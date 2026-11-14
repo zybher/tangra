@@ -11,6 +11,7 @@ enum Seg {
     Dist(bool),
     Fill(bool),
     Opacity,
+    Corner,
     Div,
 }
 
@@ -127,13 +128,14 @@ impl App {
             Seg::Opacity,
         ];
         if single_img {
-            segs.extend([Seg::Div, Seg::Fill(true), Seg::Fill(false)]);
+            segs.extend([Seg::Corner, Seg::Div, Seg::Fill(true), Seg::Fill(false)]);
         }
         if targets.len() >= 3 {
             segs.extend([Seg::Div, Seg::Dist(true), Seg::Dist(false)]);
         }
         let layout_locked = self.place_locked_by_layout(&targets);
         let opacity = (self.opacity_of(&targets[0].1) * 100.0).round();
+        let corner = self.board.images.iter().find(|i| i.id == targets[0].1).map_or(0.0, |i| i.corner.round());
 
         // Entrance replays when the selection changes
         let key = format!("{}|{}", targets.iter().map(|t| t.1.as_str()).collect::<Vec<_>>().join(","), segs.len());
@@ -157,15 +159,17 @@ impl App {
         let (pad, h) = (4.0_f32, 34.0_f32);
         let seg_w = |s: &Seg| match s {
             Seg::Opacity => 62.0,
+            Seg::Corner => 50.0,
             Seg::Div => 9.0,
             _ => 28.0,
         };
         let was_scrub: bool = ctx.data(|d| d.get_temp(bid.with("scrub"))).unwrap_or(false);
+        let was_cscrub: bool = ctx.data(|d| d.get_temp(bid.with("cscrub"))).unwrap_or(false);
         // Dock-style magnify, same as the style bar
         let mags: Vec<f32> = {
             let prev = ctx.data(|d| d.get_temp::<Rect>(bid)).unwrap_or(Rect::NOTHING);
             let ptr = ctx.pointer_hover_pos();
-            let inside = was_scrub || ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q));
+            let inside = was_scrub || was_cscrub || ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q));
             let sa = spring(&ctx, bid.with("mag_a"), inside, 18.0);
             let base = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>();
             let mut offs = Vec::new();
@@ -176,7 +180,7 @@ impl App {
             }
             let fid = bid.with("mag_f");
             let mut focus = ctx.data(|d| d.get_temp::<f32>(fid)).unwrap_or(0.0);
-            if let (true, Some(q), false) = (inside, ptr, was_scrub) {
+            if let (true, Some(q), false) = (inside, ptr, was_scrub || was_cscrub) {
                 let target = q.x - prev.center().x;
                 if sa < 0.05 {
                     focus = target;
@@ -263,6 +267,7 @@ impl App {
         let mut tip: Option<(f32, &str)> = None;
         let mut clicked: Option<Seg> = None;
         let mut scrub: Option<f32> = None;
+        let mut cscrub: Option<f32> = None;
         let mut reset_opacity = false;
         let mut xx = bar.center().x - w / 2.0 + pad;
         let mut gi_n = 0usize;
@@ -295,7 +300,7 @@ impl App {
                 continue;
             }
             let enabled = !(layout_locked && matches!(s, Seg::Al(_)));
-            let sense = if *s == Seg::Opacity { Sense::click_and_drag() } else { Sense::click() };
+            let sense = if matches!(s, Seg::Opacity | Seg::Corner) { Sense::click_and_drag() } else { Sense::click() };
             let resp = ui.interact(r, bid.with(("b", i)), sense);
             let (hh, pp) = hover_fx(&ctx, &resp, enabled);
             pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
@@ -349,9 +354,28 @@ impl App {
                         reset_opacity = true;
                     }
                 }
+                Seg::Corner => {
+                    if resp.hovered() || resp.dragged() {
+                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                        tip = Some((r.center().x, "Corner radius  ·  drag"));
+                    }
+                    // Same corner glyph as the style bar's
+                    let ic = pos2(r.min.x + 14.0, cyy);
+                    let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
+                    pl.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
+                    pb.text(tf(pos2(r.max.x - 9.0, cyy)), Align2::RIGHT_CENTER, format!("{}", corner as i32), FontId::proportional(12.0 * sc), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    if resp.drag_started() {
+                        ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));
+                    }
+                    if resp.dragged() {
+                        let v0: f32 = ctx.data(|d| d.get_temp(bid.with("c0"))).unwrap_or(corner);
+                        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+                        cscrub = Some((v0 + dx * 0.5).round().clamp(0.0, 400.0));
+                    }
+                }
                 Seg::Div => {}
             }
-            if enabled && resp.clicked() && *s != Seg::Opacity {
+            if enabled && resp.clicked() && !matches!(s, Seg::Opacity | Seg::Corner) {
                 clicked = Some(*s);
             }
         }
@@ -363,6 +387,18 @@ impl App {
         ctx.data_mut(|d| d.insert_temp(bid.with("scrub"), scrub.is_some()));
         if let Some(v) = scrub {
             self.set_selection_opacity(v / 100.0);
+        }
+        // Corner scrub: one undo step per drag
+        if cscrub.is_some() && !was_cscrub {
+            self.snapshot();
+        }
+        ctx.data_mut(|d| d.insert_temp(bid.with("cscrub"), cscrub.is_some()));
+        if let Some(v) = cscrub {
+            let id = targets[0].1.clone();
+            if let Some(i) = self.board.images.iter_mut().find(|i| i.id == id) {
+                i.corner = v;
+            }
+            self.mark_dirty();
         }
         if reset_opacity && opacity < 100.0 {
             self.snapshot();

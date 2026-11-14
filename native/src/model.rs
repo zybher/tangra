@@ -37,6 +37,9 @@ pub struct Stroke {
     pub radius: Option<f32>,
 }
 
+fn is_zero(v: &f32) -> bool {
+    *v == 0.0
+}
 fn is_false(b: &bool) -> bool {
     !*b
 }
@@ -100,6 +103,9 @@ pub struct ImageNode {
     /// Uniform scale before the image was first stretched (for Reset stretch)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_scale: Option<f32>,
+    /// Corner radius in world units (0 = square)
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub corner: f32,
 }
 
 impl ImageNode {
@@ -253,6 +259,7 @@ impl Board {
             created_at: now_ms(),
             z_index: self.images.len() as f64 + 1.0,
             base_scale: None,
+            corner: 0.0,
         });
         id
     }

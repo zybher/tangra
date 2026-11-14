@@ -164,6 +164,13 @@ impl App {
                 }
             }
             Act::FitFrame => self.fit_frames_to_content(),
+            Act::ImageCorner(v) => {
+                self.snapshot();
+                let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Image).map(|s| s.1.clone()).collect();
+                for i in self.board.images.iter_mut().filter(|i| ids.contains(&i.id)) {
+                    i.corner = v;
+                }
+            }
             Act::ToggleClip => {
                 self.snapshot();
                 let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Group).map(|s| s.1.clone()).collect();

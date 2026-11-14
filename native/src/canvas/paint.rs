@@ -135,6 +135,8 @@ impl App {
             if !r.intersects(rect) {
                 continue;
             }
+            // Rounded corners (screen px), never more than half the short side
+            let rd = (img.corner * z).clamp(0.0, r.width().min(r.height()) / 2.0);
             p.add(
                 egui::epaint::Shadow {
                     offset: vec2(0.0, 4.0 * z),
@@ -142,12 +144,19 @@ impl App {
                     spread: 0.0,
                     color: Color32::from_black_alpha(90),
                 }
-                .as_shape(r, Rounding::ZERO),
+                .as_shape(r, Rounding::same(rd)),
             );
             if let Some((tex, _)) = self.textures.get(&img.asset_file_name) {
-                p.image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                if rd > 0.0 {
+                    let mut rs = egui::epaint::RectShape::filled(r, rd, Color32::WHITE);
+                    rs.fill_texture_id = tex.id();
+                    rs.uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                    p.add(rs);
+                } else {
+                    p.image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                }
             } else {
-                p.rect_filled(r, 0.0, rgba(30, 41, 59, 255));
+                p.rect_filled(r, rd, rgba(30, 41, 59, 255));
                 let msg = if self.missing.contains(&img.asset_file_name) { "Image file missing" } else { "Loading…" };
                 p.text(r.center(), Align2::CENTER_CENTER, msg, FontId::proportional(12.0), TEXT_FAINT);
             }
@@ -345,7 +354,7 @@ impl App {
                 if let Some([x, y, w, h]) = self.rect_of(k, &id) {
                     let r = item_rect(x, y, w, h).expand(0.5);
                     let round = match k {
-                        Kind::Image => 0.0,
+                        Kind::Image => self.board.images.iter().find(|i| i.id == id).map_or(0.0, |i| i.corner * z),
                         Kind::Group => self.board.group_cards.iter().find(|g| g.id == id).map_or(0.0, |g| group_radius(g) * z),
                         Kind::Stroke => self.find_stroke(&id).and_then(|s| s.radius).map_or(2.0, |r| r * z),
                         Kind::Text => 2.0,
@@ -367,7 +376,7 @@ impl App {
             if let Some([x, y, w, h]) = self.rect_of(*k, id) {
                 let r = item_rect(x, y, w, h).expand(0.5);
                 let round = match k {
-                    Kind::Image => 0.0,
+                    Kind::Image => self.board.images.iter().find(|i| &i.id == id).map_or(0.0, |i| i.corner * z),
                     Kind::Group => self.board.group_cards.iter().find(|g| &g.id == id).map_or(0.0, |g| group_radius(g) * z),
                     Kind::Stroke => self.find_stroke(id).and_then(|s| s.radius).map_or(2.0, |r| r * z),
                     Kind::Text => 2.0,

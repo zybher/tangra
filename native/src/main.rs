@@ -239,6 +239,8 @@ struct SettingsDraft {
 enum Act {
     /// Shrink / grow the selected frames to wrap what's inside them
     FitFrame,
+    /// Corner radius for the selected pictures
+    ImageCorner(f32),
     /// Aim the next "add" action at the middle of the view (toolbar buttons)
     CentreMenu,
     CycleColor,
