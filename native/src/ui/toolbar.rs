@@ -102,7 +102,7 @@ impl App {
             if m > 0.01 && on < 0.99 {
                 // a soft lifted tile behind the swelling button
                 p.rect_filled(r.translate(vec2(0.0, 3.0 * m)), 10.0, Color32::from_black_alpha((60.0 * m) as u8));
-                p.rect_filled(r, 10.0, mix(frame_bg(), popup(), 0.6).gamma_multiply(m));
+                p.rect_filled(r, 10.0, mix(frame_bg(), Color32::from_gray(90), 0.22).gamma_multiply(m));
                 p.rect_stroke(r, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(m)));
             }
             p.rect_filled(r, 8.0 + 2.0 * m, hover_fill(hv * (1.0 - on), pr));

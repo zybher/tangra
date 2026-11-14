@@ -677,7 +677,7 @@ impl App {
 
 impl eframe::App for App {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        let c = frame_bg();
+        let c = chrome();
         [c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0, 1.0]
     }
 
@@ -782,7 +782,7 @@ impl eframe::App for App {
         }
         if self.hide_in > 0 {
             self.hide_in -= 1;
-            egui::CentralPanel::default().frame(egui::Frame::none().fill(frame_bg())).show(ctx, |_| {});
+            egui::CentralPanel::default().frame(egui::Frame::none().fill(chrome())).show(ctx, |_| {});
             if self.hide_in == 0 {
                 platform::hide_window();
                 self.asleep = true;
@@ -822,7 +822,7 @@ impl eframe::App for App {
         }
 
         let mut view = self.view(self.last_rect);
-        egui::CentralPanel::default().frame(egui::Frame::none().fill(frame_bg())).show(ctx, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::none().fill(chrome())).show(ctx, |ui| {
             let full_rect = ui.max_rect();
             let titlebar_h = 44.0_f32;
             let titlebar_rect = Rect::from_min_max(full_rect.min, pos2(full_rect.max.x, full_rect.min.y + titlebar_h));

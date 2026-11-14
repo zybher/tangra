@@ -51,15 +51,23 @@ pub(crate) static THEME: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 pub(crate) fn theme_rgb() -> [u8; 3] {
     THEMES[THEME.load(std::sync::atomic::Ordering::Relaxed) % THEMES.len()].1
 }
+/// Three tones per theme, all from the theme's base colour: the tab bar is darkest, the
+/// canvas a step up, floating bars (toolbar, outline, menus) a step above the canvas.
+pub(crate) fn shade(base: [u8; 3], d: i16) -> Color32 {
+    let f = |v: u8| (v as i16 + d).clamp(0, 255) as u8;
+    Color32::from_rgb(f(base[0]), f(base[1]), f(base[2]))
+}
+/// The tab bar / window chrome behind the tabs
+pub(crate) fn chrome() -> Color32 {
+    shade(theme_rgb(), -10)
+}
 /// The canvas (and the active tab, which is joined to it)
 pub(crate) fn bg() -> Color32 {
-    let [r, g, b] = theme_rgb();
-    Color32::from_rgb(r, g, b)
+    shade(theme_rgb(), -5)
 }
-/// The window chrome: the same hue, a step lighter
+/// Floating bars: toolbar, outline, style bar
 pub(crate) fn frame_bg() -> Color32 {
-    let [r, g, b] = theme_rgb();
-    Color32::from_rgb(r.saturating_add(0x17), g.saturating_add(0x17), b.saturating_add(0x17))
+    shade(theme_rgb(), 2)
 }
 // ---- One palette for the whole UI ----
 /// Accent presets: (name, rgb)
@@ -93,16 +101,12 @@ pub(crate) const DANGER: Color32 = Color32::from_rgb(232, 17, 35);
 // faint alpha comes out several times brighter than it looks on paper, and an
 // edge that lands on one pixel row instead of two turns into a pale line.
 pub(crate) fn border() -> Color32 {
-    let [r, g, b] = theme_rgb();
-    Color32::from_rgb(r.saturating_add(0x21), g.saturating_add(0x21), b.saturating_add(0x21))
+    shade(theme_rgb(), 0x12)
 }
 
-/// Floating surfaces: menus, dialogs, pills, toasts. A step above the canvas, same hue.
+/// Floating surfaces that open (menus, dialogs, toasts): the bar tone, a hair lighter
 pub(crate) fn popup() -> Color32 {
-    let [r, g, b] = theme_rgb();
-    // One step above the floating bars (frame_bg), so things that open read as raised
-    let (r, g, b) = (r.saturating_add(0x21), g.saturating_add(0x21), b.saturating_add(0x21));
-    Color32::from_rgb(r, g, b)
+    shade(theme_rgb(), 5)
 }
 
 /// Soft round glow: a bell-shaped falloff built from many rings, so no edges show
@@ -221,7 +225,7 @@ pub(crate) fn paint_aura(p: &egui::Painter, canvas: Rect, now: f64) {
 
 pub(crate) static GRADIENTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 pub(crate) static GRAD_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-pub(crate) const GRAD_DIRS: [&str; 6] = ["Diagonal ↘", "Diagonal ↙", "Top to bottom", "Bottom to top", "Left to right", "Glow from centre"];
+pub(crate) const GRAD_DIRS: [&str; 6] = ["Diagonal right", "Diagonal left", "Top to bottom", "Bottom to top", "Left to right", "Glow from centre"];
 
 /// Gradient is switched on for the current colour (each colour remembers its own)
 pub(crate) fn gradient_on() -> bool {

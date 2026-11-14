@@ -557,6 +557,7 @@ impl App {
         // F3: performance read-out, top-left, in the same quiet style as the hotkey list
         let st = ease(p.ctx(), egui::Id::new("qd_stats_in"), self.stats_on);
         if st > 0.001 {
+            let rect = rect.translate(vec2(crate::ui::outline::top_shift(p.ctx()), 0.0));
             let n = self.frames.len();
             let worst = self.frames.iter().zip(self.frames.iter().skip(1)).map(|(a, b)| b - a).fold(0.0_f64, f64::max);
             let idle = n < 5;

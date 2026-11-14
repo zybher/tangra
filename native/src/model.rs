@@ -220,6 +220,8 @@ pub struct Board {
     pub link_cards: Vec<LinkCard>,
     pub sticky_notes: Vec<Note>,
     pub group_cards: Vec<Group>,
+    /// Custom layer names set from the outline (object id -> name); frames use their title instead
+    pub layer_names: std::collections::HashMap<String, String>,
     pub updated_at: f64,
     pub created_at: f64,
 }

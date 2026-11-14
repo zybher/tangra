@@ -40,7 +40,7 @@ impl App {
         let ic = EStroke::new(1.1_f32, mix(TEXT_DIM, Color32::WHITE, h));
         if is_max {
             painter.rect_stroke(Rect::from_center_size(pos2(xc.x + 1.5, cy - 1.5), vec2(8.0, 8.0)), 0.0, ic);
-            painter.rect_filled(Rect::from_center_size(pos2(xc.x - 1.5, cy + 1.5), vec2(8.0, 8.0)), 0.0, mix(frame_bg(), Color32::from_gray(66), h));
+            painter.rect_filled(Rect::from_center_size(pos2(xc.x - 1.5, cy + 1.5), vec2(8.0, 8.0)), 0.0, mix(chrome(), Color32::from_gray(66), h));
             painter.rect_stroke(Rect::from_center_size(pos2(xc.x - 1.5, cy + 1.5), vec2(8.0, 8.0)), 0.0, ic);
         } else {
             painter.rect_stroke(Rect::from_center_size(pos2(xc.x, cy), vec2(10.0, 10.0)), 0.0, ic);
@@ -112,9 +112,6 @@ impl App {
                 painter.rect_filled(hover_r, Rounding::same(7.0), Color32::from_white_alpha((tab_h_t * 14.0 + tab_p_t * 12.0) as u8));
             }
 
-            // Dot indicator
-            let dot_col = if is_active { Color32::WHITE } else { TEXT_FAINT };
-            painter.circle_filled(pos2(tab_r.min.x + 13.0, cy), 3.5, dot_col);
 
             // Title text (optically centered on cy)
             let title_col = if is_active { Color32::WHITE } else { mix(TEXT_DIM, TEXT, tab_h_t) };
@@ -127,7 +124,7 @@ impl App {
                 name.clone()
             };
             painter.text(
-                pos2(tab_r.min.x + 23.0, cy - 1.0),
+                pos2(tab_r.min.x + 13.0, cy - 1.0),
                 Align2::LEFT_CENTER,
                 display_title,
                 FontId::proportional(12.5),

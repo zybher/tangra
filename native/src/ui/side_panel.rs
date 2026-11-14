@@ -151,15 +151,18 @@ impl App {
                             let on = spring(ctx, egui::Id::new(("qd_theme_on", i)), i == cur, 18.0);
                             let a = tc * tp;
                             let tl = tile.shrink(pr);
-                            p.rect_filled(tl, 5.0, Color32::from_rgb(*r, *g, *b).gamma_multiply(a));
+                            let base = [*r, *g, *b];
+                            p.rect_filled(tl, 5.0, shade(base, -5).gamma_multiply(a));
                             if i == AURORA {
                                 let sp = p.with_clip_rect(tl.shrink(1.0));
                                 glow(&sp, tl.left_bottom(), 16.0, Color32::from_rgb(45, 212, 191).gamma_multiply(0.7 * a));
                                 glow(&sp, tl.center_top(), 15.0, Color32::from_rgb(59, 130, 246).gamma_multiply(0.7 * a));
                                 glow(&sp, tl.right_bottom(), 16.0, Color32::from_rgb(168, 85, 247).gamma_multiply(0.7 * a));
                             }
-                            let lit = Color32::from_rgb(r.saturating_add(0x17), g.saturating_add(0x17), b.saturating_add(0x17));
-                            p.rect_filled(Rect::from_min_size(tl.min, vec2(tl.width(), 6.0)), Rounding { nw: 5.0, ne: 5.0, sw: 0.0, se: 0.0 }, lit.gamma_multiply(a));
+                            // Mini preview of the 3 tones: tab bar strip, canvas, a floating bar
+                            p.rect_filled(Rect::from_min_size(tl.min, vec2(tl.width(), 6.0)), Rounding { nw: 5.0, ne: 5.0, sw: 0.0, se: 0.0 }, shade(base, -10).gamma_multiply(a));
+                            let bar_r = Rect::from_center_size(pos2(tl.center().x, tl.max.y - 6.0), vec2(tl.width() * 0.55, 4.0));
+                            p.rect_filled(bar_r, 2.0, shade(base, 0x14).gamma_multiply(a));
                             p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(mix(border(), TEXT_FAINT, 0.55), TEXT_DIM, h), blue(), on).gamma_multiply(a)));
                             if resp.on_hover_text(*name).clicked() {
                                 THEME.store(i, std::sync::atomic::Ordering::Relaxed);
