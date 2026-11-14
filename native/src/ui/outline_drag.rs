@@ -1,5 +1,5 @@
 //! Outline drag & drop: where a dragged row would land, and applying it (list order is stored
-//! per object; moving into / out of a frame moves the object, since nesting is geometric).
+//! per object; moving into / out of a frame changes which frame it belongs to).
 use crate::*;
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, Stroke as EStroke};
 
@@ -103,8 +103,16 @@ impl App {
         before_id: Option<String>,
         new_parent_id: Option<String>,
     ) {
+        // List order among the new siblings
+        let mut list: Vec<String> = siblings.iter().filter(|s| **s != src.1).cloned().collect();
+        let at = if d.into { 0 } else { before_id.and_then(|b| list.iter().position(|s| *s == b)).unwrap_or(list.len()) };
+        list.insert(at.min(list.len()), src.1.clone());
+        // Dropped back where it was: nothing to do (and no undo step)
+        if d.parent == old_parent && list == siblings {
+            return;
+        }
         self.snapshot();
-        // Reparent: nesting is geometric, so the object moves into (or out of) the frame
+        // Reparent: the object moves into (or out of) the frame
         if d.parent != old_parent {
             let r = src_rect;
             let to = match new_parent_rect {
@@ -122,10 +130,6 @@ impl App {
             self.board.parents.insert(src.1.clone(), new_parent_id.unwrap_or_default());
 
         }
-        // List order among the new siblings
-        let mut list: Vec<String> = siblings.into_iter().filter(|s| *s != src.1).collect();
-        let at = if d.into { 0 } else { before_id.and_then(|b| list.iter().position(|s| *s == b)).unwrap_or(list.len()) };
-        list.insert(at.min(list.len()), src.1.clone());
         for (n, id) in list.into_iter().enumerate() {
             self.board.layer_order.insert(id, n as f32);
         }

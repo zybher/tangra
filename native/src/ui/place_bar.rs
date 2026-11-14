@@ -49,6 +49,7 @@ impl App {
             let v = if d == 0 { 1.0 } else { d as f32 / 10.0 };
             self.snapshot();
             self.set_selection_opacity(v);
+            self.toast(format!("Opacity {}%", (v * 100.0).round() as i32));
         }
         if let Some(a) = al {
             self.align_selection(a);

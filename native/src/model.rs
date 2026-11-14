@@ -351,6 +351,8 @@ pub struct Settings {
     pub aura_palette: u8,
     /// Aurora motion preset
     pub aura_motion: u8,
+    /// Outline panel width in points (0 = default)
+    pub outline_width: f32,
 }
 
 impl Default for Settings {
@@ -371,6 +373,7 @@ impl Default for Settings {
             pattern: 0,
             aura_palette: 0,
             aura_motion: 0,
+            outline_width: 0.0,
         }
     }
 }

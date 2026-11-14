@@ -14,7 +14,7 @@ fn width() -> f32 {
     let b = WIDTH.load(std::sync::atomic::Ordering::Relaxed);
     if b == 0 { 240.0 } else { f32::from_bits(b) }
 }
-fn set_width(w: f32) {
+pub(crate) fn set_width(w: f32) {
     WIDTH.store(w.clamp(W_MIN, W_MAX).to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 const GAP: f32 = 12.0;
@@ -691,6 +691,17 @@ impl App {
                                 super::outline_drag::paint_ghost(ctx, q, &self.outline_name(&src), src.0);
                             }
                             ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+                            // Near the top / bottom edge the list scrolls (faster the closer you get)
+                            if let Some(q) = ptr {
+                                let vr = ui.clip_rect();
+                                let edge = 36.0;
+                                let up = (vr.min.y + edge - q.y).clamp(0.0, edge * 2.0);
+                                let down = (q.y - (vr.max.y - edge)).clamp(0.0, edge * 2.0);
+                                if up > 0.0 || down > 0.0 {
+                                    let dt = ctx.input(|i| i.stable_dt).min(0.05);
+                                    ui.scroll_with_delta(vec2(0.0, (up - down) * 14.0 * dt));
+                                }
+                            }
                             if ctx.input(|i| i.pointer.any_released() || !i.pointer.any_down()) {
                                 ctx.data_mut(|dd| dd.remove::<Option<Sel>>(drag_id));
                                 drop_req = target.map(|t| (si, t));
@@ -709,6 +720,11 @@ impl App {
                 if eresp.dragged() {
                     set_width(W + eresp.drag_delta().x);
                     ctx.request_repaint();
+                }
+                // Remembered across restarts (saved once, when the drag ends)
+                if eresp.drag_stopped() {
+                    self.settings.outline_width = width();
+                    save_settings(&self.settings);
                 }
                 if ek > 0.01 {
                     ui.painter().line_segment([pos2(shell.max.x - 0.5, shell.min.y + 14.0), pos2(shell.max.x - 0.5, shell.max.y - 14.0)], EStroke::new(2.0_f32, blue().gamma_multiply(ek)));

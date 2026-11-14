@@ -424,6 +424,9 @@ impl App {
         AURA_PAL.store(settings.aura_palette as usize, std::sync::atomic::Ordering::Relaxed);
         AURA_MOT.store(settings.aura_motion as usize, std::sync::atomic::Ordering::Relaxed);
         ANIM.store(settings.anim, std::sync::atomic::Ordering::Relaxed);
+        if settings.outline_width > 0.0 {
+            ui::outline::set_width(settings.outline_width);
+        }
         retint(&cc.egui_ctx);
         let boards = list_boards();
         if !boards.iter().any(|b| b.0 == settings.active_board_id) {
