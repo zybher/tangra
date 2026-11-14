@@ -167,6 +167,10 @@ impl App {
                 if check_item(ui, "Clip content", clip) {
                     acts.push(Act::ToggleClip);
                 }
+                let can_fit = matches!(&self.sel, Some((Kind::Group, id)) if self.board.group_cards.iter().any(|g| &g.id == id && g.layout == 0) && !self.descendants(id).is_empty());
+                if item(ui, "Resize to fit content", "Ctrl+Alt+Shift+R", can_fit) {
+                    acts.push(Act::FitFrame);
+                }
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
                 }

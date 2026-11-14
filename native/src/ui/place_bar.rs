@@ -54,6 +54,10 @@ impl App {
         if let Some(a) = al {
             self.align_selection(a);
         }
+        // Ctrl+Alt+Shift+R: resize the selected frames to fit their contents (Figma)
+        if ctx.input(|i| i.modifiers.command && i.modifiers.alt && i.modifiers.shift && i.key_pressed(Key::R)) {
+            self.fit_frames_to_content();
+        }
         // Shift+Enter: select the frame around the selection (Figma)
         let up = ctx.input(|i| i.modifiers.shift && !i.modifiers.command && !i.modifiers.alt && i.key_pressed(Key::Enter));
         if up {

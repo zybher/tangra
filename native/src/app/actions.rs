@@ -163,6 +163,7 @@ impl App {
                     ctx.request_repaint();
                 }
             }
+            Act::FitFrame => self.fit_frames_to_content(),
             Act::ToggleClip => {
                 self.snapshot();
                 let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Group).map(|s| s.1.clone()).collect();

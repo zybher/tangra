@@ -237,6 +237,8 @@ struct SettingsDraft {
 
 #[allow(dead_code)]
 enum Act {
+    /// Shrink / grow the selected frames to wrap what's inside them
+    FitFrame,
     /// Aim the next "add" action at the middle of the view (toolbar buttons)
     CentreMenu,
     CycleColor,

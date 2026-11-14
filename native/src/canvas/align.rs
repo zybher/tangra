@@ -156,4 +156,31 @@ impl App {
         }
         self.mark_dirty();
     }
+
+    /// Selected frames (not auto-arranging) shrink / grow to wrap everything inside them
+    pub(crate) fn fit_frames_to_content(&mut self) {
+        let frames: Vec<String> = self
+            .selected
+            .iter()
+            .filter(|s| s.0 == Kind::Group && self.board.group_cards.iter().any(|g| g.id == s.1 && g.layout == 0))
+            .map(|s| s.1.clone())
+            .collect();
+        let mut fits = Vec::new();
+        for f in frames {
+            let kids = self.descendants(&f);
+            if let Some(b) = self.place_bounds(&kids).filter(|_| kids.len() > 1).or_else(|| kids.first().and_then(|k| self.rect_of(k.0, &k.1))) {
+                if b[2] > 1.0 && b[3] > 1.0 {
+                    fits.push((f, b));
+                }
+            }
+        }
+        if fits.is_empty() {
+            return;
+        }
+        self.snapshot();
+        for (f, b) in fits {
+            self.set_rect(Kind::Group, &f, b);
+        }
+        self.mark_dirty();
+    }
 }
