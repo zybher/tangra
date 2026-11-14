@@ -427,8 +427,13 @@ impl App {
                         self.set_rect(s.0, &s.1, [origin.x + dx, origin.y + dy, wd, h]);
                     }
                 }
-                let moved: Vec<Sel> = self.selected.iter().cloned().collect();
-                self.rehome([w.x, w.y], &moved);
+                // Holding Ctrl keeps the objects in the frame they're in (Figma)
+                if CTRL_DOWN.load(std::sync::atomic::Ordering::Relaxed) {
+                    App::set_drop_at(None);
+                } else {
+                    let moved: Vec<Sel> = self.selected.iter().cloned().collect();
+                    self.rehome([w.x, w.y], &moved);
+                }
                 self.drag_changed = true;
             }
             Drag::Resize { start, ox, oy, ow, oh, left, top, rx, ry, sel: (k, id) } => {
@@ -544,6 +549,7 @@ impl App {
 
     pub(crate) fn input(&mut self, ctx: &egui::Context, resp: &egui::Response, rect: Rect) {
         ALT_DOWN.store(ctx.input(|i| i.modifiers.alt), std::sync::atomic::Ordering::Relaxed);
+        CTRL_DOWN.store(ctx.input(|i| i.modifiers.command), std::sync::atomic::Ordering::Relaxed);
         PTR_SPEED.store(ctx.input(|i| i.pointer.velocity().length()).to_bits(), std::sync::atomic::Ordering::Relaxed);
         let (press, pos, hover, scroll_delta, zoom_delta, ctrl, space) = ctx.input(|i| {
             (

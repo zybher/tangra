@@ -49,6 +49,8 @@ pub(crate) fn ui_blocks(ctx: &egui::Context, q: Pos2) -> bool {
 }
 
 pub(crate) static ALT_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Ctrl held: a canvas drag doesn't drop objects into (or out of) frames
+pub(crate) static CTRL_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// A board dialog is open or still animating closed (blocks the + button)
 pub(crate) static PROMPT_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
