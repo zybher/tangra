@@ -310,7 +310,6 @@ pub(crate) fn wave_tile(p: &egui::Painter, r: Rect, m: f32, fill: Color32, a: f3
     }
     p.rect_filled(r.translate(vec2(0.0, 3.0 * m)), 8.0, Color32::from_black_alpha((60.0 * m * a) as u8));
     p.rect_filled(r, 8.0, fill.gamma_multiply(m * a));
-    p.rect_stroke(r, 8.0, EStroke::new(1.0_f32, border().gamma_multiply(m * a)));
 }
 
 pub(crate) fn hover_fill(h: f32, p: f32) -> Color32 {

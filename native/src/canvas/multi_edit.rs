@@ -7,19 +7,16 @@ impl App {
     /// Unselected objects sitting fully inside a selected frame, with the index of that frame in `sels`
     pub(crate) fn frame_contents(&self, sels: &[(Sel, [f32; 4])]) -> Vec<(Sel, [f32; 4], usize)> {
         let mut out = Vec::new();
-        let all = self.all_items();
-        for (pi, ((k, _), r)) in sels.iter().enumerate() {
+        for (pi, ((k, _), _)) in sels.iter().enumerate() {
             if *k != Kind::Group {
                 continue;
             }
-            for s in &all {
-                if self.selected.contains(s) || out.iter().any(|(o, _, _)| o == s) {
+            for s in self.descendants(&sels[pi].0 .1) {
+                if self.selected.contains(&s) || out.iter().any(|(o, _, _)| *o == s) {
                     continue;
                 }
                 if let Some(q) = self.rect_of(s.0, &s.1) {
-                    if q[0] >= r[0] && q[1] >= r[1] && q[0] + q[2] <= r[0] + r[2] && q[1] + q[3] <= r[1] + r[3] {
-                        out.push((s.clone(), q, pi));
-                    }
+                    out.push((s, q, pi));
                 }
             }
         }

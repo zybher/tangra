@@ -53,12 +53,14 @@ impl App {
 
     /// Leaves a copy of each item where it is, just beneath the original (Alt+drag)
     pub(crate) fn duplicate_in_place(&mut self, items: &HashSet<(Kind, String)>) {
-        fn dup<T: Clone>(v: &mut Vec<T>, ids: &[&String], id_of: impl Fn(&T) -> &String, set_id: impl Fn(&mut T, String)) {
+        fn dup<T: Clone>(v: &mut Vec<T>, ids: &[&String], id_of: impl Fn(&T) -> &String, set_id: impl Fn(&mut T, String), pairs: &mut Vec<(String, String)>) {
             let mut i = 0;
             while i < v.len() {
                 if ids.contains(&id_of(&v[i])) {
                     let mut c = v[i].clone();
-                    set_id(&mut c, new_id());
+                    let n = new_id();
+                    pairs.push((id_of(&v[i]).clone(), n.clone()));
+                    set_id(&mut c, n);
                     v.insert(i, c);
                     i += 1;
                 }
@@ -67,12 +69,25 @@ impl App {
         }
         let ids = |k: Kind| items.iter().filter(|s| s.0 == k).map(|s| &s.1).collect::<Vec<_>>();
         let b = &mut self.board;
-        dup(&mut b.images, &ids(Kind::Image), |x| &x.id, |x, n| x.id = n);
-        dup(&mut b.sticky_notes, &ids(Kind::Note), |x| &x.id, |x, n| x.id = n);
-        dup(&mut b.link_cards, &ids(Kind::Link), |x| &x.id, |x, n| x.id = n);
-        dup(&mut b.group_cards, &ids(Kind::Group), |x| &x.id, |x, n| x.id = n);
-        dup(&mut b.world_texts, &ids(Kind::Text), |x| &x.id, |x, n| x.id = n);
-        dup(&mut b.world_strokes, &ids(Kind::Stroke), |x| &x.id, |x, n| x.id = n);
+        let mut pairs: Vec<(Kind, Vec<(String, String)>)> = Vec::new();
+        for k in [Kind::Image, Kind::Note, Kind::Link, Kind::Group, Kind::Text, Kind::Stroke] {
+            let mut p = Vec::new();
+            match k {
+                Kind::Image => dup(&mut b.images, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+                Kind::Note => dup(&mut b.sticky_notes, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+                Kind::Link => dup(&mut b.link_cards, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+                Kind::Group => dup(&mut b.group_cards, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+                Kind::Text => dup(&mut b.world_texts, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+                Kind::Stroke => dup(&mut b.world_strokes, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+            }
+            pairs.push((k, p));
+        }
+        // The copy left behind keeps the name; the one you're holding gets the next number
+        for (k, p) in pairs {
+            for (orig, copy) in p {
+                self.number_duplicate(k, &orig, &copy);
+            }
+        }
         self.mark_dirty();
     }
 

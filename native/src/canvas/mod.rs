@@ -8,3 +8,5 @@ pub(crate) use geometry::*;
 mod snap;
 mod gap_handles;
 mod multi_edit;
+mod visibility;
+mod nesting;

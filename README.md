@@ -66,7 +66,12 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Colour picker** | `ui/color_picker.rs` | Custom colour panel (saturation/brightness square, hue slider, hex field) used by the style bar's Custom colour |
 | `native/src/ui/scale.rs` | Responsive UI size: scales all chrome with the window width (1:1 on the small default window, up to 1.45x when maximised on big screens) |
 | **Canvas panel** | `ui/side_panel.rs` | Theme, accent, gradient, Aurora, patterns, animation strength, settings |
-| **Outline panel** | `ui/outline.rs` | Layer tree of the selected frame (or whole board), fold, click to select, hover to highlight; pushes the bottom-left HUD aside; `L` toggles |
+| **Outline panel** | `ui/outline.rs` | Layer tree of the frame you are in (or whole board), search with kind synonyms (photo, sticky, ...), collapses to a logo bar, fold, click to select, hover to highlight; pushes the bottom-left HUD aside; `L` toggles; double-click/Enter renames; duplicates get numbered |
+| **Outline drag & drop** | `ui/outline_drag.rs` | Drag rows to reorder (saved per object) or drop on a frame to move the object into it |
+| **Frame nesting** | `canvas/nesting.rs` | Which frame each object belongs to (stored, not guessed from position); the cursor decides which frame a dragged object joins (target frame lights up); frames clip their contents |
+| **Line icons** | `ui/icons.rs` | Eye and lock drawn on a 16-unit grid, pixel-snapped |
+| **Hide / lock** | `canvas/visibility.rs` | Hidden objects skip painting; hidden or locked ones skip picking; a frame passes its state to everything inside |
+| **App icon** | `native/build.rs`, `native/assets/icon.ico` | Embeds the icon into `tangra.exe` at build time (regenerate the .ico from `icon128.png`) |
 | **Right-click menu** | `ui/menus.rs` | Context menu contents |
 | **Menu building blocks** | `ui/menu_kit.rs` | Menu open/close animation, rows, radios, checks, swatches, dividers |
 | **Dialogs** | `ui/dialogs.rs` | Label editing, board name prompts, hotkey recording |

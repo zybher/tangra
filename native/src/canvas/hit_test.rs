@@ -115,7 +115,8 @@ impl App {
         let filled = |s: &Stroke, q: Pt| {
             s.fill && s.closed_len().is_some() && pts_bbox(&s.points).is_some_and(|[x, y, w, h]| inside(q, x, y, w, h))
         };
-        if let Some(s) = self.board.world_strokes.iter().rev().find(|s| stroke_hit(s, p, r + s.width / 2.0) || filled(s, p)) {
+        let bl = self.blocked_ids();
+        if let Some(s) = self.board.world_strokes.iter().rev().find(|s| !bl.contains(&s.id) && (stroke_hit(s, p, r + s.width / 2.0) || filled(s, p))) {
             return Some((Kind::Stroke, s.id.clone()));
         }
         let img = self.image_at(p)?;
@@ -156,10 +157,12 @@ impl App {
     }
 
     pub(crate) fn image_at(&self, p: Pt) -> Option<&ImageNode> {
-        self.board.images.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height))
+        let bl = self.blocked_ids();
+        self.board.images.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height))
     }
 
     pub(crate) fn hit_test(&self, p: Pt) -> Option<Sel> {
+        let bl = self.blocked_ids();
         let b = &self.board;
         // A frame's title (above it) selects the whole frame, like Figma; double-click still renames
         if let Some(t) = self.frame_title_at(p) {
@@ -168,13 +171,13 @@ impl App {
         if let Some(s) = self.stroke_at(p) {
             return Some(s);
         }
-        if let Some(t) = b.world_texts.iter().rev().find(|l| label_hit(l, p, 4.0)) {
+        if let Some(t) = b.world_texts.iter().rev().find(|l| !bl.contains(&l.id) && label_hit(l, p, 4.0)) {
             return Some((Kind::Text, t.id.clone()));
         }
-        if let Some(n) = b.sticky_notes.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
+        if let Some(n) = b.sticky_notes.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
             return Some((Kind::Note, n.id.clone()));
         }
-        if let Some(n) = b.link_cards.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
+        if let Some(n) = b.link_cards.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
             return Some((Kind::Link, n.id.clone()));
         }
         if let Some(n) = self.image_at(p) {
@@ -183,7 +186,7 @@ impl App {
         b.group_cards
             .iter()
             .rev()
-            .find(|i| inside(p, i.x, i.y, i.width, i.height))
+            .find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height))
             .map(|n| (Kind::Group, n.id.clone()))
     }
 
@@ -212,6 +215,9 @@ impl App {
             .iter()
             .rev()
             .find(|g| {
+                if self.board.hidden.contains(&g.id) || self.board.locked.contains(&g.id) {
+                    return false;
+                }
                 let th = (FRAME_TITLE_PX + 14.0 + g.border.unwrap_or(1.0) / 2.0) / z;
                 p.x >= g.x && p.x <= g.x + g.width && p.y >= g.y - th && p.y <= g.y
             })
@@ -219,6 +225,7 @@ impl App {
     }
 
     pub(crate) fn hit_test_drag(&self, p: Pt) -> Option<Sel> {
+        let bl = self.blocked_ids();
         let b = &self.board;
         // Dragging a frame by its title moves the whole frame
         if let Some(t) = self.frame_title_at(p) {
@@ -227,13 +234,13 @@ impl App {
         if let Some(s) = self.stroke_at(p) {
             return Some(s);
         }
-        if let Some(t) = b.world_texts.iter().rev().find(|l| label_hit(l, p, 4.0)) {
+        if let Some(t) = b.world_texts.iter().rev().find(|l| !bl.contains(&l.id) && label_hit(l, p, 4.0)) {
             return Some((Kind::Text, t.id.clone()));
         }
-        if let Some(n) = b.sticky_notes.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
+        if let Some(n) = b.sticky_notes.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
             return Some((Kind::Note, n.id.clone()));
         }
-        if let Some(n) = b.link_cards.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
+        if let Some(n) = b.link_cards.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
             return Some((Kind::Link, n.id.clone()));
         }
         if let Some(n) = self.image_at(p) {
@@ -242,7 +249,7 @@ impl App {
         b.group_cards
             .iter()
             .rev()
-            .find(|g| self.frame_hit_drag(g, p))
+            .find(|g| !bl.contains(&g.id) && self.frame_hit_drag(g, p))
             .map(|n| (Kind::Group, n.id.clone()))
     }
 
@@ -282,6 +289,8 @@ impl App {
                 hits.push((Kind::Group, g.id.clone()));
             }
         }
+        let bl = self.blocked_ids();
+        hits.retain(|s| !bl.contains(&s.1));
         hits
     }
 

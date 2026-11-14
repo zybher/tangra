@@ -46,10 +46,24 @@ impl App {
 
         let item_rect = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_max(v.s(x, y), v.s(x + w, y + h));
 
+        let hid = self.hidden_ids();
+        // Objects inside a clipping frame are cropped to it
+        let clips = self.clip_boxes();
         // Frames
         // The title lights with the hover outline (one source of truth, set below last frame)
         let hovered_now: Option<Sel> = p.ctx().data(|d| d.get_temp::<Option<Sel>>(egui::Id::new("qd_hover_now"))).flatten();
         for c in &b.group_cards {
+            if hid.contains(&c.id) {
+                continue;
+            }
+            let clipped_p;
+            let p = match clips.get(&c.id) {
+                Some(q) => {
+                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
+                    &clipped_p
+                }
+                None => p,
+            };
             let r = item_rect(c.x, c.y, c.width, c.height);
             if !r.intersects(rect) {
                 continue;
@@ -98,26 +112,21 @@ impl App {
 
         // Images + their annotations
         for img in &b.images {
+            if hid.contains(&img.id) {
+                continue;
+            }
+            let clipped_p;
+            let p = match clips.get(&img.id) {
+                Some(q) => {
+                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
+                    &clipped_p
+                }
+                None => p,
+            };
             let r = item_rect(img.x, img.y, img.width, img.height);
             if !r.intersects(rect) {
                 continue;
             }
-            // A clipping frame crops whatever part of the image hangs over its edge
-            let clip = b
-                .group_cards
-                .iter()
-                .rev()
-                .filter(|g| g.clip)
-                .map(|g| item_rect(g.x, g.y, g.width, g.height))
-                .find(|fr| fr.intersects(r));
-            let clipped;
-            let p = match clip {
-                Some(fr) => {
-                    clipped = p.with_clip_rect(fr.intersect(rect));
-                    &clipped
-                }
-                None => p,
-            };
             p.add(
                 egui::epaint::Shadow {
                     offset: vec2(0.0, 4.0 * z),
@@ -162,6 +171,17 @@ impl App {
 
         // Link cards
         for l in &b.link_cards {
+            if hid.contains(&l.id) {
+                continue;
+            }
+            let clipped_p;
+            let p = match clips.get(&l.id) {
+                Some(q) => {
+                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
+                    &clipped_p
+                }
+                None => p,
+            };
             let r = item_rect(l.x, l.y, l.width, l.height);
             if !r.intersects(rect) {
                 continue;
@@ -185,6 +205,17 @@ impl App {
 
         // Sticky notes
         for n in &b.sticky_notes {
+            if hid.contains(&n.id) {
+                continue;
+            }
+            let clipped_p;
+            let p = match clips.get(&n.id) {
+                Some(q) => {
+                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
+                    &clipped_p
+                }
+                None => p,
+            };
             let r = item_rect(n.x, n.y, n.width, n.height);
             if !r.intersects(rect) {
                 continue;
@@ -214,9 +245,31 @@ impl App {
 
         // Free-floating strokes and text
         for s in &b.world_strokes {
+            if hid.contains(&s.id) {
+                continue;
+            }
+            let clipped_p;
+            let p = match clips.get(&s.id) {
+                Some(q) => {
+                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
+                    &clipped_p
+                }
+                None => p,
+            };
             paint_stroke(p, s, |q| v.s(q.x, q.y), s.width * z);
         }
         for t in &b.world_texts {
+            if hid.contains(&t.id) {
+                continue;
+            }
+            let clipped_p;
+            let p = match clips.get(&t.id) {
+                Some(q) => {
+                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
+                    &clipped_p
+                }
+                None => p,
+            };
             let fs = if t.font_size > 0.0 { t.font_size } else { 16.0 };
             // Hidden while it is being edited in place
             let editing = matches!(&self.edit, Some(Edit { target: EditTarget::WorldText(id), .. }) if id == &t.id);
@@ -278,9 +331,15 @@ impl App {
                         Kind::Text => 2.0,
                         _ => 10.0 * z,
                     };
-                    p.rect_stroke(r, round, EStroke::new(1.5_f32, blue().gamma_multiply(a)));
+                    p.rect_stroke(r, round, EStroke::new(2.0_f32, blue().gamma_multiply(a)));
                 }
             }
+        }
+
+        // Canvas drag: the frame the cursor is in lights up ("let go to drop it here")
+        if let Some(g) = self.drop_target().and_then(|t| self.board.group_cards.iter().find(|g| g.id == t)) {
+            let r = item_rect(g.x, g.y, g.width, g.height).expand(1.0);
+            p.rect_stroke(r, group_radius(g) * z, EStroke::new(2.0_f32, blue()));
         }
 
         // Selection outlines
@@ -294,7 +353,7 @@ impl App {
                     Kind::Text => 2.0,
                     _ => 10.0 * z,
                 };
-                p.rect_stroke(r, round, EStroke::new(1.5_f32, blue()));
+                p.rect_stroke(r, round, EStroke::new(2.0_f32, blue()));
                 if self.selected.len() == 1 && *k != Kind::Text {
                     let ctx = p.ctx().clone();
                     let corners = [r.right_bottom(), r.left_bottom(), r.right_top(), r.left_top()];
@@ -364,7 +423,7 @@ impl App {
             }
             if x1 > x0 {
                 let r = item_rect(x0, y0, x1 - x0, y1 - y0).expand(0.5);
-                p.rect_stroke(r, 0.0, EStroke::new(1.0_f32, blue()));
+                p.rect_stroke(r, 0.0, EStroke::new(1.5_f32, blue()));
                 // Keyed by the selection itself, so adding/removing an object glides the pills too
                 let key = {
                     use std::hash::{Hash, Hasher};

@@ -222,6 +222,13 @@ pub struct Board {
     pub group_cards: Vec<Group>,
     /// Custom layer names set from the outline (object id -> name); frames use their title instead
     pub layer_names: std::collections::HashMap<String, String>,
+    /// Object ids hidden / locked from the outline (frames pass it to what's inside)
+    pub hidden: std::collections::HashSet<String>,
+    pub locked: std::collections::HashSet<String>,
+    /// Which frame each object belongs to (object id -> frame id, "" = the board itself)
+    pub parents: std::collections::HashMap<String, String>,
+    /// Order set by dragging rows in the outline (object id -> position among its siblings)
+    pub layer_order: std::collections::HashMap<String, f32>,
     pub updated_at: f64,
     pub created_at: f64,
 }

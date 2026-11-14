@@ -6,8 +6,49 @@
 use crate::*;
 use std::collections::HashSet;
 
-const W: f32 = 240.0;
+/// Panel width, dragged from its right edge (shared so the HUD and camera focus follow it)
+static WIDTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+const W_MIN: f32 = 200.0;
+const W_MAX: f32 = 480.0;
+fn width() -> f32 {
+    let b = WIDTH.load(std::sync::atomic::Ordering::Relaxed);
+    if b == 0 { 240.0 } else { f32::from_bits(b) }
+}
+fn set_width(w: f32) {
+    WIDTH.store(w.clamp(W_MIN, W_MAX).to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
 const GAP: f32 = 12.0;
+/// Width of the collapsed bar (logo, name, open button)
+const TAB_W: f32 = 150.0;
+
+/// Sidebar glyph: a small window with its left pane marked
+fn sidebar_glyph(p: &egui::Painter, c: Pos2, col: Color32) {
+    let g = Rect::from_center_size(p.round_pos_to_pixels(c), vec2(14.0, 11.0));
+    p.rect_stroke(g, 2.5, EStroke::new(1.2_f32, col));
+    p.line_segment([pos2(g.min.x + 4.5, g.min.y + 0.5), pos2(g.min.x + 4.5, g.max.y - 0.5)], EStroke::new(1.2_f32, col));
+}
+
+/// Light "semantic" match: every word must hit the name (substring or in-order letters) or
+/// a word people use for that kind of object (photo -> image, sticky -> note, ...)
+fn search_hit(q: &str, name: &str, k: Kind) -> bool {
+    let name = name.to_lowercase();
+    let syn: &[&str] = match k {
+        Kind::Image => &["image", "img", "picture", "pic", "photo", "screenshot", "png", "jpg"],
+        Kind::Note => &["note", "sticky", "postit", "memo", "shape", "rectangle"],
+        Kind::Link => &["link", "url", "web", "bookmark", "site"],
+        Kind::Group => &["frame", "board", "artboard", "group", "container"],
+        Kind::Text => &["text", "label", "title", "words", "type"],
+        Kind::Stroke => &["drawing", "stroke", "pen", "line", "arrow", "sketch", "ellipse", "circle"],
+    };
+    q.to_lowercase().split_whitespace().all(|t| {
+        if name.contains(t) || syn.iter().any(|w| w.starts_with(t)) {
+            return true;
+        }
+        // In-order letters ("tst5" finds "Test 5") once the word is long enough to mean something
+        let mut it = name.chars();
+        t.chars().count() >= 3 && t.chars().all(|c| it.any(|n| n == c))
+    })
+}
 const ROW_H: f32 = 30.0;
 
 fn kid() -> egui::Id {
@@ -16,13 +57,13 @@ fn kid() -> egui::Id {
 
 /// How far the bottom-left HUD slides right to make room for the outline (animated)
 pub(crate) fn hud_shift(ctx: &egui::Context) -> f32 {
-    ctx.data(|d| d.get_temp::<f32>(kid())).unwrap_or(0.0).clamp(0.0, 1.0) * (W + GAP)
+    ctx.data(|d| d.get_temp::<f32>(kid())).unwrap_or(0.0).clamp(0.0, 1.0) * (width() + GAP)
 }
 
 /// How far top-left readouts (F3 stats) move aside: past the panel, or past the collapsed tab
 pub(crate) fn top_shift(ctx: &egui::Context) -> f32 {
     let tk = ctx.data(|d| d.get_temp::<f32>(egui::Id::new("qd_outline_tabk"))).unwrap_or(0.0);
-    hud_shift(ctx).max(tk.clamp(0.0, 1.0) * (34.0 + GAP))
+    hud_shift(ctx).max(tk.clamp(0.0, 1.0) * (TAB_W + GAP))
 }
 
 /// The object whose outline row is under the pointer, so the canvas can highlight it
@@ -57,39 +98,31 @@ struct Tree {
     items: Vec<(Sel, [f32; 4])>,
     parent: Vec<Option<usize>>,
     kids: Vec<Vec<usize>>,
+    /// Top-level objects in list order
+    roots: Vec<usize>,
 }
 
 impl App {
     fn outline_tree(&self) -> Tree {
         let items: Vec<(Sel, [f32; 4])> = self.all_items().into_iter().filter_map(|s| self.rect_of(s.0, &s.1).map(|r| (s, r))).collect();
-        let area = |r: &[f32; 4]| r[2] * r[3];
-        let inside = |a: &[f32; 4], b: &[f32; 4]| a[0] >= b[0] && a[1] >= b[1] && a[0] + a[2] <= b[0] + b[2] && a[1] + a[3] <= b[1] + b[3];
-        let mut parent = vec![None; items.len()];
-        for (i, (_, r)) in items.iter().enumerate() {
-            let mut best: Option<usize> = None;
-            for (j, ((k, _), q)) in items.iter().enumerate() {
-                // identical rects: the earlier one is the parent, so there's never a cycle
-                if i == j || *k != Kind::Group || !inside(r, q) || (area(q) <= area(r) && !(area(q) == area(r) && j < i)) {
-                    continue;
-                }
-                if best.map_or(true, |b| area(q) < area(&items[b].1)) {
-                    best = Some(j);
-                }
-            }
-            parent[i] = best;
-        }
+        let pos: std::collections::HashMap<&str, usize> = items.iter().enumerate().map(|(i, (s, _))| (s.1.as_str(), i)).collect();
+        let parent: Vec<Option<usize>> = items.iter().map(|(s, _)| self.parent_of(&s.1).and_then(|p| pos.get(p).copied())).collect();
         let mut kids = vec![Vec::new(); items.len()];
         for (i, p) in parent.iter().enumerate() {
             if let Some(p) = p {
                 kids[*p].push(i);
             }
         }
-        // Frames first, then reading order (top to bottom, left to right)
-        let key = |i: usize| ((items[i].0 .0 != Kind::Group) as u8, items[i].1[1], items[i].1[0]);
+        // Order dragged in the outline first; otherwise frames first, then reading order
+        let ord = &self.board.layer_order;
+        let key = |i: usize| (ord.get(&items[i].0 .1).copied().unwrap_or(f32::MAX), (items[i].0 .0 != Kind::Group) as u8, items[i].1[1], items[i].1[0]);
+        let cmp = |a: &usize, b: &usize| key(*a).partial_cmp(&key(*b)).unwrap_or(std::cmp::Ordering::Equal);
         for k in kids.iter_mut() {
-            k.sort_by(|a, b| key(*a).partial_cmp(&key(*b)).unwrap_or(std::cmp::Ordering::Equal));
+            k.sort_by(cmp);
         }
-        Tree { items, parent, kids }
+        let mut roots: Vec<usize> = (0..items.len()).filter(|&i| parent[i].is_none()).collect();
+        roots.sort_by(cmp);
+        Tree { items, parent, kids, roots }
     }
 
     fn outline_name(&self, (k, id): &Sel) -> String {
@@ -128,7 +161,7 @@ impl App {
     /// clear of the outline panel
     fn outline_focus(&mut self, r: [f32; 4], canvas: Rect) {
         let cam = self.board.camera;
-        let left = W + GAP + 10.0;
+        let left = width() + GAP + 10.0;
         let (aw, ah) = ((canvas.width() - left - 40.0).max(80.0), (canvas.height() - 120.0).max(80.0));
         let z = cam.zoom;
         let sx = (r[0] - cam.x) * z;
@@ -148,6 +181,42 @@ impl App {
         self.mark_dirty();
     }
 
+    /// After a duplicate: `copy` (new id) inherits `orig`'s name, and `orig` is renamed to
+    /// "<base> N" with the next free number among names sharing that base (Frame 1, Frame 2, ...)
+    pub(crate) fn number_duplicate(&mut self, k: Kind, orig: &str, copy: &str) {
+        let cur = self.outline_name(&(k, orig.to_string()));
+        if let Some(p) = self.board.parents.get(orig).cloned() {
+            self.board.parents.insert(copy.to_string(), p);
+        }
+        if k != Kind::Group {
+            if let Some(n) = self.board.layer_names.get(orig).cloned() {
+                self.board.layer_names.insert(copy.to_string(), n);
+            }
+        }
+        let split = |n: &str| -> (String, Option<u32>) {
+            match n.rsplit_once(' ') {
+                Some((b, d)) if !b.is_empty() && d.chars().all(|c| c.is_ascii_digit()) && !d.is_empty() => (b.to_string(), d.parse().ok()),
+                _ => (n.to_string(), None),
+            }
+        };
+        let (base, _) = split(&cur);
+        let mut top = 0;
+        for s in self.all_items() {
+            let (b, n) = split(&self.outline_name(&s));
+            if b == base {
+                top = top.max(n.unwrap_or(0));
+            }
+        }
+        let name = format!("{base} {}", top + 1);
+        if k == Kind::Group {
+            if let Some(g) = self.board.group_cards.iter_mut().find(|g| g.id == orig) {
+                g.title = name;
+            }
+        } else {
+            self.board.layer_names.insert(orig.to_string(), name);
+        }
+    }
+
     pub(crate) fn outline_ui(&mut self, ctx: &egui::Context, canvas: Rect) {
         let closed = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_outline_closed"))).unwrap_or(false);
         let board_scope = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_outline_board"))).unwrap_or(false);
@@ -160,17 +229,22 @@ impl App {
             i
         };
         // The frame being worked in: the outermost frame around the selection
-        let root: Option<Sel> = self.sel.as_ref().and_then(idx).and_then(|i| {
+        let mut root: Option<Sel> = self.sel.as_ref().and_then(idx).and_then(|i| {
             let t = top(i);
             (tree.items[t].0 .0 == Kind::Group).then(|| tree.items[t].0.clone())
         });
-        let show = !closed && root.is_some() && self.edit.is_none();
         let rid = egui::Id::new("qd_outline_root");
+        if root.is_none() {
+            root = ctx.data(|d| d.get_temp::<Sel>(rid)).filter(|r| idx(r).is_some());
+        }
+        // No frame to show yet: list the whole board
+        let board_scope = board_scope || root.is_none();
+        let show = !closed && self.edit.is_none();
         if let Some(r) = &root {
             ctx.data_mut(|d| d.insert_temp(rid, r.clone()));
         }
         // Collapsed: a small tab (logo placeholder) stays at the top-left; click or L to expand
-        let tk = ease(ctx, egui::Id::new("qd_outline_tab"), closed && root.is_some() && self.edit.is_none());
+        let tk = ease(ctx, egui::Id::new("qd_outline_tab"), closed && self.edit.is_none());
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_tabk"), tk));
         if tk > 0.01 {
             egui::Area::new(egui::Id::new("qd_outline_tab_area"))
@@ -179,17 +253,18 @@ impl App {
                 .interactable(tk > 0.5)
                 .show(ctx, |ui| {
                     ui.set_opacity(tk.clamp(0.0, 1.0));
-                    let (r, resp) = ui.allocate_exact_size(vec2(34.0, 34.0), Sense::click());
-                    let resp = resp.on_hover_text("Outline  ·  L");
+                    let (r, _) = ui.allocate_exact_size(vec2(TAB_W, 40.0), Sense::hover());
                     let p = ui.painter();
+                    p.rect_filled(r.translate(vec2(0.0, 3.0)), 12.0, Color32::from_black_alpha(70));
+                    p.rect_filled(r, 12.0, frame_bg());
+                    p.rect_stroke(r, 12.0, EStroke::new(1.0_f32, border()));
+                    paint_logo(p, pos2(r.min.x + 22.0, r.center().y), 18.0, 1.0);
+                    p.text(pos2(r.min.x + 40.0, r.center().y), Align2::LEFT_CENTER, "Tangra", FontId::proportional(13.0), Color32::from_gray(235));
+                    let br = Rect::from_center_size(pos2(r.max.x - 22.0, r.center().y), vec2(26.0, 26.0));
+                    let resp = ui.interact(br, egui::Id::new("qd_outline_open"), Sense::click()).on_hover_text("Show outline  ·  L");
                     let (h, pr) = hover_fx(ui.ctx(), &resp, true);
-                    let r = r.expand(1.5 * h - pr);
-                    p.rect_filled(r.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-                    p.rect_filled(r, 10.0, frame_bg());
-                    p.rect_filled(r, 10.0, hover_fill(h, pr));
-                    p.rect_stroke(r, 10.0, EStroke::new(1.0_f32, border()));
-                    let c = r.center();
-                    paint_logo(p, c, 18.0 + 2.0 * h, 1.0);
+                    p.rect_filled(br.expand(1.0 * h - pr), 7.0, hover_fill(h, pr));
+                    sidebar_glyph(p, br.center(), mix(TEXT_DIM, Color32::from_gray(235), h));
                     if resp.clicked() {
                         toggle_outline(ui.ctx());
                     }
@@ -203,8 +278,7 @@ impl App {
         if k <= 0.01 {
             return;
         }
-        let Some(root) = root.or_else(|| ctx.data(|d| d.get_temp::<Sel>(rid))) else { return };
-        let Some(ri) = idx(&root) else { return };
+        let ri = root.as_ref().and_then(idx);
 
         // Folded frames; selecting something unfolds the frames around it
         let fid = egui::Id::new("qd_outline_fold");
@@ -232,18 +306,47 @@ impl App {
                 }
             }
         }
-        if board_scope {
-            let mut roots: Vec<usize> = (0..tree.items.len()).filter(|&i| tree.parent[i].is_none()).collect();
-            roots.sort_by(|a, b| {
-                let ka = ((tree.items[*a].0 .0 != Kind::Group) as u8, tree.items[*a].1[1], tree.items[*a].1[0]);
-                let kb = ((tree.items[*b].0 .0 != Kind::Group) as u8, tree.items[*b].1[1], tree.items[*b].1[0]);
-                ka.partial_cmp(&kb).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            for r in roots {
+        let qid = egui::Id::new("qd_outline_q");
+        let mut query: String = ctx.data(|d| d.get_temp(qid)).unwrap_or_default();
+        let q = query.trim().to_string();
+        if board_scope || ri.is_none() {
+            for &r in &tree.roots {
                 walk(&tree, r, 0, &fold, &mut rows);
             }
-        } else {
+        } else if let Some(ri) = ri {
             walk(&tree, ri, 0, &fold, &mut rows);
+        }
+        // Searching: keep matches plus the frames around them (unfolded), drop the rest
+        if !q.is_empty() {
+            fn mark(t: &Tree, i: usize, hit: &dyn Fn(usize) -> bool, keep: &mut HashSet<usize>) -> bool {
+                let mut any = hit(i);
+                for &c in &t.kids[i] {
+                    any |= mark(t, c, hit, keep);
+                }
+                if any {
+                    keep.insert(i);
+                }
+                any
+            }
+            let hit = |i: usize| search_hit(&q, &self.outline_name(&tree.items[i].0), tree.items[i].0 .0);
+            let mut keep = HashSet::new();
+            let tops: Vec<usize> = rows.iter().filter(|r| r.1 == 0).map(|r| r.0).collect();
+            for t in &tops {
+                mark(&tree, *t, &hit, &mut keep);
+            }
+            fn walk_all(t: &Tree, i: usize, d: usize, keep: &HashSet<usize>, out: &mut Vec<(usize, usize)>) {
+                if !keep.contains(&i) {
+                    return;
+                }
+                out.push((i, d));
+                for &c in &t.kids[i] {
+                    walk_all(t, c, d + 1, keep, out);
+                }
+            }
+            rows.clear();
+            for t in tops {
+                walk_all(&tree, t, 0, &keep, &mut rows);
+            }
         }
 
         // Same reveal as the canvas popup: a short slide + fade, rows cascading in after the shell
@@ -258,6 +361,9 @@ impl App {
         let mut ren: Option<(Sel, String)> = ctx.data(|d| d.get_temp(ren_id)).flatten();
         let mut ren_start = false;
         let mut ren_done: Option<Option<(Sel, String)>> = None;
+        let mut vis: Option<(Sel, bool)> = None;
+        let drag_id = egui::Id::new("qd_outline_drag");
+        let mut drop_req: Option<(usize, super::outline_drag::Drop)> = None;
         // A rename whose row is gone (folded away, scope switched, panel hidden) is dropped
         if ren.as_ref().is_some_and(|(rs, _)| !show || !rows.iter().any(|&(i, _)| &tree.items[i].0 == rs)) {
             ren = None;
@@ -276,6 +382,8 @@ impl App {
             .interactable(show)
             .show(ctx, |ui| {
                 ui.set_opacity(k.clamp(0.0, 1.0));
+                #[allow(non_snake_case)]
+                let W = width();
                 let shell = Rect::from_min_size(pos, vec2(W, h));
                 ui.painter().rect_filled(shell.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
                 egui::Frame::none().fill(frame_bg()).stroke(EStroke::new(1.0_f32, border())).rounding(10.0).inner_margin(6.0).show(ui, |ui| {
@@ -290,26 +398,104 @@ impl App {
                     let xresp = ui.interact(xr, egui::Id::new("qd_outline_x"), Sense::click()).on_hover_text("Collapse  ·  L");
                     let (xh, xp) = hover_fx(ctx, &xresp, true);
                     p.rect_filled(xr.expand(1.5 * xh - xp), 6.0, hover_fill(xh, xp));
-                    let c = xr.center();
-                    p.line_segment([c + vec2(2.0, -4.5), c + vec2(-2.5, 0.0)], EStroke::new(1.4_f32, TEXT_DIM));
-                    p.line_segment([c + vec2(-2.5, 0.0), c + vec2(2.0, 4.5)], EStroke::new(1.4_f32, TEXT_DIM));
+                    sidebar_glyph(&p, xr.center(), mix(TEXT_DIM, Color32::from_gray(235), xh));
                     close |= xresp.clicked();
-                    for (label, on_board) in [("Board", true), ("Frame", false)] {
-                        let tw = ui.fonts(|f| f.layout_no_wrap(label.to_string(), FontId::proportional(11.0), Color32::WHITE).size().x) + 14.0;
-                        x -= tw + 4.0;
-                        let r = Rect::from_min_size(pos2(x, hr.min.y + 4.0), vec2(tw, 20.0));
+                    let _ = x;
+                    // Scope switch under the title: one shared track, a pill slides to the active half
+                    ui.add_space(4.0);
+                    let (tr, _) = ui.allocate_exact_size(vec2(W - 12.0, 26.0), Sense::hover());
+                    let tr = tr.shrink2(vec2(4.0, 0.0));
+                    p.rect_filled(tr, 7.0, Color32::from_black_alpha(60));
+                    let bk = {
+                        let gid = egui::Id::new("qd_outline_scope_k");
+                        let t = if board_scope { 1.0 } else { 0.0 };
+                        let c: f32 = ctx.data(|d| d.get_temp(gid)).unwrap_or(t);
+                        let dt = ctx.input(|i| i.stable_dt).min(0.05);
+                        let mut v = c + (t - c) * (1.0 - (-dt * 14.0).exp());
+                        if (v - t).abs() < 0.002 {
+                            v = t;
+                        } else {
+                            ctx.request_repaint();
+                        }
+                        ctx.data_mut(|d| d.insert_temp(gid, v));
+                        v
+                    };
+                    let half = tr.width() / 2.0;
+                    let pill = Rect::from_min_size(pos2(tr.min.x + 2.0 + bk * half, tr.min.y + 2.0), vec2(half - 4.0 + 0.0, tr.height() - 4.0));
+                    p.rect_filled(pill, 5.5, Color32::from_white_alpha(22));
+                    for (i, (label, on_board)) in [("This frame", false), ("Whole board", true)].into_iter().enumerate() {
+                        let r = Rect::from_min_size(pos2(tr.min.x + i as f32 * half, tr.min.y), vec2(half, tr.height()));
                         let resp = ui.interact(r, egui::Id::new(("qd_outline_scope", label)), Sense::click());
                         let on = board_scope == on_board;
                         let (sh, sp) = hover_fx(ctx, &resp, !on);
-                        let onk = ease(ctx, egui::Id::new(("qd_outline_scope_on", label)), on);
-                        p.rect_filled(r.expand(1.0 * sh - sp), 6.0, mix(hover_fill(sh, sp), Color32::from_white_alpha(20), onk));
-                        p.text(r.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), if on { Color32::from_gray(235) } else { TEXT_DIM });
+                        if !on {
+                            p.rect_filled(r.shrink(2.0), 5.5, hover_fill(sh * 0.6, sp));
+                        }
+                        let onk = if on_board { bk } else { 1.0 - bk };
+                        p.text(r.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), mix(TEXT_DIM, Color32::from_gray(235), onk.max(sh * 0.5)));
                         if resp.clicked() {
                             scope = Some(on_board);
                         }
                     }
-                    ui.add_space(2.0);
-                    egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(ui.available_height() - 36.0).show(ui, |ui| {
+                    // Search
+                    ui.add_space(6.0);
+                    let (sr, _) = ui.allocate_exact_size(vec2(W - 12.0, 28.0), Sense::hover());
+                    let sr = sr.shrink2(vec2(4.0, 0.0));
+                    let te_id = egui::Id::new("qd_outline_search");
+                    let focused = ctx.memory(|m| m.has_focus(te_id));
+                    let fk = ease(ctx, te_id.with("f"), focused);
+                    p.rect_filled(sr, 7.0, Color32::from_black_alpha(60));
+                    if fk > 0.01 {
+                        p.rect_stroke(sr.shrink(0.5), 7.0, EStroke::new(1.0_f32, blue().gamma_multiply(fk)));
+                    }
+                    // Magnifier
+                    let mc = p.round_pos_to_pixels(pos2(sr.min.x + 14.0, sr.center().y - 0.5));
+                    let ms = EStroke::new(1.2_f32, TEXT_DIM);
+                    p.circle_stroke(mc, 4.0, ms);
+                    p.line_segment([mc + vec2(2.9, 2.9), mc + vec2(5.6, 5.6)], ms);
+                    let te = ui.put(
+                        Rect::from_min_max(pos2(sr.min.x + 26.0, sr.min.y), pos2(sr.max.x - 24.0, sr.max.y)),
+                        egui::TextEdit::singleline(&mut query).id(te_id).frame(false).hint_text("Search layers").font(FontId::proportional(11.5)).vertical_align(egui::Align::Center),
+                    );
+                    if te.has_focus() && ctx.input(|i| i.key_pressed(Key::Escape)) {
+                        query.clear();
+                        te.surrender_focus();
+                    }
+                    if !query.is_empty() {
+                        let cr = Rect::from_center_size(pos2(sr.max.x - 12.0, sr.center().y), vec2(18.0, 18.0));
+                        let cresp = ui.interact(cr, te_id.with("clear"), Sense::click());
+                        let (ch, cp) = hover_fx(ctx, &cresp, true);
+                        p.rect_filled(cr, 5.0, hover_fill(ch, cp));
+                        let c = p.round_pos_to_pixels(cr.center());
+                        let cs = EStroke::new(1.2_f32, mix(TEXT_DIM, Color32::from_gray(235), ch));
+                        p.line_segment([c + vec2(-3.0, -3.0), c + vec2(3.0, 3.0)], cs);
+                        p.line_segment([c + vec2(3.0, -3.0), c + vec2(-3.0, 3.0)], cs);
+                        if cresp.clicked() {
+                            query.clear();
+                        }
+                    }
+                    ctx.data_mut(|d| d.insert_temp(qid, query.clone()));
+                    // Divider edge to edge, then the layers
+                    ui.add_space(8.0);
+                    let dy = ui.cursor().min.y;
+                    p.line_segment([pos2(shell.min.x, dy), pos2(shell.max.x, dy)], EStroke::new(1.0_f32, border()));
+                    ui.add_space(6.0);
+                    // Solid scrollbar: it takes its own lane instead of floating over the rows
+                    {
+                        let sc = &mut ui.spacing_mut().scroll;
+                        *sc = egui::style::ScrollStyle::solid();
+                        sc.bar_width = 5.0;
+                        sc.bar_inner_margin = 3.0;
+                        // Handle only, like Figma: no visible track
+                        sc.dormant_background_opacity = 0.0;
+                        sc.active_background_opacity = 0.0;
+                        sc.interact_background_opacity = 0.0;
+                        sc.dormant_handle_opacity = 0.55;
+                        sc.active_handle_opacity = 0.8;
+                        sc.interact_handle_opacity = 1.0;
+                    }
+                    ui.visuals_mut().extreme_bg_color = Color32::TRANSPARENT;
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).drag_to_scroll(false).max_height(ui.available_height() - 36.0).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         // Toolbar-style wave: rows near the pointer lift into a tile that slides right
                         let pitch = ROW_H + 2.0;
@@ -321,7 +507,7 @@ impl App {
                         let mut laid: Vec<(Rect, f32, f32, egui::Response)> = Vec::with_capacity(rows.len());
                         for (ri_, &(i, _)) in rows.iter().enumerate() {
                             let (s, _) = &tree.items[i];
-                            let (r0, resp) = ui.allocate_exact_size(vec2(W - 12.0, ROW_H), Sense::click());
+                            let (r0, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click_and_drag());
                             // Cascade in after the shell, top row first
                             let e = (k * 1.7 - (ri_ as f32 * 0.04).min(0.6)).clamp(0.0, 1.0);
                             let e = 1.0 - (1.0 - e).powi(3);
@@ -329,7 +515,7 @@ impl App {
                             // Hover lift; a row being renamed stays lifted, and easing in/out of it means
                             // no snap when the field opens or closes (the field steals the row's hover)
                             let m = ease(ctx, resp.id.with("lift"), resp.hovered() || renaming);
-                            let r = Rect::from_min_max(pos2(r0.min.x + 6.0 * m - (1.0 - e) * 10.0, r0.min.y), pos2(r0.max.x - 2.0 + 2.0 * m, r0.max.y));
+                            let r = Rect::from_min_max(pos2(r0.min.x + 4.0 + 6.0 * m - (1.0 - e) * 10.0, r0.min.y), pos2(r0.max.x - 2.0 + 2.0 * m, r0.max.y));
                             // Selected rows never get the grey hover tile: selection colour wins
                             if !self.selected.contains(s) {
                                 wave_tile(&ui.painter().with_clip_rect(ui.clip_rect()), r, m, mix(popup(), Color32::from_gray(90), 0.35), e);
@@ -366,7 +552,14 @@ impl App {
                             }
                         }
                         // Pass 3: row contents on top
+                        let hid_all = self.hidden_ids();
+                        let lock_all = self.blocked_ids();
+                        let mut drag_rows: Vec<(Rect, usize, usize)> = Vec::with_capacity(rows.len());
                         for (&(i, d), (r, m, e, resp)) in rows.iter().zip(laid) {
+                            drag_rows.push((r, i, d));
+                            if resp.drag_started() && ren.is_none() {
+                                ctx.data_mut(|dd| dd.insert_temp(drag_id, Some(tree.items[i].0.clone())));
+                            }
                             let (s, _) = &tree.items[i];
                             let p = ui.painter().with_clip_rect(ui.clip_rect());
                             let selected = self.selected.contains(s);
@@ -398,38 +591,30 @@ impl App {
                             // Kind icon
                             let ic = pos2(x0 + 24.0, cy);
                             let icol = mix(Color32::from_gray(140), blue(), sk);
-                            match s.0 {
-                                Kind::Group => {
-                                    for t in [-2.0_f32, 2.0] {
-                                        p.line_segment([ic + vec2(-5.0, t), ic + vec2(5.0, t)], EStroke::new(1.1_f32, icol));
-                                        p.line_segment([ic + vec2(t, -5.0), ic + vec2(t, 5.0)], EStroke::new(1.1_f32, icol));
-                                    }
-                                }
-                                Kind::Image => {
-                                    let b = Rect::from_center_size(ic, vec2(10.0, 9.0));
-                                    p.rect_stroke(b, 1.5, EStroke::new(1.1_f32, icol));
-                                    p.circle_filled(b.min + vec2(3.0, 3.0), 1.2, icol);
-                                }
-                                Kind::Text => {
-                                    p.text(ic, Align2::CENTER_CENTER, "T", FontId::proportional(11.0), icol);
-                                }
-                                Kind::Note => {
-                                    p.rect_filled(Rect::from_center_size(ic, vec2(9.0, 9.0)), 2.0, icol.gamma_multiply(0.7));
-                                }
-                                Kind::Link => {
-                                    p.line_segment([ic + vec2(-4.0, 4.0), ic + vec2(4.0, -4.0)], EStroke::new(1.2_f32, icol));
-                                    p.line_segment([ic + vec2(0.0, -4.0), ic + vec2(4.0, -4.0)], EStroke::new(1.2_f32, icol));
-                                    p.line_segment([ic + vec2(4.0, -4.0), ic + vec2(4.0, 0.0)], EStroke::new(1.2_f32, icol));
-                                }
-                                Kind::Stroke => {
-                                    p.circle_stroke(ic, 4.5, EStroke::new(1.1_f32, icol));
-                                }
-                            }
+                            super::icons::kind_icon(&p, s.0, ic, icol);
                             let name = self.outline_name(s);
-                            let tc = mix(mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m), Color32::WHITE, sk);
+                            // Hidden (or inside a hidden frame) rows fade
+                            let dim = if hid_all.contains(&s.1) { 0.4 } else { 1.0 };
+                            let tc = mix(mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m), Color32::WHITE, sk).gamma_multiply(dim);
+                            // Eye + lock on the right: shown on hover, or always while switched on
+                            let own_h = self.board.hidden.contains(&s.1);
+                            let own_l = self.board.locked.contains(&s.1);
+                            let show_ic = resp.hovered() || own_h || own_l;
+                            let icon_w = if show_ic { 44.0 } else { 0.0 };
+                            let lock_c = pos2(r.max.x - 34.0, cy);
+                            let eye_c = pos2(r.max.x - 14.0, cy);
+                            let ptr = resp.hover_pos().or(resp.interact_pointer_pos());
+                            let on_eye = show_ic && ptr.is_some_and(|q| (q.x - eye_c.x).abs() < 9.0);
+                            let on_lock = show_ic && ptr.is_some_and(|q| (q.x - lock_c.x).abs() < 9.0);
+                            if show_ic {
+                                let ic = |on: bool, over: bool| Color32::from_gray(if over { 240 } else if on { 205 } else { 150 });
+                                let locked_eff = own_l || (lock_all.contains(&s.1) && !hid_all.contains(&s.1));
+                                super::icons::lock(&p, lock_c, 15.0, ic(locked_eff, on_lock), locked_eff);
+                                super::icons::eye(&p, eye_c, 15.0, ic(own_h, on_eye), own_h);
+                            }
                             // Double-click: rename in place (Enter / click away saves, Esc cancels)
                             let on_caret = has && resp.interact_pointer_pos().is_some_and(|q| q.x < x0 + 15.0);
-                            if resp.double_clicked() && !on_caret {
+                            if resp.double_clicked() && !on_caret && !on_eye && !on_lock {
                                 ren = Some((s.clone(), name.clone()));
                                 ren_start = true;
                             }
@@ -455,7 +640,7 @@ impl App {
                                 }
                             } else {
                                 // Long names end in an ellipsis before the folded-count badge
-                                let room = r.max.x - (x0 + 37.0) - if has && folded { 26.0 } else { 8.0 };
+                                let room = r.max.x - (x0 + 37.0) - icon_w - if has && folded { 26.0 } else { 8.0 };
                                 let font = FontId::proportional(12.0);
                                 let wid = |t: String| ui.fonts(|f| f.layout_no_wrap(t, font.clone(), tc).size().x);
                                 let mut shown = name.clone();
@@ -469,21 +654,62 @@ impl App {
                                 p.text(pos2(x0 + 37.0, cy), Align2::LEFT_CENTER, shown, font.clone(), tc);
                             }
                             if has && folded {
-                                p.text(pos2(r.max.x - 8.0, cy), Align2::RIGHT_CENTER, tree.kids[i].len().to_string(), FontId::proportional(10.5), Color32::from_gray(110));
+                                p.text(pos2(r.max.x - 8.0 - icon_w, cy), Align2::RIGHT_CENTER, tree.kids[i].len().to_string(), FontId::proportional(10.5), Color32::from_gray(110));
                             }
                             if resp.hovered() {
                                 hov = Some(s.clone());
                             }
                             if resp.clicked() {
-                                if on_caret {
+                                if on_eye || on_lock {
+                                    vis = Some((s.clone(), on_lock));
+                                } else if on_caret {
                                     toggle = Some(s.1.clone());
                                 } else {
                                     pick = Some(s.clone());
                                 }
                             }
                         }
+                        // Dragging a row: show where it would land; let go to drop
+                        let dragging: Option<Sel> = ctx.data(|dd| dd.get_temp::<Option<Sel>>(drag_id)).flatten();
+                        if let Some(src) = dragging.filter(|s| idx(s).is_some()) {
+                            let si = idx(&src).unwrap();
+                            let ptr = ctx.input(|i| i.pointer.interact_pos());
+                            let next_sib = |j: usize| {
+                                let list = match tree.parent[j] { Some(p) => &tree.kids[p], None => &tree.roots };
+                                list.iter().position(|&x| x == j).and_then(|n| list.get(n + 1).copied())
+                            };
+                            let target = ptr.and_then(|q| {
+                                super::outline_drag::drop_target(q.y, &drag_rows, &tree.parent, |j| tree.items[j].0 .0 == Kind::Group, si, next_sib)
+                            });
+                            if let Some(t) = &target {
+                                super::outline_drag::paint_marker(&ui.painter().with_clip_rect(ui.clip_rect()), t, &drag_rows);
+                            }
+                            if let Some(q) = ptr {
+                                super::outline_drag::paint_ghost(ctx, q, &self.outline_name(&src), src.0);
+                            }
+                            ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+                            if ctx.input(|i| i.pointer.any_released() || !i.pointer.any_down()) {
+                                ctx.data_mut(|dd| dd.remove::<Option<Sel>>(drag_id));
+                                drop_req = target.map(|t| (si, t));
+                            }
+                            ctx.request_repaint();
+                        }
                     });
                 });
+                // Right edge: drag to resize
+                let er = Rect::from_min_max(pos2(shell.max.x - 4.0, shell.min.y + 12.0), pos2(shell.max.x + 4.0, shell.max.y - 12.0));
+                let eresp = ui.interact(er, egui::Id::new("qd_outline_resize"), Sense::drag());
+                let ek = ease(ctx, egui::Id::new("qd_outline_resize_k"), eresp.hovered() || eresp.dragged());
+                if eresp.hovered() || eresp.dragged() {
+                    ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                }
+                if eresp.dragged() {
+                    set_width(W + eresp.drag_delta().x);
+                    ctx.request_repaint();
+                }
+                if ek > 0.01 {
+                    ui.painter().line_segment([pos2(shell.max.x - 0.5, shell.min.y + 14.0), pos2(shell.max.x - 0.5, shell.max.y - 14.0)], EStroke::new(2.0_f32, blue().gamma_multiply(ek)));
+                }
                 // Footer: the Tangra mark, bottom-left
                 let p = ui.painter();
                 let fy = shell.max.y - 22.0;
@@ -530,6 +756,35 @@ impl App {
                 }
             }
             None => ctx.data_mut(|d| d.insert_temp(ren_id, ren)),
+        }
+        if let Some(((k, id), lock)) = vis {
+            self.toggle_vis(k, &id, lock);
+        }
+        if let Some((si, d)) = drop_req {
+            let mut sub = Vec::new();
+            let mut stack = vec![si];
+            while let Some(i) = stack.pop() {
+                sub.push(tree.items[i].0.clone());
+                stack.extend(tree.kids[i].iter().copied());
+            }
+            let mut top_i = si;
+            while let Some(p) = tree.parent[top_i] {
+                top_i = p;
+            }
+            let siblings: Vec<String> = match d.parent { Some(p) => &tree.kids[p], None => &tree.roots }.iter().map(|&i| tree.items[i].0 .1.clone()).collect();
+            self.apply_outline_drop(
+                tree.items[si].0.clone(),
+                tree.items[si].1,
+                tree.parent[si],
+                d,
+                d.parent.map(|p| tree.items[p].1),
+                tree.items[top_i].1,
+                sub,
+                siblings,
+                d.before.map(|b| tree.items[b].0 .1.clone()),
+                d.parent.map(|p| tree.items[p].0 .1.clone()),
+            );
+            pick = None;
         }
         if let Some(s) = pick {
             if let Some(i) = idx(&s) {

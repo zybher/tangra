@@ -14,6 +14,9 @@ tray-icon = "0.25"
 global-hotkey = "0.8"
 ab_glyph = "0.2"
 
+[build-dependencies]
+winresource = "0.1"
+
 [profile.release]
 codegen-units = 1
 lto = true

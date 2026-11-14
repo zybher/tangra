@@ -108,6 +108,8 @@ impl App {
             for g in &self.board.group_cards { self.selected.insert((Kind::Group, g.id.clone())); }
             for t in &self.board.world_texts { self.selected.insert((Kind::Text, t.id.clone())); }
             for s in &self.board.world_strokes { self.selected.insert((Kind::Stroke, s.id.clone())); }
+            let bl = self.blocked_ids();
+            self.selected.retain(|s| !bl.contains(&s.1));
             self.sel = self.selected.iter().next().cloned();
         }
         if paste && self.now - self.last_paste > 0.3 {
@@ -326,37 +328,7 @@ impl App {
                     let mut moving_sels = self.selected.clone();
                     for (k, id) in &self.selected {
                         if *k == Kind::Group {
-                            if let Some([gx, gy, gw, gh]) = self.rect_of(Kind::Group, id) {
-                                let is_inside = |rx: f32, ry: f32, rw: f32, rh: f32| {
-                                    // Anything still touching the frame belongs to it
-                                    rx < gx + gw && rx + rw > gx && ry < gy + gh && ry + rh > gy
-                                };
-                                for img in &self.board.images {
-                                    if is_inside(img.x, img.y, img.width, img.height) {
-                                        moving_sels.insert((Kind::Image, img.id.clone()));
-                                    }
-                                }
-                                for n in &self.board.sticky_notes {
-                                    if is_inside(n.x, n.y, n.width, n.height) {
-                                        moving_sels.insert((Kind::Note, n.id.clone()));
-                                    }
-                                }
-                                for l in &self.board.link_cards {
-                                    if is_inside(l.x, l.y, l.width, l.height) {
-                                        moving_sels.insert((Kind::Link, l.id.clone()));
-                                    }
-                                }
-                                for s in &self.board.world_strokes {
-                                    if pts_bbox(&s.points).is_some_and(|[x, y, w, h]| is_inside(x, y, w, h)) {
-                                        moving_sels.insert((Kind::Stroke, s.id.clone()));
-                                    }
-                                }
-                                for t in &self.board.world_texts {
-                                    if is_inside(t.x, t.y, 20.0, 14.0) {
-                                        moving_sels.insert((Kind::Text, t.id.clone()));
-                                    }
-                                }
-                            }
+                            moving_sels.extend(self.descendants(id));
                         }
                     }
 
@@ -445,6 +417,8 @@ impl App {
                         self.set_rect(s.0, &s.1, [origin.x + dx, origin.y + dy, wd, h]);
                     }
                 }
+                let moved: Vec<Sel> = self.selected.iter().cloned().collect();
+                self.rehome([w.x, w.y], &moved);
                 self.drag_changed = true;
             }
             Drag::Resize { start, ox, oy, ow, oh, left, top, rx, ry, sel: (k, id) } => {
@@ -540,6 +514,17 @@ impl App {
             if let Some(b) = self.drag_board.take() {
                 self.push_undo(b);
             }
+        }
+        // Dropped objects join the frame they landed in; a new frame takes in what it surrounds
+        match &self.drag {
+            Drag::Move { .. } => App::set_drop_at(None),
+            Drag::Frame { id, .. } => {
+                let id = id.clone();
+                self.drag = Drag::None;
+                self.stamp_parents();
+                self.adopt_enclosed(&id);
+            }
+            _ => {}
         }
         self.active = None;
         self.drag = Drag::None;
