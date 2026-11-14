@@ -1,0 +1,22 @@
+[package]
+name = "tangra"
+version = "0.2.0"
+description = "Tangra - open-source design tool and infinite scratchpad & screenshot annotator"
+edition = "2021"
+
+[dependencies]
+eframe = { version = "=0.29.1", default-features = false, features = ["glow", "default_fonts"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff", "ico"] }
+arboard = "3.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tray-icon = "0.25"
+global-hotkey = "0.8"
+ab_glyph = "0.2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

@@ -1,0 +1,13 @@
+mod dialogs;
+mod menus;
+mod shortcuts;
+mod side_panel;
+pub(crate) mod outline;
+mod style_bar;
+mod titlebar;
+mod tool_menu;
+mod toolbar;
+pub(crate) mod menu_kit;
+pub(crate) use menu_kit::*;
+pub(crate) mod color_picker;
+pub(crate) mod scale;

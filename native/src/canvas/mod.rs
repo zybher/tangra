@@ -1,0 +1,10 @@
+mod input;
+mod paint;
+mod size_pills;
+mod hit_test;
+mod textures;
+pub(crate) mod geometry;
+pub(crate) use geometry::*;
+mod snap;
+mod gap_handles;
+mod multi_edit;

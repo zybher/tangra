@@ -1,0 +1,34 @@
+# Rust build output
+native/target/
+target/
+**/*.rs.bk
+
+# Local runtime data / logs
+*.log
+native/data/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Web tooling (if ever added)
+node_modules/
+dist/
+build/
+.next/
+out/
+.vercel/
+coverage/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Internal working notes (kept local)
+AUDIT_REPORT.md
+FEEDBACK.md
+MAIN_RS_MAP.md
+SWARM_AUDIT_PROMPT.md
