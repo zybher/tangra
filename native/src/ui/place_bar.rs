@@ -59,6 +59,10 @@ impl App {
         if ctx.input(|i| i.modifiers.command && i.modifiers.alt && i.modifiers.shift && i.key_pressed(Key::R)) {
             self.fit_frames_to_content();
         }
+        // Ctrl+Alt+G: wrap the selection in a new frame (Figma)
+        if ctx.input(|i| i.modifiers.command && i.modifiers.alt && !i.modifiers.shift && i.key_pressed(Key::G)) {
+            self.frame_selection();
+        }
         // Shift+Enter: select the frame around the selection (Figma)
         let up = ctx.input(|i| i.modifiers.shift && !i.modifiers.command && !i.modifiers.alt && i.key_pressed(Key::Enter));
         if up {

@@ -183,4 +183,46 @@ impl App {
         }
         self.mark_dirty();
     }
+
+    /// Wrap the selection in a new frame (Figma's Ctrl+Alt+G). The new frame takes the place
+    /// of the selection in whatever frame it was in.
+    pub(crate) fn frame_selection(&mut self) {
+        let targets = self.place_targets();
+        let mut b: Option<[f32; 4]> = None;
+        for (k, id) in &targets {
+            let Some(r) = self.rect_of(*k, id) else { continue };
+            b = Some(match b {
+                None => r,
+                Some(a) => {
+                    let (x0, y0) = (a[0].min(r[0]), a[1].min(r[1]));
+                    let (x1, y1) = ((a[0] + a[2]).max(r[0] + r[2]), (a[1] + a[3]).max(r[1] + r[3]));
+                    [x0, y0, x1 - x0, y1 - y0]
+                }
+            });
+        }
+        let Some(b) = b.filter(|b| b[2] > 1.0 && b[3] > 1.0) else { return };
+        // Shared frame around the selection, else the board
+        let home = match targets.first().and_then(|t| self.parent_of(&t.1)) {
+            Some(p) if targets.iter().all(|t| self.parent_of(&t.1) == Some(p)) => p.to_string(),
+            _ => String::new(),
+        };
+        self.snapshot();
+        let id = self.board.add_group(Pt { x: 0.0, y: 0.0 });
+        // Paint under any frame being wrapped (frames paint in list order)
+        let first = self.board.group_cards.iter().position(|g| targets.iter().any(|t| t.0 == Kind::Group && t.1 == g.id));
+        if let (Some(at), Some(g)) = (first, self.board.group_cards.pop()) {
+            self.board.group_cards.insert(at, g);
+        }
+        if let Some(g) = self.board.group_cards.iter_mut().find(|g| g.id == id) {
+            (g.x, g.y, g.width, g.height) = (b[0], b[1], b[2], b[3]);
+            g.title = "Frame".into();
+            g.clip = true;
+        }
+        self.board.parents.insert(id.clone(), home);
+        for (_, t) in &targets {
+            self.board.parents.insert(t.clone(), id.clone());
+        }
+        self.select_only((Kind::Group, id));
+        self.mark_dirty();
+    }
 }
