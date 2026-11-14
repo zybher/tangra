@@ -58,7 +58,8 @@ impl App {
                         .filter(|&i| {
                             let im = &self.board.images[i];
                             let (cx, cy) = (im.x + im.width / 2.0, im.y + im.height / 2.0);
-                            cx > g.x && cx < g.x + g.width && cy > g.y && cy < g.y + g.height
+                            // Stored frame membership decides; centre position only for objects not stamped yet
+                            self.board.parents.get(&im.id).map_or(cx > g.x && cx < g.x + g.width && cy > g.y && cy < g.y + g.height, |p| p == &g.id)
                         })
                         .collect();
                     if idx.is_empty() {

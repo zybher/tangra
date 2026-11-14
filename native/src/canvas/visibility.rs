@@ -42,4 +42,16 @@ impl App {
         let _ = k;
         self.mark_dirty();
     }
+
+    /// Blocked ids plus, at point `p`, every object whose visible part (inside its clipping
+    /// frames) doesn't cover `p`: the cropped-off part of a picture can't be clicked
+    pub(crate) fn blocked_at(&self, p: Pt) -> std::collections::HashSet<String> {
+        let mut bl = self.blocked_ids();
+        for (id, c) in self.clip_boxes() {
+            if !(p.x >= c[0] && p.x <= c[0] + c[2] && p.y >= c[1] && p.y <= c[1] + c[3]) {
+                bl.insert(id);
+            }
+        }
+        bl
+    }
 }

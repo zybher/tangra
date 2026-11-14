@@ -312,7 +312,17 @@ impl App {
                     }
                 }
 
-                let hit = self.hit_test_drag(w);
+                let mut hit = self.hit_test_drag(w);
+                // A selected object cropped by its frame can still be grabbed by its hidden part
+                // (where only the frame, or nothing, would be hit)
+                if hit.as_ref().map_or(true, |h| h.0 == Kind::Group) && self.selected.len() == 1 {
+                    let s = self.selected.iter().next().cloned();
+                    if let Some(s) = s.filter(|s| s.0 != Kind::Group && self.parent_of(&s.1).is_some()) {
+                        if self.rect_of(s.0, &s.1).is_some_and(|r| inside(w, r[0], r[1], r[2], r[3])) {
+                            hit = Some(s);
+                        }
+                    }
+                }
                 if let Some(target) = hit {
                     if self.selected.contains(&target) {
                         // Already in selection, keep current selection

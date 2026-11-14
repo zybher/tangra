@@ -31,12 +31,21 @@ pub(crate) static PTR_SPEED: std::sync::atomic::AtomicU32 = std::sync::atomic::A
 /// the canvas underneath doesn't start resizes/moves or show resize cursors through it
 pub(crate) fn ui_block(ctx: &egui::Context, r: Rect) {
     let n = ctx.cumulative_pass_nr();
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_ui_block"), (r, n)));
+    let id = egui::Id::new("qd_ui_block");
+    ctx.data_mut(|d| {
+        // Several bars can publish in one pass; a new pass starts a fresh list
+        let mut cur: (Vec<Rect>, u64) = d.get_temp(id).unwrap_or_default();
+        if cur.1 != n {
+            cur = (Vec::new(), n);
+        }
+        cur.0.push(r);
+        d.insert_temp(id, cur);
+    });
 }
 
 pub(crate) fn ui_blocks(ctx: &egui::Context, q: Pos2) -> bool {
-    ctx.data(|d| d.get_temp::<(Rect, u64)>(egui::Id::new("qd_ui_block")))
-        .is_some_and(|(r, n)| ctx.cumulative_pass_nr() <= n + 1 && r.contains(q))
+    ctx.data(|d| d.get_temp::<(Vec<Rect>, u64)>(egui::Id::new("qd_ui_block")))
+        .is_some_and(|(rs, n)| ctx.cumulative_pass_nr() <= n + 1 && rs.iter().any(|r| r.contains(q)))
 }
 
 pub(crate) static ALT_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

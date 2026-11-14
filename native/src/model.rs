@@ -227,6 +227,8 @@ pub struct Board {
     pub locked: std::collections::HashSet<String>,
     /// Which frame each object belongs to (object id -> frame id, "" = the board itself)
     pub parents: std::collections::HashMap<String, String>,
+    /// Per-object opacity 0..1 (missing = 1). A frame's opacity also fades what's inside it
+    pub opacity: std::collections::HashMap<String, f32>,
     /// Order set by dragging rows in the outline (object id -> position among its siblings)
     pub layer_order: std::collections::HashMap<String, f32>,
     pub updated_at: f64,

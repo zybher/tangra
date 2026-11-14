@@ -10,3 +10,5 @@ mod gap_handles;
 mod multi_edit;
 mod visibility;
 mod nesting;
+pub(crate) mod align;
+pub(crate) use align::Align;

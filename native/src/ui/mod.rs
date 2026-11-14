@@ -4,6 +4,7 @@ mod shortcuts;
 mod side_panel;
 pub(crate) mod outline;
 pub(crate) mod icons;
+mod place_bar;
 pub(crate) mod outline_drag;
 mod style_bar;
 mod titlebar;

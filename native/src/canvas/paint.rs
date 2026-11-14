@@ -49,6 +49,8 @@ impl App {
         let hid = self.hidden_ids();
         // Objects inside a clipping frame are cropped to it
         let clips = self.clip_boxes();
+        // Faded objects (and everything inside a faded frame)
+        let fades = self.fades();
         // Frames
         // The title lights with the hover outline (one source of truth, set below last frame)
         let hovered_now: Option<Sel> = p.ctx().data(|d| d.get_temp::<Option<Sel>>(egui::Id::new("qd_hover_now"))).flatten();
@@ -56,14 +58,17 @@ impl App {
             if hid.contains(&c.id) {
                 continue;
             }
-            let clipped_p;
-            let p = match clips.get(&c.id) {
-                Some(q) => {
-                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
-                    &clipped_p
+            let clipped_p = {
+                let mut q = match clips.get(&c.id) {
+                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                    None => p.clone(),
+                };
+                if let Some(o) = fades.get(&c.id) {
+                    q.multiply_opacity(*o);
                 }
-                None => p,
+                q
             };
+            let p = &clipped_p;
             let r = item_rect(c.x, c.y, c.width, c.height);
             if !r.intersects(rect) {
                 continue;
@@ -115,14 +120,17 @@ impl App {
             if hid.contains(&img.id) {
                 continue;
             }
-            let clipped_p;
-            let p = match clips.get(&img.id) {
-                Some(q) => {
-                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
-                    &clipped_p
+            let clipped_p = {
+                let mut q = match clips.get(&img.id) {
+                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                    None => p.clone(),
+                };
+                if let Some(o) = fades.get(&img.id) {
+                    q.multiply_opacity(*o);
                 }
-                None => p,
+                q
             };
+            let p = &clipped_p;
             let r = item_rect(img.x, img.y, img.width, img.height);
             if !r.intersects(rect) {
                 continue;
@@ -174,14 +182,17 @@ impl App {
             if hid.contains(&l.id) {
                 continue;
             }
-            let clipped_p;
-            let p = match clips.get(&l.id) {
-                Some(q) => {
-                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
-                    &clipped_p
+            let clipped_p = {
+                let mut q = match clips.get(&l.id) {
+                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                    None => p.clone(),
+                };
+                if let Some(o) = fades.get(&l.id) {
+                    q.multiply_opacity(*o);
                 }
-                None => p,
+                q
             };
+            let p = &clipped_p;
             let r = item_rect(l.x, l.y, l.width, l.height);
             if !r.intersects(rect) {
                 continue;
@@ -208,14 +219,17 @@ impl App {
             if hid.contains(&n.id) {
                 continue;
             }
-            let clipped_p;
-            let p = match clips.get(&n.id) {
-                Some(q) => {
-                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
-                    &clipped_p
+            let clipped_p = {
+                let mut q = match clips.get(&n.id) {
+                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                    None => p.clone(),
+                };
+                if let Some(o) = fades.get(&n.id) {
+                    q.multiply_opacity(*o);
                 }
-                None => p,
+                q
             };
+            let p = &clipped_p;
             let r = item_rect(n.x, n.y, n.width, n.height);
             if !r.intersects(rect) {
                 continue;
@@ -248,28 +262,34 @@ impl App {
             if hid.contains(&s.id) {
                 continue;
             }
-            let clipped_p;
-            let p = match clips.get(&s.id) {
-                Some(q) => {
-                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
-                    &clipped_p
+            let clipped_p = {
+                let mut q = match clips.get(&s.id) {
+                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                    None => p.clone(),
+                };
+                if let Some(o) = fades.get(&s.id) {
+                    q.multiply_opacity(*o);
                 }
-                None => p,
+                q
             };
+            let p = &clipped_p;
             paint_stroke(p, s, |q| v.s(q.x, q.y), s.width * z);
         }
         for t in &b.world_texts {
             if hid.contains(&t.id) {
                 continue;
             }
-            let clipped_p;
-            let p = match clips.get(&t.id) {
-                Some(q) => {
-                    clipped_p = p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect()));
-                    &clipped_p
+            let clipped_p = {
+                let mut q = match clips.get(&t.id) {
+                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                    None => p.clone(),
+                };
+                if let Some(o) = fades.get(&t.id) {
+                    q.multiply_opacity(*o);
                 }
-                None => p,
+                q
             };
+            let p = &clipped_p;
             let fs = if t.font_size > 0.0 { t.font_size } else { 16.0 };
             // Hidden while it is being edited in place
             let editing = matches!(&self.edit, Some(Edit { target: EditTarget::WorldText(id), .. }) if id == &t.id);

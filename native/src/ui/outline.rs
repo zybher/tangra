@@ -188,6 +188,9 @@ impl App {
         if let Some(p) = self.board.parents.get(orig).cloned() {
             self.board.parents.insert(copy.to_string(), p);
         }
+        if let Some(o) = self.board.opacity.get(orig).copied() {
+            self.board.opacity.insert(copy.to_string(), o);
+        }
         if k != Kind::Group {
             if let Some(n) = self.board.layer_names.get(orig).cloned() {
                 self.board.layer_names.insert(copy.to_string(), n);

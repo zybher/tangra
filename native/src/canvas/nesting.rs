@@ -74,7 +74,9 @@ impl App {
             let Some(r) = self.rect_of(k, &id) else { continue };
             match self.board.parents.get(&id) {
                 None => {
-                    let p = self.frame_for(&id, r, true);
+                    // New frames join by their whole box (a frame only nests in a bigger one); anything else
+                    // joins the frame under its centre, like a canvas drop
+                    let p = self.frame_for(&id, r, k == Kind::Group);
                     self.board.parents.insert(id.clone(), p);
                     if k == Kind::Group {
                         if let Some(g) = self.board.group_cards.iter_mut().find(|g| g.id == id) {
@@ -155,6 +157,32 @@ impl App {
                 self.board.parents.insert(id, frame.to_string());
             }
         }
+    }
+
+    /// Opacity of one object on its own (1 = solid)
+    pub(crate) fn opacity_of(&self, id: &str) -> f32 {
+        self.board.opacity.get(id).copied().unwrap_or(1.0).clamp(0.0, 1.0)
+    }
+
+    /// Objects drawn faded: their own opacity times every frame's around them
+    pub(crate) fn fades(&self) -> HashMap<String, f32> {
+        let mut out = HashMap::new();
+        if self.board.opacity.is_empty() {
+            return out;
+        }
+        for (_, id) in self.all_items() {
+            let mut o = self.opacity_of(&id);
+            let mut cur = self.parent_of(&id);
+            for _ in 0..64 {
+                let Some(pid) = cur else { break };
+                o *= self.opacity_of(pid);
+                cur = self.parent_of(pid);
+            }
+            if o < 0.999 {
+                out.insert(id, o);
+            }
+        }
+        out
     }
 
     /// World-space clip box per object: the overlap of every clipping frame around it

@@ -68,8 +68,10 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Canvas panel** | `ui/side_panel.rs` | Theme, accent, gradient, Aurora, patterns, animation strength, settings |
 | **Outline panel** | `ui/outline.rs` | Layer tree of the frame you are in (or whole board), search with kind synonyms (photo, sticky, ...), collapses to a logo bar, fold, click to select, hover to highlight; pushes the bottom-left HUD aside; `L` toggles; double-click/Enter renames; duplicates get numbered |
 | **Outline drag & drop** | `ui/outline_drag.rs` | Drag rows to reorder (saved per object) or drop on a frame to move the object into it |
-| **Frame nesting** | `canvas/nesting.rs` | Which frame each object belongs to (stored, not guessed from position); the cursor decides which frame a dragged object joins (target frame lights up); frames clip their contents |
-| **Line icons** | `ui/icons.rs` | Eye and lock drawn on a 16-unit grid, pixel-snapped |
+| **Frame nesting** | `canvas/nesting.rs` | Which frame each object belongs to (stored, not guessed from position); the cursor decides which frame a dragged object joins (target frame lights up); frames clip their contents (the cropped-off part of an object is not clickable) |
+| **Placement bar** | `ui/place_bar.rs` | Pops up when the selection is inside a frame: align left/centre/right/top/middle/bottom, opacity scrub, fill / fit a picture, even spacing for 3+; sits beside the style bar or above the object. Keys: 0-9 opacity, Alt+A/D/W/S/H/V align, Shift+Enter selects the frame |
+| **Align & opacity** | `canvas/align.rs` | Align / distribute / fill / fit / opacity operations; opacity is stored per object (`board.opacity`) and a frame fades what's inside it |
+| **Line icons** | `ui/icons.rs` | Eye, lock, align, distribute, fill / fit and opacity icons drawn on a 16-unit grid, pixel-snapped |
 | **Hide / lock** | `canvas/visibility.rs` | Hidden objects skip painting; hidden or locked ones skip picking; a frame passes its state to everything inside |
 | **App icon** | `native/build.rs`, `native/assets/icon.ico` | Embeds the icon into `tangra.exe` at build time (regenerate the .ico from `icon128.png`) |
 | **Right-click menu** | `ui/menus.rs` | Context menu contents |

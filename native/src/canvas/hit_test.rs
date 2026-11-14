@@ -115,7 +115,7 @@ impl App {
         let filled = |s: &Stroke, q: Pt| {
             s.fill && s.closed_len().is_some() && pts_bbox(&s.points).is_some_and(|[x, y, w, h]| inside(q, x, y, w, h))
         };
-        let bl = self.blocked_ids();
+        let bl = self.blocked_at(p);
         if let Some(s) = self.board.world_strokes.iter().rev().find(|s| !bl.contains(&s.id) && (stroke_hit(s, p, r + s.width / 2.0) || filled(s, p))) {
             return Some((Kind::Stroke, s.id.clone()));
         }
@@ -157,12 +157,12 @@ impl App {
     }
 
     pub(crate) fn image_at(&self, p: Pt) -> Option<&ImageNode> {
-        let bl = self.blocked_ids();
+        let bl = self.blocked_at(p);
         self.board.images.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height))
     }
 
     pub(crate) fn hit_test(&self, p: Pt) -> Option<Sel> {
-        let bl = self.blocked_ids();
+        let bl = self.blocked_at(p);
         let b = &self.board;
         // A frame's title (above it) selects the whole frame, like Figma; double-click still renames
         if let Some(t) = self.frame_title_at(p) {
@@ -225,7 +225,7 @@ impl App {
     }
 
     pub(crate) fn hit_test_drag(&self, p: Pt) -> Option<Sel> {
-        let bl = self.blocked_ids();
+        let bl = self.blocked_at(p);
         let b = &self.board;
         // Dragging a frame by its title moves the whole frame
         if let Some(t) = self.frame_title_at(p) {

@@ -694,7 +694,8 @@ impl eframe::App for App {
                     .iter()
                     .filter(|im| {
                         let (cx, cy) = (im.x + im.width / 2.0, im.y + im.height / 2.0);
-                        cx > g.x && cx < g.x + g.width && cy > g.y && cy < g.y + g.height
+                        // Stored frame membership decides; centre position only for objects not stamped yet
+                        self.board.parents.get(&im.id).map_or(cx > g.x && cx < g.x + g.width && cy > g.y && cy < g.y + g.height, |p| p == &g.id)
                     })
                     .map(|im| im.id.clone())
                     .collect();
@@ -849,6 +850,7 @@ impl eframe::App for App {
             self.bottom_bar_ui(ui, &mut acts, canvas_rect);
             self.toolbar_ui(ui, &mut acts, canvas_rect);
             self.style_bar_ui(ui, &mut acts, canvas_rect);
+            self.place_bar_ui(ui, canvas_rect);
             let pctx = ui.ctx().clone();
             self.side_panel_ui(&pctx, canvas_rect);
             self.outline_ui(&pctx, canvas_rect);
