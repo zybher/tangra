@@ -77,8 +77,8 @@ impl App {
                         stroke_pos = g.stroke_pos;
                         segs = vec![
                             Seg::Color,
-                            Seg::Num("corner", 0, group_radius(g), 0.0, 60.0, 0.25, "Corner radius  ·  drag"),
-                            Seg::Num("border", 1, g.border.unwrap_or(1.0), 0.0, 12.0, 0.06, "Stroke  ·  drag"),
+                            Seg::Num("corner", 0, group_radius(g), 0.0, 60.0, 0.25, "Corner radius"),
+                            Seg::Num("border", 1, g.border.unwrap_or(1.0), 0.0, 12.0, 0.06, "Stroke"),
                             Seg::StrokePos,
                             Seg::Aspect,
                         ];
@@ -93,16 +93,16 @@ impl App {
                         color = st.color.clone();
                         segs.push(Seg::Color);
                         if st.closed_len() == Some(4) {
-                            segs.push(Seg::Num("corner", 0, st.radius.unwrap_or(0.0), 0.0, 60.0, 0.25, "Corner radius  ·  drag"));
+                            segs.push(Seg::Num("corner", 0, st.radius.unwrap_or(0.0), 0.0, 60.0, 0.25, "Corner radius"));
                         }
-                        segs.push(Seg::Num("width", 1, st.width, 0.5, 500.0, 0.2, "Thickness  ·  drag"));
+                        segs.push(Seg::Num("width", 1, st.width, 0.5, 500.0, 0.2, "Thickness"));
                     }
                 }
                 Kind::Text => {
                     if let Some(t) = self.board.world_texts.iter().find(|t| &t.id == id) {
                         color = t.color.clone();
                         let fs = if t.font_size > 0.0 { t.font_size } else { 16.0 };
-                        segs = vec![Seg::Color, Seg::Num("tsize", 2, fs, 8.0, 96.0, 0.2, "Text size  ·  drag")];
+                        segs = vec![Seg::Color, Seg::Num("tsize", 2, fs, 8.0, 96.0, 0.2, "Text size")];
                     }
                 }
                 _ => {}
@@ -116,7 +116,7 @@ impl App {
                 segs.push(Seg::Align);
             }
             // Always shown, so the 0-9 opacity keys have something visible to answer to
-            segs.push(Seg::Num("opacity", 3, opacity_now, 0.0, 100.0, 0.5, "Opacity  ·  drag, double-click resets"));
+            segs.push(Seg::Num("opacity", 3, opacity_now, 0.0, 100.0, 0.5, "Opacity"));
         }
         // Remember the controls, and close with exactly those (the selection is already gone,
         // so rebuilding them would drop in-frame extras like Align and jolt the pill)

@@ -8,20 +8,20 @@ impl App {
         use TbIcon as I;
         // None = divider. A tool of None means "add this item to the middle of the view".
         let items: [Option<(I, &str, Option<Tool>)>; 14] = [
-            Some((I::Select, "Select / move  (V)", Some(Tool::Select))),
+            Some((I::Select, "Select  ·  V", Some(Tool::Select))),
             None,
-            Some((I::Frame, "Frame  ·  click or drag on the canvas", Some(Tool::Frame))),
+            Some((I::Frame, "Frame  ·  F", Some(Tool::Frame))),
             None,
-            Some((I::Rect, "Rectangle  (R)", Some(Tool::Rect))),
-            Some((I::Ellipse, "Ellipse  (O)", Some(Tool::Ellipse))),
-            Some((I::Arrow, "Arrow  (A)", Some(Tool::Arrow))),
+            Some((I::Rect, "Rectangle  ·  R", Some(Tool::Rect))),
+            Some((I::Ellipse, "Ellipse  ·  O", Some(Tool::Ellipse))),
+            Some((I::Arrow, "Arrow  ·  A", Some(Tool::Arrow))),
             None,
-            Some((I::Pen, "Pen  (P)", Some(Tool::Pen))),
-            Some((I::Highlighter, "Highlighter  (H)", Some(Tool::Highlighter))),
-            Some((I::Pixelate, "Pixelate: hide part of an image  (B)", Some(Tool::Pixelate))),
-            Some((I::Text, "Text  (T)", Some(Tool::Text))),
-            Some((I::Eraser, "Eraser  (E)", Some(Tool::Eraser))),
-            Some((I::Lasso, "Lasso cut: loop part of an image, then Delete  (K)", Some(Tool::Lasso))),
+            Some((I::Pen, "Pen  ·  P", Some(Tool::Pen))),
+            Some((I::Highlighter, "Highlighter  ·  H", Some(Tool::Highlighter))),
+            Some((I::Pixelate, "Pixelate  ·  B", Some(Tool::Pixelate))),
+            Some((I::Text, "Text  ·  T", Some(Tool::Text))),
+            Some((I::Eraser, "Eraser  ·  E", Some(Tool::Eraser))),
+            Some((I::Lasso, "Lasso  ·  K", Some(Tool::Lasso))),
         ];
         let (bw, gap, div, pad, h) = (34.0_f32, 2.0_f32, 11.0_f32, 5.0_f32, 44.0_f32);
         // Dock-style magnify: the hovered button swells and lifts, its neighbours a little;
@@ -136,7 +136,7 @@ impl App {
                     acts.push(Act::ToolMenu(k, r));
                 }
             }
-            let resp = resp.on_hover_text(if menu_kind.is_some() { format!("{tip}  ·  right-click for options") } else { tip.to_string() });
+            let resp = resp.on_hover_text(tip.to_string());
             if resp.clicked() {
                 match (tool, icon) {
                     (Some(t), _) => acts.push(Act::Tool(t)),

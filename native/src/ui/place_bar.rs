@@ -367,7 +367,7 @@ impl App {
                     let cv = pos2(r.max.x - 10.0, cyy);
                     crate::ui::svg_icons::draw(&pl, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() && pop == 0 {
-                        tip = Some((r.center().x, if enabled { "Align" } else { "The frame arranges this picture" }));
+                        tip = Some((r.center().x, if enabled { "Align" } else { "Align" }));
                     }
                     if enabled && resp.clicked() {
                         set_pop = if pop == 1 { 0 } else { 1 };
@@ -376,7 +376,7 @@ impl App {
                 Seg::Opacity => {
                     if resp.hovered() || resp.dragged() {
                         ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                        tip = Some((r.center().x, "Opacity  ·  drag, 0-9 keys"));
+                        tip = Some((r.center().x, "Opacity"));
                     }
                     // On hover the pill fills with accent liquid up to the value (as the style bar)
                     let lq = ctx.animate_bool_with_time(bid.with("liquid_op"), resp.hovered() || resp.dragged(), 0.5 * anim_k());
@@ -409,7 +409,7 @@ impl App {
                 Seg::Corner => {
                     if resp.hovered() || resp.dragged() {
                         ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                        tip = Some((r.center().x, "Corner radius  ·  drag"));
+                        tip = Some((r.center().x, "Corner radius"));
                     }
                     // Same corner glyph as the style bar's
                     let ic = pos2(r.min.x + 14.0, cyy);

@@ -279,7 +279,7 @@ impl App {
                     }
                     let br = Rect::from_center_size(pos2(r.max.x - 22.0, r.center().y), vec2(26.0, 26.0));
                     if tk > 0.5 {
-                        let resp = ui.interact(br, egui::Id::new("qd_outline_open"), Sense::click()).on_hover_text("Show outline  ·  L");
+                        let resp = ui.interact(br, egui::Id::new("qd_outline_open"), Sense::click()).on_hover_text("Show outline");
                         let (h, pr) = hover_fx(ui.ctx(), &resp, true);
                         p.rect_filled(br.expand(1.0 * h - pr), 7.0, hover_fill(h, pr).gamma_multiply(ta));
                         sidebar_glyph(&p, br.center(), mix(TEXT_DIM, Color32::from_gray(235), h).gamma_multiply(ta));
@@ -418,7 +418,7 @@ impl App {
                     p.text(pos2(hr.min.x + 6.0, hr.center().y), Align2::LEFT_CENTER, "Outline", FontId::proportional(12.5), Color32::from_gray(230));
                     let mut x = hr.max.x - 24.0;
                     let xr = Rect::from_min_size(pos2(x, hr.min.y + 3.0), vec2(22.0, 22.0));
-                    let xresp = ui.interact(xr, egui::Id::new("qd_outline_x"), Sense::click()).on_hover_text("Collapse  ·  L");
+                    let xresp = ui.interact(xr, egui::Id::new("qd_outline_x"), Sense::click()).on_hover_text("Collapse");
                     let (xh, xp) = hover_fx(ctx, &xresp, true);
                     p.rect_filled(xr.expand(1.5 * xh - xp), 6.0, hover_fill(xh, xp));
                     sidebar_glyph(&p, xr.center(), mix(TEXT_DIM, Color32::from_gray(235), xh));

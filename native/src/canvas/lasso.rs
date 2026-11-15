@@ -69,8 +69,6 @@ impl App {
                 img.edit.get_or_insert_with(Default::default).cuts.push(pts.clone());
             }
         }
-        let n = hits.len();
-        self.toast(format!("Cut from {n} picture{}  ·  right-click → Restore cut areas", if n == 1 { "" } else { "s" }));
         true
     }
 
