@@ -198,6 +198,13 @@ pub struct Group {
     /// Border width in screen pixels (None: 1)
     #[serde(default)]
     pub border: Option<f32>,
+    /// Where the border sits on the edge, like Figma: 0 centre, 1 inside, 2 outside
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub stroke_pos: u8,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
@@ -317,6 +324,7 @@ impl Board {
             layout_unit: 0.0,
             corner: None,
             border: None,
+            stroke_pos: 0,
         });
         id
     }

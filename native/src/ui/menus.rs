@@ -177,6 +177,16 @@ impl App {
                 if item(ui, "Resize to fit content", "Ctrl+Alt+Shift+R", can_fit) {
                     acts.push(Act::FitFrame);
                 }
+                // Border position, like Figma's stroke Inside / Center / Outside
+                header(ui, "   STROKE");
+                let sp = match &self.sel {
+                    Some((Kind::Group, id)) => self.board.group_cards.iter().find(|g| &g.id == id).map_or(0, |g| g.stroke_pos),
+                    _ => 0,
+                };
+                if let Some(v) = choice_row(ui, &[("Inside", 1.0), ("Center", 0.0), ("Outside", 2.0)], sp as f32, 0.5) {
+                    acts.push(Act::StrokePos(v as u8));
+                }
+                divider(ui);
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
                 }

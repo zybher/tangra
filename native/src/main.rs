@@ -242,6 +242,8 @@ enum Act {
     /// Corner radius for the selected pictures
     /// (radius, first frame of the drag: take the undo step)
     ImageCorner(f32, bool),
+    /// Frame border position: 0 centre, 1 inside, 2 outside
+    StrokePos(u8),
     /// Aim the next "add" action at the middle of the view (toolbar buttons)
     CentreMenu,
     CycleColor,

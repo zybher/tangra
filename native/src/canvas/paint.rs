@@ -93,7 +93,15 @@ impl App {
             let fr = group_radius(c) * z;
             p.rect_filled(r, fr, fill_color);
             let bw = c.border.unwrap_or(1.0);
-            p.rect_stroke(r, fr, EStroke::new(bw, stroke_color));
+            // Stroke position: inside keeps the frame's size, outside grows past it
+            let (sr, sfr) = match c.stroke_pos {
+                1 => (r.shrink(bw / 2.0), (fr - bw / 2.0).max(0.0)),
+                2 => (r.expand(bw / 2.0), fr + bw / 2.0),
+                _ => (r, fr),
+            };
+            if bw > 0.0 {
+                p.rect_stroke(sr, sfr, EStroke::new(bw, stroke_color));
+            }
             let lit = ease(p.ctx(), egui::Id::new(("qd_ftitle", c.id.as_str())), self.selected.contains(&(Kind::Group, c.id.clone())) || hovered_now.as_ref().is_some_and(|(k, id)| *k == Kind::Group && *id == c.id));
             let title_color = mix(title_color, blue(), lit);
             // Titles keep one size on screen at every zoom, cut to the frame's width
@@ -358,7 +366,7 @@ impl App {
             let a = ctx.animate_bool_with_time(hid.with("a"), hov.is_some(), 0.12 * anim_k());
             if let (Some((k, id)), true) = (last, a > 0.01) {
                 if let Some([x, y, w, h]) = self.rect_of(k, &id) {
-                    let r = item_rect(x, y, w, h).expand(0.5);
+                    let r = item_rect(x, y, w, h).shrink(0.5);
                     let round = match k {
                         Kind::Image => self.board.images.iter().find(|i| i.id == id).map_or(0.0, |i| i.corner * z),
                         Kind::Group => self.board.group_cards.iter().find(|g| g.id == id).map_or(0.0, |g| group_radius(g) * z),
@@ -380,7 +388,8 @@ impl App {
         // Selection outlines
         for (k, id) in &self.selected {
             if let Some([x, y, w, h]) = self.rect_of(*k, id) {
-                let r = item_rect(x, y, w, h).expand(0.5);
+                // Centred half a pixel in: covers the object's own edge, so no dark sliver shows
+                let r = item_rect(x, y, w, h).shrink(0.5);
                 let round = match k {
                     Kind::Image => self.board.images.iter().find(|i| &i.id == id).map_or(0.0, |i| i.corner * z),
                     Kind::Group => self.board.group_cards.iter().find(|g| &g.id == id).map_or(0.0, |g| group_radius(g) * z),

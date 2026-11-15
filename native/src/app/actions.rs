@@ -173,6 +173,13 @@ impl App {
                     i.corner = v;
                 }
             }
+            Act::StrokePos(v) => {
+                self.snapshot();
+                let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Group).map(|s| s.1.clone()).collect();
+                for g in self.board.group_cards.iter_mut().filter(|g| ids.contains(&g.id)) {
+                    g.stroke_pos = v;
+                }
+            }
             Act::ToggleClip => {
                 self.snapshot();
                 let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Group).map(|s| s.1.clone()).collect();
