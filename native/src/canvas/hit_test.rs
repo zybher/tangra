@@ -109,6 +109,15 @@ impl App {
     }
 
     /// The stroke under the cursor (drawn on top of everything, so checked first).
+    /// A selected drawing grabs anywhere inside its box, not just on the line
+    pub(crate) fn selected_drawing_at(&self, p: Pt) -> Option<Sel> {
+        self.selected.iter().find(|(k, id)| {
+            *k == Kind::Stroke
+                && self.board.world_strokes.iter().any(|s| &s.id == id && super::geometry::is_freehand(s))
+                && self.rect_of(Kind::Stroke, id).is_some_and(|[x, y, w, h]| p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h)
+        }).cloned()
+    }
+
     pub(crate) fn stroke_at(&self, p: Pt) -> Option<Sel> {
         let z = self.board.camera.zoom;
         let r = 6.0 / z;
@@ -167,6 +176,9 @@ impl App {
         // A frame's title (above it) selects the whole frame, like Figma; double-click still renames
         if let Some(t) = self.frame_title_at(p) {
             return Some(t);
+        }
+        if let Some(s) = self.selected_drawing_at(p) {
+            return Some(s);
         }
         if let Some(s) = self.stroke_at(p) {
             return Some(s);
@@ -230,6 +242,9 @@ impl App {
         // Dragging a frame by its title moves the whole frame
         if let Some(t) = self.frame_title_at(p) {
             return Some(t);
+        }
+        if let Some(s) = self.selected_drawing_at(p) {
+            return Some(s);
         }
         if let Some(s) = self.stroke_at(p) {
             return Some(s);

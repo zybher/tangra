@@ -86,39 +86,16 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
         }
         return;
     }
-    if o >= 0.99 {
-        // round caps
-        p.circle_filled(pts[0], width / 2.0, col);
-        p.circle_filled(pts[pts.len() - 1], width / 2.0, col);
-        p.add(Shape::line(pts, EStroke::new(width, col)));
-        return;
-    }
-    // See-through strokes (highlighter): tiny segments much shorter than the line is wide fold
-    // over themselves at every bend, and each fold's soft edge shows as a hairline. Keep only
-    // points spaced at least ~a third of the width apart, then smooth them.
-    let gap = (width * 0.35).max(1.0);
-    let mut thin: Vec<Pos2> = vec![pts[0]];
-    for q in &pts[1..] {
-        if q.distance(*thin.last().unwrap()) >= gap {
-            thin.push(*q);
-        }
-    }
-    let last = pts[pts.len() - 1];
-    if thin.len() < 2 || thin.last().unwrap().distance(last) > 0.5 {
-        thin.push(last);
-    }
-    for _ in 0..2 {
-        if thin.len() < 3 {
-            break;
-        }
-        let mut sm = vec![thin[0]];
-        for w in thin.windows(3) {
-            sm.push(pos2((w[0].x + 2.0 * w[1].x + w[2].x) / 4.0, (w[0].y + 2.0 * w[1].y + w[2].y) / 4.0));
-        }
-        sm.push(*thin.last().unwrap());
-        thin = sm;
-    }
-    p.add(Shape::line(thin, EStroke::new(width, col)));
+    // Pen / highlighter: one smooth mesh (round caps, no seams, even when see-through)
+    let line = super::stroke_mesh::smooth_line(&pts, width);
+    p.add(super::stroke_mesh::stroke_mesh(&line, width, col));
+}
+
+/// Freehand line (pen / highlighter): not a closed shape, rounded rectangle or arrow
+pub(crate) fn is_freehand(s: &Stroke) -> bool {
+    let n = s.points.len();
+    let arrow = n == 5 && s.points[1].x == s.points[3].x && s.points[1].y == s.points[3].y;
+    n >= 2 && s.closed_len().is_none() && s.radius.is_none() && !arrow
 }
 
 /// Shift while dragging a shape: square / circle, or an arrow snapped to 45°.

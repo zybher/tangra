@@ -414,7 +414,13 @@ impl App {
             ctx.data_mut(|d| d.insert_temp(hid, last.clone()));
             let a = ctx.animate_bool_with_time(hid.with("a"), hov.is_some(), 0.12 * anim_k());
             if let (Some((k, id)), true) = (last, a > 0.01) {
-                if let Some([x, y, w, h]) = self.rect_of(k, &id) {
+                // A drawing lights up along its own line (Figma), not as a box
+                let free = if k == Kind::Stroke { self.find_stroke(&id).filter(|s| super::geometry::is_freehand(s)).cloned() } else { None };
+                if let Some(s) = free {
+                    let pts: Vec<Pos2> = s.points.iter().map(|q| v.s(q.x, q.y)).collect();
+                    let line = super::stroke_mesh::smooth_line(&pts, s.width * z);
+                    p.add(super::stroke_mesh::stroke_mesh(&line, 1.5, blue().gamma_multiply(a)));
+                } else if let Some([x, y, w, h]) = self.rect_of(k, &id) {
                     let r = item_rect(x, y, w, h).shrink(0.5);
                     let round = match k {
                         Kind::Image => self.board.images.iter().find(|i| i.id == id).map_or(0.0, |i| i.corner * z),
