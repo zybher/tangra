@@ -100,27 +100,32 @@ impl App {
             ctx.data_mut(|d| d.insert_temp(bid.with("t_gone"), now));
         }
         ctx.data_mut(|d| d.insert_temp(bid.with("was_shown"), show));
-        // Hidden: the pill shrinks and fades where it was (same exit as the style bar)
-        let (Some([ix, iy, iw, ih]), true) = (item, show) else {
-            ctx.data_mut(|d| d.insert_temp(bid.with("on"), String::new()));
-            if super::bar_morph::taken(&ctx, bid, self.now) {
-                ctx.data_mut(|d| d.remove::<Rect>(bid));
-            }
-            if let Some(r) = ctx.data(|d| d.get_temp::<Rect>(bid)) {
-                let t_gone: f64 = ctx.data(|d| d.get_temp(bid.with("t_gone"))).unwrap_or(self.now);
-                let e = ((self.now - t_gone) as f32 / (0.25 * k)).clamp(0.0, 1.0);
-                if e < 1.0 {
-                    let a = (1.0 - e).powf(1.5);
-                    let rr = Rect::from_center_size(r.center() + vec2(0.0, e * 8.0), r.size() * (1.0 - 0.25 * e));
-                    p.rect_filled(rr, rr.height() / 2.0, popup().gamma_multiply(a));
-                    p.rect_stroke(rr, rr.height() / 2.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
+        // Hidden: replay the last bar closing, the same domino exit as the style bar
+        let (mut targets, mut free_img, mut item) = (targets, free_img, item);
+        let mut closing: Option<f32> = None;
+        type Last = (Vec<Sel>, bool, [f32; 4]);
+        if let (true, Some(r)) = (show, item) {
+            ctx.data_mut(|d| d.insert_temp::<Last>(bid.with("last"), (targets.clone(), free_img, r)));
+        } else {
+            let t_gone: f64 = ctx.data(|d| d.get_temp(bid.with("t_gone"))).unwrap_or(self.now);
+            let e = ((self.now - t_gone) as f32 / (0.3 * k)).clamp(0.0, 1.0);
+            match ctx.data(|d| d.get_temp::<Last>(bid.with("last"))) {
+                Some((t, fi, r)) if e < 1.0 && !t.is_empty() && self.edit.is_none() && !super::bar_morph::taken(&ctx, bid, self.now) => {
+                    (targets, free_img, item) = (t, fi, Some(r));
+                    closing = Some(e);
                     ctx.request_repaint();
-                } else {
-                    ctx.data_mut(|d| d.remove::<Rect>(bid));
+                }
+                _ => {
+                    ctx.data_mut(|d| {
+                        d.insert_temp(bid.with("on"), String::new());
+                        d.remove::<Last>(bid.with("last"));
+                        d.remove::<Rect>(bid);
+                    });
+                    return;
                 }
             }
-            return;
-        };
+        }
+        let Some([ix, iy, iw, ih]) = item else { return };
 
         let single_img = matches!(targets.as_slice(), [(Kind::Image, _)]);
         let mut segs = vec![
@@ -246,9 +251,15 @@ impl App {
         };
 
         // Pill springs open sideways with the same jelly as the style bar
-        let f = 1.0 - (-4.5 * x).exp() * (8.0 * x).cos();
-        let wob = (-5.5 * x).exp() * (16.0 * x).sin() * 0.06;
-        let a = (x / 0.15).min(1.0);
+        let mut f = 1.0 - (-4.5 * x).exp() * (8.0 * x).cos();
+        let mut wob = (-5.5 * x).exp() * (16.0 * x).sin() * 0.06;
+        let mut a = (x / 0.15).min(1.0);
+        if let Some(e) = closing {
+            // Shrink back toward a small pill, fading at the very end (as the style bar)
+            f = 1.0 - egui::emath::easing::cubic_in(e);
+            wob = 0.0;
+            a = ((1.0 - e) / 0.35).min(1.0);
+        }
         if x < 1.0 {
             ctx.request_repaint();
         }
@@ -267,7 +278,9 @@ impl App {
                 ctx.request_repaint();
             }
             ctx.data_mut(|d| d.insert_temp(bid.with("glide"), (gx, gy, gw)));
-            super::bar_morph::publish(&ctx, bid, (gx, gy, gw));
+            if closing.is_none() {
+                super::bar_morph::publish(&ctx, bid, (gx, gy, gw));
+            }
             (gx, gy, gw)
         };
         let bar = Rect::from_center_size(pos2(gx, gy), vec2(gw, h));
@@ -297,7 +310,11 @@ impl App {
                 continue;
             }
             // Each control rises into place one after another as the pill widens
-            let gi = ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0);
+            let gi = match closing {
+                // Domino: left to right, each icon slides down and out a beat after the last
+                Some(e) => 1.0 - ((e - gi_n as f32 * 0.07) / 0.3).clamp(0.0, 1.0),
+                None => ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0),
+            };
             gi_n += 1;
             let ca = 1.0 - (1.0 - gi).powi(3);
             let cyy = bar.center().y + (1.0 - ca) * 9.0;

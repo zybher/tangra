@@ -118,11 +118,12 @@ impl App {
             // Always shown, so the 0-9 opacity keys have something visible to answer to
             segs.push(Seg::Num("opacity", 3, opacity_now, 0.0, 100.0, 0.5, "Opacity  ·  drag, double-click resets"));
         }
-        // Remember the controls too, so a deleted object's bar can domino out like a normal close
+        // Remember the controls, and close with exactly those (the selection is already gone,
+        // so rebuilding them would drop in-frame extras like Align and jolt the pill)
         if closing.is_none() && !segs.is_empty() {
             let c = (segs.clone(), color.clone(), layout);
             ctx.data_mut(|d| d.insert_temp(bid.with("last_segs"), c));
-        } else if closing.is_some() && segs.is_empty() {
+        } else if closing.is_some() {
             if let Some((sg, c, l)) = ctx.data(|d| d.get_temp::<(Vec<Seg>, String, u8)>(bid.with("last_segs"))) {
                 (segs, color, layout) = (sg, c, l);
             }
