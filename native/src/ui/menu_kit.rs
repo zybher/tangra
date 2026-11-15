@@ -66,6 +66,45 @@ pub(crate) fn choice_row(ui: &mut egui::Ui, choices: &[(&str, f32)], current: f3
 }
 
 pub(crate) const MENU_INSET: f32 = 10.0;
+/// Menu row whose number is changed by dragging left / right (same as the placement bar's
+/// scrubs). Returns (new value, true on the first frame of the drag) while dragging.
+pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32, lo: f32, hi: f32) -> Option<(f32, bool)> {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().max(160.0), 26.0), Sense::drag());
+    let (h, pr) = hover_fx(ui.ctx(), &resp, true);
+    let (a, dy) = cm_anim(ui, rect.min.y);
+    let m = cm_wave(ui, rect.center().y).max(h);
+    let p = ui.painter().clone().with_clip_rect(ui.ctx().screen_rect());
+    let r = rect.translate(vec2(0.0, dy));
+    let tile = Rect::from_min_max(pos2(r.min.x + 6.0 * m, r.min.y + 1.0), pos2(r.max.x + 2.0 * m, r.max.y - 1.0));
+    wave_tile(&p, tile, m, mix(popup(), Color32::from_gray(90), 0.35), a);
+    if pr > 0.01 {
+        p.rect_filled(tile, 8.0, Color32::from_black_alpha((40.0 * pr * a) as u8));
+    }
+    let col = mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m).gamma_multiply(a);
+    let lg = p.layout_no_wrap(label.to_owned(), FontId::proportional(13.0), col);
+    p.galley(pos2(tile.min.x + 10.0, tile.center().y - lg.size().y / 2.0), lg, col);
+    // Corner glyph + value on the right, like the bars
+    let vx = tile.max.x - 10.0;
+    let vg = p.layout_no_wrap(format!("{}", value.round() as i32), FontId::proportional(12.0), col);
+    let ic = pos2(vx - vg.size().x - 12.0, tile.center().y);
+    let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
+    p.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
+    p.galley(pos2(vx - vg.size().x, tile.center().y - vg.size().y / 2.0), vg, col);
+    if resp.hovered() || resp.dragged() {
+        ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+    }
+    let id = ui.id().with(("scrub0", label));
+    if resp.drag_started() {
+        ui.ctx().data_mut(|d| d.insert_temp(id, value));
+    }
+    if resp.dragged() {
+        let v0: f32 = ui.ctx().data(|d| d.get_temp(id)).unwrap_or(value);
+        let dx = resp.interact_pointer_pos().zip(ui.ctx().input(|i| i.pointer.press_origin())).map_or(0.0, |(q, o)| q.x - o.x);
+        return Some(((v0 + dx * per_px).round().clamp(lo, hi), resp.drag_started()));
+    }
+    None
+}
+
 /// Worker job level meaning "make the coarse pixelation copy".
 pub(crate) const MOSAIC: u8 = 255;
 

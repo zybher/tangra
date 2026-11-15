@@ -213,7 +213,8 @@ impl App {
         // Stacked on the style bar when it's up (one column of bars), else above the object
         let sbid = egui::Id::new("qd_style_bar");
         let sb_on: String = ctx.data(|d| d.get_temp(sbid.with("on"))).unwrap_or_default();
-        let sb: Option<Rect> = if sb_on.is_empty() { None } else { ctx.data(|d| d.get_temp::<Rect>(sbid)) };
+        let sb_closing: bool = ctx.data(|d| d.get_temp(sbid.with("closing"))).unwrap_or(false);
+        let sb: Option<Rect> = if sb_on.is_empty() || sb_closing { None } else { ctx.data(|d| d.get_temp::<Rect>(sbid)) };
         let (cx, cy) = match sb {
             Some(sb) => {
                 // Away from the object: above a style bar that sits above it, below one that sits below

@@ -55,6 +55,8 @@ impl App {
                 });
             }
         }
+        // Other bars stack on this one only while it's really up (not while it animates out)
+        ctx.data_mut(|d| d.insert_temp(bid.with("closing"), closing.is_some()));
         let was_scrub: bool = ctx.data(|d| d.get_temp(bid.with("scrub"))).unwrap_or(false);
         let _ = was_scrub;
         let idle = self.edit.is_none();

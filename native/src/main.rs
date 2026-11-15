@@ -240,7 +240,8 @@ enum Act {
     /// Shrink / grow the selected frames to wrap what's inside them
     FitFrame,
     /// Corner radius for the selected pictures
-    ImageCorner(f32),
+    /// (radius, first frame of the drag: take the undo step)
+    ImageCorner(f32, bool),
     /// Aim the next "add" action at the middle of the view (toolbar buttons)
     CentreMenu,
     CycleColor,
