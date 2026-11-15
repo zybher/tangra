@@ -63,7 +63,7 @@ pub(crate) fn hud_shift(ctx: &egui::Context) -> f32 {
 /// How far top-left readouts (F3 stats) move aside: past the panel, or past the collapsed tab
 pub(crate) fn top_shift(ctx: &egui::Context) -> f32 {
     let tk = ctx.data(|d| d.get_temp::<f32>(egui::Id::new("qd_outline_tabk"))).unwrap_or(0.0);
-    hud_shift(ctx).max(tk.clamp(0.0, 1.0) * (TAB_W + GAP))
+    hud_shift(ctx).max(tk.clamp(0.0, 1.0) * (TAB_W + GAP - 10.0))
 }
 
 /// The object whose outline row is under the pointer, so the canvas can highlight it
@@ -253,15 +253,15 @@ impl App {
         if tk > 0.01 {
             egui::Area::new(egui::Id::new("qd_outline_tab_area"))
                 .order(egui::Order::Middle)
-                .fixed_pos(pos2(canvas.min.x + 10.0 - (1.0 - tk) * 14.0, canvas.min.y + 10.0))
+                .fixed_pos(pos2(canvas.min.x - (1.0 - tk) * 14.0, canvas.min.y + 10.0))
                 .interactable(tk > 0.5)
                 .show(ctx, |ui| {
                     ui.set_opacity(tk.clamp(0.0, 1.0));
                     let (r, _) = ui.allocate_exact_size(vec2(TAB_W, 40.0), Sense::hover());
                     let p = ui.painter();
-                    p.rect_filled(r.translate(vec2(0.0, 3.0)), 12.0, Color32::from_black_alpha(70));
-                    p.rect_filled(r, 12.0, frame_bg());
-                    p.rect_stroke(r, 12.0, EStroke::new(1.0_f32, border()));
+                    p.rect_filled(r.translate(vec2(0.0, 3.0)), Rounding { nw: 0.0, sw: 0.0, ne: 12.0, se: 12.0 }, Color32::from_black_alpha(70));
+                    p.rect_filled(r, Rounding { nw: 0.0, sw: 0.0, ne: 12.0, se: 12.0 }, frame_bg());
+                    p.rect_stroke(r, Rounding { nw: 0.0, sw: 0.0, ne: 12.0, se: 12.0 }, EStroke::new(1.0_f32, border()));
                     paint_logo(p, pos2(r.min.x + 22.0, r.center().y), 18.0, 1.0);
                     p.text(pos2(r.min.x + 40.0, r.center().y), Align2::LEFT_CENTER, "Tangra", FontId::proportional(13.0), Color32::from_gray(235));
                     let br = Rect::from_center_size(pos2(r.max.x - 22.0, r.center().y), vec2(26.0, 26.0));
