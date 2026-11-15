@@ -7,7 +7,7 @@ use egui::Vec2;
 
 /// Rounded rectangle as a polygon (clockwise on screen)
 pub(crate) fn rounded_poly(r: Rect, rad: f32) -> Vec<Pos2> {
-    let rad = rad.clamp(0.0, r.width().min(r.height()) / 2.0);
+    let rad = rad.clamp(0.0, (r.width().min(r.height()) / 2.0).max(0.0));
     if rad < 0.5 {
         return vec![r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()];
     }

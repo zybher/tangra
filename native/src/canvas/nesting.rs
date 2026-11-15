@@ -221,7 +221,7 @@ impl App {
     /// A clipping frame's crop box (world): its rect pulled in to the stroke's inner edge
     pub(crate) fn crop_box(&self, g: &Group) -> [f32; 4] {
         let i = self.clip_inset(g).min(g.width / 2.0).min(g.height / 2.0);
-        [g.x + i, g.y + i, g.width - 2.0 * i, g.height - 2.0 * i]
+        [g.x + i, g.y + i, (g.width - 2.0 * i).max(0.0), (g.height - 2.0 * i).max(0.0)]
     }
 
     pub(crate) fn clip_boxes(&self) -> HashMap<String, [f32; 4]> {
