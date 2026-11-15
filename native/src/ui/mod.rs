@@ -8,6 +8,7 @@ pub(crate) mod svg_icons;
 mod place_bar;
 pub(crate) mod image_sliders;
 mod place_align;
+pub(crate) mod drop_anim;
 pub(crate) mod props;
 mod bar_morph;
 pub(crate) mod outline_drag;

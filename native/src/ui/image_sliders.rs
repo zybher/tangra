@@ -15,15 +15,15 @@ impl App {
     /// Draws the open dropdown (bar's `pop` 2 = Adjust, 3 = 3D) for picture `img`, under (or
     /// over) `bar`, starting at its button in `btns`. Returns the panel's rect while one is open.
     pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, btns: [Rect; 2], pop: u8, img: &str) -> Rect {
-        let pop = pop.saturating_sub(1);
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_img_pop");
+        let da = super::drop_anim::DropAnim::new(&ctx, egui::Id::new("qd_place_bar").with("drop"), pop);
+        let pop = pop.saturating_sub(1);
         let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
-        let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
         let mut open_rect = Rect::NOTHING;
         let mut any_drag = false;
         for kind in [1u8, 2] {
-            let kk = ctx.animate_bool_with_time(bid.with(("ipop", kind)), pop == kind, 0.22 * anim_k());
+            let kk = da.k(kind + 1);
             if kk <= 0.001 {
                 continue;
             }
@@ -49,7 +49,7 @@ impl App {
             ctx.data_mut(|d| d.insert_temp(xid, left));
             let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + (1.0 - ez(kk)) * -8.0 * sg;
+            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + (1.0 - kk) * -8.0 * sg;
 
             // The row being dragged stays raised and the others stay flat until it is let go
             let drag_id = bid.with(("idrag", kind));
@@ -58,6 +58,7 @@ impl App {
             let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT, dragging.is_some());
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
+            let (bgr, gx) = da.panel(&ctx, pr, up);
             let live = pop == kind;
             if live {
                 open_rect = pr;
@@ -65,17 +66,17 @@ impl App {
             }
             let pk = ui.painter().clone().with_clip_rect(ctx.screen_rect());
             let mut p = pk.clone();
-            p.multiply_opacity(ez(kk));
-            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, pr, 10.0, 1.0);
-            p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
+            p.multiply_opacity(kk);
+            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
+            glass(&p, bgr, 10.0, 1.0);
+            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
 
             let mut now_drag: Option<usize> = None;
             for i in 0..n {
-                let rk = ez(kk * 1.5 - i as f32 * 0.12);
-                let (rr, wm) = (rows[i].translate(vec2(0.0, dy - sg * (1.0 - rk) * 10.0)), mags[i]);
+                let rk = da.row(i, n, up);
+                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
                 let mut p = pk.clone();
-                p.multiply_opacity(ez(kk) * rk);
+                p.multiply_opacity(kk * rk);
                 let k = 1.0 + 0.14 * wm;
                 if let Some(&(f, label, lo, hi)) = sliders.get(i) {
                     let mut e = ed.clone();
