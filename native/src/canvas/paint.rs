@@ -54,15 +54,18 @@ impl App {
         // Frames
         // The title lights with the hover outline (one source of truth, set below last frame)
         let hovered_now: Option<Sel> = p.ctx().data(|d| d.get_temp::<Option<Sel>>(egui::Id::new("qd_hover_now"))).flatten();
-        for c in &b.group_cards {
+        // Parents paint before the frames inside them, so a nested frame is never hidden
+        for c in self.frames_paint_order() {
             if hid.contains(&c.id) {
                 continue;
             }
+            // The title is not faded with the frame (it labels the frame, it isn't part of it)
+            let title_p = match clips.get(&c.id) {
+                Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
+                None => p.clone(),
+            };
             let clipped_p = {
-                let mut q = match clips.get(&c.id) {
-                    Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
-                    None => p.clone(),
-                };
+                let mut q = title_p.clone();
                 if let Some(o) = fades.get(&c.id) {
                     q.multiply_opacity(*o);
                 }
@@ -110,7 +113,7 @@ impl App {
                     }
                 }
                 if g.size().x <= maxw {
-                    p.galley(tp - vec2(0.0, g.size().y), g, title_color);
+                    title_p.galley(tp - vec2(0.0, g.size().y), g, title_color);
                 }
             }
         }

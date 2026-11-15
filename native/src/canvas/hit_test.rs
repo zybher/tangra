@@ -183,8 +183,9 @@ impl App {
         if let Some(n) = self.image_at(p) {
             return Some((Kind::Image, n.id.clone()));
         }
-        b.group_cards
-            .iter()
+        // Topmost first: the same order frames paint in
+        self.frames_paint_order()
+            .into_iter()
             .rev()
             .find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height))
             .map(|n| (Kind::Group, n.id.clone()))
@@ -210,9 +211,8 @@ impl App {
 
     pub(crate) fn frame_title_at(&self, p: Pt) -> Option<Sel> {
         let z = self.board.camera.zoom.max(0.01);
-        self.board
-            .group_cards
-            .iter()
+        self.frames_paint_order()
+            .into_iter()
             .rev()
             .find(|g| {
                 if self.board.hidden.contains(&g.id) || self.board.locked.contains(&g.id) {
@@ -246,8 +246,8 @@ impl App {
         if let Some(n) = self.image_at(p) {
             return Some((Kind::Image, n.id.clone()));
         }
-        b.group_cards
-            .iter()
+        self.frames_paint_order()
+            .into_iter()
             .rev()
             .find(|g| !bl.contains(&g.id) && self.frame_hit_drag(g, p))
             .map(|n| (Kind::Group, n.id.clone()))

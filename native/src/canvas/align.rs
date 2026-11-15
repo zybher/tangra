@@ -222,7 +222,9 @@ impl App {
         for (_, t) in &targets {
             self.board.parents.insert(t.clone(), id.clone());
         }
+        let n = targets.len();
         self.select_only((Kind::Group, id));
         self.mark_dirty();
+        self.toast(format!("Framed {n} object{}", if n == 1 { "" } else { "s" }));
     }
 }

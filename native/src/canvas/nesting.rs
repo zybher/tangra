@@ -159,6 +159,26 @@ impl App {
         }
     }
 
+    /// Frames in paint order: list order, but every frame right after the frame it sits in
+    pub(crate) fn frames_paint_order(&self) -> Vec<&Group> {
+        let gs = &self.board.group_cards;
+        let mut out: Vec<&Group> = Vec::with_capacity(gs.len());
+        let mut stack: Vec<&Group> = gs.iter().filter(|g| self.parent_of(&g.id).is_none()).rev().collect();
+        while let Some(g) = stack.pop() {
+            out.push(g);
+            stack.extend(gs.iter().filter(|c| self.parent_of(&c.id) == Some(g.id.as_str())).rev());
+        }
+        // Anything left over (a parent loop) still paints
+        if out.len() < gs.len() {
+            for g in gs {
+                if !out.iter().any(|o| o.id == g.id) {
+                    out.push(g);
+                }
+            }
+        }
+        out
+    }
+
     /// Opacity of one object on its own (1 = solid)
     pub(crate) fn opacity_of(&self, id: &str) -> f32 {
         self.board.opacity.get(id).copied().unwrap_or(1.0).clamp(0.0, 1.0)

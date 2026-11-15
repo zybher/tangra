@@ -210,17 +210,17 @@ impl App {
         let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * mags[i];
         let w = pad * 2.0 + segs.iter().enumerate().map(|(i, sg)| seg_ws(i, sg)).sum::<f32>();
 
-        // Beside the style bar when it's up (its left edge stays put), else above the object
+        // Stacked on the style bar when it's up (one column of bars), else above the object
         let sbid = egui::Id::new("qd_style_bar");
         let sb_on: String = ctx.data(|d| d.get_temp(sbid.with("on"))).unwrap_or_default();
         let sb: Option<Rect> = if sb_on.is_empty() { None } else { ctx.data(|d| d.get_temp::<Rect>(sbid)) };
         let (cx, cy) = match sb {
             Some(sb) => {
-                let mut cx = sb.max.x + 8.0 + w / 2.0;
-                if cx + w / 2.0 > rect.max.x - 8.0 {
-                    cx = sb.min.x - 8.0 - w / 2.0;
-                }
-                (cx, sb.center().y)
+                // Away from the object: above a style bar that sits above it, below one that sits below
+                let above = sb.center().y <= fr.center().y && sb.min.y - 8.0 - h >= rect.min.y + 8.0;
+                let cy = if above { sb.min.y - 8.0 - h / 2.0 } else { sb.max.y + 8.0 + h / 2.0 };
+                let cx = sb.center().x.clamp(rect.min.x + w / 2.0 + 8.0, rect.max.x - w / 2.0 - 8.0);
+                (cx, cy)
             }
             None => {
                 let mut cy = fr.min.y - 32.0 - h / 2.0;
@@ -243,7 +243,8 @@ impl App {
             ctx.request_repaint();
         }
         let (gx, gy, gw) = {
-            let cur: Option<(f32, f32, f32)> = ctx.data(|d| d.get_temp(bid.with("glide")));
+            // A fresh entrance starts where it belongs (no slide in from where it was last time)
+            let cur: Option<(f32, f32, f32)> = if was_shown { ctx.data(|d| d.get_temp(bid.with("glide"))) } else { None };
             let (mut gx, mut gy, mut gw) = cur.unwrap_or((cx, cy, w));
             let dt = ctx.input(|i| i.stable_dt).min(0.05);
             let kf = if anim_k() == 0.0 { 1.0 } else { 1.0 - (-dt * 16.0 / anim_k()).exp() };
