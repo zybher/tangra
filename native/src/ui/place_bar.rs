@@ -90,7 +90,18 @@ impl App {
         let alt = ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed) && matches!(self.drag, Drag::None);
         let cm_open = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_cm_open"))).unwrap_or(false);
         let item = if targets.len() == 1 { self.rect_of(targets[0].0, &targets[0].1) } else { self.place_bounds(&targets) };
-        let show = in_frame && item.is_some() && self.edit.is_none() && self.sel_label.is_none() && !alt && !cm_open;
+        // Off screen (or behind the outline panel): the bar goes away too, like the style bar
+        let on_screen = item.is_some_and(|[ix, iy, iw, ih]| {
+            let v = self.view(rect);
+            let fr = Rect::from_min_max(v.s(ix, iy), v.s(ix + iw, iy + ih));
+            let left = rect.min.x + crate::ui::outline::hud_shift(&ctx);
+            // Same rule as the style bar: hidden once the bar, kept on screen, can no longer
+            // sit over its object
+            let bw = ctx.data(|d| d.get_temp::<Rect>(bid)).map_or(0.0, |r| r.width());
+            let cx = fr.center().x.clamp(left + bw / 2.0 + 8.0, (rect.max.x - bw / 2.0 - 8.0).max(left + bw / 2.0 + 8.0));
+            cx >= fr.min.x && cx <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y
+        });
+        let show = in_frame && on_screen && self.edit.is_none() && self.sel_label.is_none() && !alt && !cm_open;
 
         let k = anim_k().max(1e-3);
         let p = ui.painter().clone();
