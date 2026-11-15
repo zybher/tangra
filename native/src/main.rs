@@ -932,6 +932,7 @@ impl eframe::App for App {
             ctx.request_repaint_after(Duration::from_secs(1));
         }
         cm_ghost(ctx);
+        ui::cursor::paint(ctx);
     }
 }
 

@@ -56,46 +56,64 @@ impl App {
             if let Some((_, fw)) = title {
                 text_w = text_w.min((fw - 12.0).max(16.0));
             }
+            // Frame titles are typed in place, like a bar number (inline_text.rs)
+            if let Some((fx, fw)) = title {
+                let h = ctx.fonts(|f| f.row_height(&fid));
+                let field = Rect::from_min_size(pos, vec2((fw - 12.0).max(16.0), h));
+                let start = e.fresh > 0;
+                e.fresh = e.fresh.saturating_sub(1);
+                egui::Area::new(egui::Id::new("qd_edit_inline"))
+                    .order(egui::Order::Foreground)
+                    .fixed_pos(pos)
+                    .constrain(false)
+                    .show(ctx, |ui| {
+                        let ring = super::inline_text::Ring::Hug { left: fx, max_right: fx + fw, rounding: 3.0 };
+                        if let Some(d) = super::inline_text::edit(ui, egui::Id::new("qd_title_rename"), field, &mut e.text, fid.clone(), col, start, ring) {
+                            done = Some(d);
+                        }
+                    });
+            } else {
             egui::Area::new(egui::Id::new("qd_edit_inline"))
-                .order(egui::Order::Foreground)
-                .fixed_pos(pos)
-                .constrain(false)
-                .show(ctx, |ui| {
-                    // The area remembers last frame's size and caps the field to it, which made the
-                    // field lag a keystroke behind and scroll the text left: lift the cap first
-                    ui.set_max_width(text_w.max(24.0) + 12.0);
-                    let out = egui::TextEdit::singleline(&mut e.text)
-                        .font(fid)
-                        .text_color(col)
-                        .frame(false)
-                        .margin(egui::Margin::ZERO)
-                        .clip_text(title.is_some())
-                        .desired_width(text_w.max(24.0) + 8.0)
-                        .show(ui);
-                    let r = out.response;
-                    if let Some((fx, fw)) = title {
-                        // Frame titles: an accent outline that starts on the frame's left edge and
-                        // never passes its right edge
-                        let right = (r.rect.min.x + text_w.max(24.0) + 6.0).min(fx + fw);
-                        let b = Rect::from_min_max(pos2(fx, r.rect.min.y - 2.0), pos2(right, r.rect.max.y + 2.0));
-                        ui.painter().rect_filled(b, 3.0, blue().gamma_multiply(0.12));
-                        ui.painter().rect_stroke(b, 3.0, EStroke::new(1.0_f32, blue()));
-                    } else {
-                        // A thin underline is the only sign you are editing
-                        let y = r.rect.max.y + 1.0;
-                        ui.painter().line_segment(
-                            [pos2(r.rect.min.x, y), pos2(r.rect.min.x + text_w.max(24.0), y)],
-                            EStroke::new(1.0_f32, blue()),
-                        );
-                    }
-                    if e.fresh > 0 {
-                        e.fresh -= 1;
-                        r.request_focus();
-                    } else if r.lost_focus() {
-                        let esc = ui.input(|i| i.key_pressed(Key::Escape));
-                        done = Some(!esc);
-                    }
-                });
+                    .order(egui::Order::Foreground)
+                    .fixed_pos(pos)
+                    .constrain(false)
+                    .show(ctx, |ui| {
+                        // The area remembers last frame's size and caps the field to it, which made the
+                        // field lag a keystroke behind and scroll the text left: lift the cap first
+                        ui.set_max_width(text_w.max(24.0) + 12.0);
+                        let out = egui::TextEdit::singleline(&mut e.text)
+                            .font(fid)
+                            .text_color(col)
+                            .frame(false)
+                            .margin(egui::Margin::ZERO)
+                            .clip_text(title.is_some())
+                            .desired_width(text_w.max(24.0) + 8.0)
+                            .show(ui);
+                        let r = out.response;
+                        if let Some((fx, fw)) = title {
+                            // Frame titles: an accent outline that starts on the frame's left edge and
+                            // never passes its right edge
+                            let right = (r.rect.min.x + text_w.max(24.0) + 6.0).min(fx + fw);
+                            let b = Rect::from_min_max(pos2(fx, r.rect.min.y - 2.0), pos2(right, r.rect.max.y + 2.0));
+                            ui.painter().rect_filled(b, 3.0, blue().gamma_multiply(0.12));
+                            ui.painter().rect_stroke(b, 3.0, EStroke::new(1.0_f32, blue()));
+                        } else {
+                            // A thin underline is the only sign you are editing
+                            let y = r.rect.max.y + 1.0;
+                            ui.painter().line_segment(
+                                [pos2(r.rect.min.x, y), pos2(r.rect.min.x + text_w.max(24.0), y)],
+                                EStroke::new(1.0_f32, blue()),
+                            );
+                        }
+                        if e.fresh > 0 {
+                            e.fresh -= 1;
+                            r.request_focus();
+                        } else if r.lost_focus() {
+                            let esc = ui.input(|i| i.key_pressed(Key::Escape));
+                            done = Some(!esc);
+                        }
+                    });
+            }
         } else {
         egui::Area::new(egui::Id::new("qd_edit"))
             .order(egui::Order::Foreground)

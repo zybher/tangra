@@ -124,42 +124,11 @@ pub(crate) fn hover_fx(ctx: &egui::Context, resp: &egui::Response, enabled: bool
     )
 }
 
-/// Hand cursor drawn on top (open while hovering, fingers curl while dragging)
+/// Hand cursor drawn on top, from the icon pack; it squeezes a little while dragging
 pub(crate) fn hand_cursor(ctx: &egui::Context, at: Pos2, closed: bool) {
     let c = ctx.animate_bool_with_time(egui::Id::new("qd_hand_close"), closed, 0.12 * anim_k());
-    let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("qd_hand")));
-    let ink = Color32::from_rgb(18, 18, 20);
-    let fill = Color32::WHITE;
-    let lerp = |a: f32, b: f32| a + (b - a) * c;
-    // Fingers fan out from the knuckles: (base x, length, angle in degrees), shrinking straight when grabbing
-    let fingers = [(-5.4, 8.5, -20.0), (-1.8, 10.5, -7.0), (1.8, 10.0, 6.0), (5.3, 8.0, 19.0)];
-    let mut caps: Vec<(Pos2, Pos2, f32)> = fingers
-        .iter()
-        .map(|&(x, len, deg)| {
-            let (len, rad) = (lerp(len, 3.5), lerp(deg, 0.0).to_radians());
-            let base = at + vec2(x * lerp(1.0, 1.05), 1.0);
-            (base, base + vec2(rad.sin(), -rad.cos()) * len, 3.3)
-        })
-        .collect();
-    // Thumb, spread wide to the left, tucks in when grabbing
-    caps.push((at + vec2(-5.0, 5.0), at + vec2(lerp(-12.0, -8.0), lerp(-0.5, 2.5)), 3.5));
-    let palm = Rect::from_min_max(at + vec2(-7.5, -1.0), at + vec2(7.4, 9.0));
-    let round = Rounding { nw: 3.0, ne: 3.0, sw: 5.5, se: 5.5 };
-    let cap = |a: Pos2, b: Pos2, w: f32, col: Color32| {
-        p.line_segment([a, b], EStroke::new(w, col));
-        p.circle_filled(a, w / 2.0, col);
-        p.circle_filled(b, w / 2.0, col);
-    };
-    // Soft shadow, outline, then fill
-    p.rect_filled(palm.translate(vec2(0.8, 1.2)).expand(1.6), round, Color32::from_black_alpha(60));
-    for &(a, b, w) in &caps {
-        cap(a, b, w + 2.6, ink);
-    }
-    p.rect_filled(palm.expand(1.3), round, ink);
-    p.rect_filled(palm, round, fill);
-    for &(a, b, w) in &caps {
-        cap(a, b, w, fill);
-    }
+    let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("qd_hand")));
+    crate::ui::svg_icons::draw_cursor(&p, "hand", at, [12.0, 12.0], 24.0 * (1.0 - 0.1 * c), Color32::WHITE, Color32::from_rgb(18, 18, 20));
 }
 
 /// Blue rising like liquid in a rounded tile: a wavy surface (calm when full or empty)

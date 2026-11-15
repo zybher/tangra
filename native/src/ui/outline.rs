@@ -644,22 +644,13 @@ impl App {
                             if let Some((rs, buf)) = ren.as_mut().filter(|(rs, _)| rs == s) {
                                 // Figma-style: the whole row lights up, the field fills it inside a 2 px inset
                                 let er = Rect::from_min_max(pos2(x0 + 33.0, r.min.y + 3.0), pos2(r.max.x - 3.0, r.max.y - 2.0));
-                                p.rect_stroke(er.shrink(0.5), 6.0, EStroke::new(1.0_f32, blue()));
-                                let te = ui.put(
-                                    er.shrink2(vec2(4.0, 0.0)),
-                                    egui::TextEdit::singleline(buf).frame(false).font(FontId::proportional(12.0)).text_color(Color32::WHITE).vertical_align(egui::Align::Center),
-                                );
-                                if ren_start {
-                                    te.request_focus();
-                                    if let Some(mut st) = egui::TextEdit::load_state(ctx, te.id) {
-                                        st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(buf.chars().count()))));
-                                        st.store(ctx, te.id);
-                                    }
-                                }
-                                if ctx.input(|i| i.key_pressed(Key::Escape)) {
-                                    ren_done = Some(None);
-                                } else if te.lost_focus() && !ren_start {
-                                    ren_done = Some(Some((rs.clone(), buf.clone())));
+                                // Typed in place, like a bar number (inline_text.rs)
+                                let ring = super::inline_text::Ring::Fixed(er, 6.0);
+                                let fid = egui::Id::new("qd_outline_rename");
+                                match super::inline_text::edit(ui, fid, er.shrink2(vec2(4.0, 0.0)), buf, FontId::proportional(12.0), Color32::WHITE, ren_start, ring) {
+                                    Some(true) => ren_done = Some(Some((rs.clone(), buf.clone()))),
+                                    Some(false) => ren_done = Some(None),
+                                    None => {}
                                 }
                             } else {
                                 // Long names end in an ellipsis before the folded-count badge

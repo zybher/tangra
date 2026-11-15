@@ -326,6 +326,62 @@ fn items(name: &'static str) -> Option<Rc<Vec<Item>>> {
     })
 }
 
+/// Paints icon `name` as a pointer: a dark edge `ink` around it, closed shapes filled with
+/// `fill`, open strokes drawn in `fill`. `hot` is the point of the 24-unit box placed at `at`.
+pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: [f32; 2], px: f32, fill: Color32, ink: Color32) {
+    let Some(items) = items(name) else { return };
+    let k = px / 24.0;
+    let tf = |q: &[f32; 2]| pos2(at.x + (q[0] - hot[0]) * k, at.y + (q[1] - hot[1]) * k);
+    let w = |it: &Item| (it.stroke.unwrap_or(1.75) * k).max(1.2);
+    let pts = |v: &[[f32; 2]], closed: bool| {
+        let mut v: Vec<Pos2> = v.iter().map(tf).collect();
+        if closed {
+            if let Some(f) = v.first().copied() {
+                v.push(f);
+            }
+        }
+        v
+    };
+    // Soft shadow, then the dark edge
+    for (off, col, extra) in [(egui::vec2(0.6, 1.0), Color32::from_black_alpha(50), 3.6), (egui::vec2(0.0, 0.0), ink, 2.6)] {
+        for it in items.iter() {
+            for (v, closed) in &it.subs {
+                let v: Vec<Pos2> = pts(v, *closed).into_iter().map(|q| q + off).collect();
+                if *closed {
+                    fan(p, &v, col);
+                }
+                let st = Stroke::new(w(it) + extra, col);
+                p.add(Shape::line(v.clone(), st));
+                for q in [v.first(), v.last()].into_iter().flatten() {
+                    p.circle_filled(*q, st.width / 2.0, col);
+                }
+            }
+        }
+    }
+    // Body
+    for it in items.iter() {
+        for (v, closed) in &it.subs {
+            let v = pts(v, *closed);
+            if *closed {
+                fan(p, &v, fill);
+            } else {
+                let st = Stroke::new(w(it), fill);
+                p.add(Shape::line(v.clone(), st));
+                for q in [v.first(), v.last()].into_iter().flatten() {
+                    p.circle_filled(*q, st.width / 2.0, fill);
+                }
+            }
+        }
+    }
+}
+
+/// Fills a (star-shaped) polygon as a fan of triangles from its first point
+fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
+    for i in 1..v.len().saturating_sub(1) {
+        p.add(Shape::convex_polygon(vec![v[0], v[i], v[i + 1]], col, Stroke::NONE));
+    }
+}
+
 /// Paints icon `name` centred on `c`, its 24-unit box `px` pixels wide
 pub(crate) fn draw(p: &egui::Painter, name: &'static str, c: Pos2, px: f32, col: Color32) {
     let Some(items) = items(name) else { return };

@@ -10,6 +10,8 @@ pub(crate) mod image_sliders;
 mod place_align;
 pub(crate) mod drop_anim;
 pub(crate) mod num_edit;
+pub(crate) mod inline_text;
+pub(crate) mod cursor;
 pub(crate) mod props;
 mod bar_morph;
 pub(crate) mod outline_drag;
