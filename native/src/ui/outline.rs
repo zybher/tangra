@@ -57,7 +57,7 @@ fn kid() -> egui::Id {
 
 /// How far the bottom-left HUD slides right to make room for the outline (animated)
 pub(crate) fn hud_shift(ctx: &egui::Context) -> f32 {
-    ctx.data(|d| d.get_temp::<f32>(kid())).unwrap_or(0.0).clamp(0.0, 1.0) * (width() + GAP)
+    ctx.data(|d| d.get_temp::<f32>(kid())).unwrap_or(0.0).clamp(0.0, 1.0) * (width() + GAP - 10.0)
 }
 
 /// How far top-left readouts (F3 stats) move aside: past the panel, or past the collapsed tab
@@ -354,7 +354,7 @@ impl App {
         }
 
         // Same reveal as the canvas popup: a short slide + fade, rows cascading in after the shell
-        let pos = pos2(canvas.min.x + 10.0 - (1.0 - k) * 16.0, canvas.min.y + 10.0);
+        let pos = pos2(canvas.min.x - (1.0 - k) * 16.0, canvas.min.y + 10.0);
         let h = (canvas.height() - 20.0).max(120.0);
         let mut pick: Option<Sel> = None;
         let mut toggle: Option<String> = None;
@@ -392,8 +392,8 @@ impl App {
                 // The properties section (props.rs) sits in this panel's lower part
                 let pass = ctx.cumulative_pass_nr();
                 ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_shell"), (shell, k, pass)));
-                ui.painter().rect_filled(shell.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-                egui::Frame::none().fill(frame_bg()).stroke(EStroke::new(1.0_f32, border())).rounding(10.0).inner_margin(6.0).show(ui, |ui| {
+                ui.painter().rect_filled(shell.translate(vec2(0.0, 3.0)), Rounding { nw: 0.0, sw: 0.0, ne: 10.0, se: 10.0 }, Color32::from_black_alpha(70));
+                egui::Frame::none().fill(frame_bg()).stroke(EStroke::new(1.0_f32, border())).rounding(Rounding { nw: 0.0, sw: 0.0, ne: 10.0, se: 10.0 }).inner_margin(6.0).show(ui, |ui| {
                     ui.set_width(W - 12.0);
                     ui.set_height(h - 12.0);
                     // Header: title, scope switch, close
