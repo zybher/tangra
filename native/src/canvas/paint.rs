@@ -46,6 +46,23 @@ impl App {
 
         let item_rect = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_max(v.s(x, y), v.s(x + w, y + h));
 
+        // Inside a rounded clipping frame: the object's own shape cut to the frame's rounded shape
+        let round_cut = |id: &str, r: Rect, rd: f32| -> Option<(Vec<Pos2>, bool)> {
+            let rc = self.round_clips(id);
+            if rc.is_empty() {
+                return None;
+            }
+            let mut poly = super::round_clip::rounded_poly(r, rd);
+            // Fully clear of every rounded corner: nothing to cut beyond the usual rect clip
+            let mut safe = true;
+            for (q, rad) in &rc {
+                let cr = item_rect(q[0], q[1], q[2], q[3]);
+                let crd = rad * z;
+                safe &= cr.shrink2(vec2(crd, 0.0)).contains_rect(r.intersect(cr)) || cr.shrink2(vec2(0.0, crd)).contains_rect(r.intersect(cr));
+                poly = super::round_clip::clip_convex(&poly, &super::round_clip::rounded_poly(cr, crd));
+            }
+            Some((poly, safe))
+        };
         let hid = self.hidden_ids();
         // Objects inside a clipping frame are cropped to it
         let clips = self.clip_boxes();
@@ -91,7 +108,16 @@ impl App {
                 (panel, Color32::from_white_alpha(48), FRAME_TITLE_COL)
             };
             let fr = group_radius(c) * z;
-            p.rect_filled(r, fr, fill_color);
+            let cut = round_cut(&c.id, r, fr).filter(|(_, safe)| !safe);
+            match &cut {
+                Some((poly, _)) if poly.len() >= 3 => {
+                    p.add(egui::Shape::convex_polygon(poly.clone(), fill_color, EStroke::NONE));
+                }
+                Some(_) => {}
+                None => {
+                    p.rect_filled(r, fr, fill_color);
+                }
+            }
             let bw = c.border.unwrap_or(1.0);
             // Stroke position: inside keeps the frame's size, outside grows past it
             let (sr, sfr) = match c.stroke_pos {
@@ -100,7 +126,15 @@ impl App {
                 _ => (r, fr),
             };
             if bw > 0.0 {
-                p.rect_stroke(sr, sfr, EStroke::new(bw, stroke_color));
+                match round_cut(&c.id, sr, sfr).filter(|(_, safe)| !safe) {
+                    Some((poly, _)) if poly.len() >= 3 => {
+                        p.add(egui::Shape::closed_line(poly, EStroke::new(bw, stroke_color)));
+                    }
+                    Some(_) => {}
+                    None => {
+                        p.rect_stroke(sr, sfr, EStroke::new(bw, stroke_color));
+                    }
+                }
             }
             let lit = ease(p.ctx(), egui::Id::new(("qd_ftitle", c.id.as_str())), self.selected.contains(&(Kind::Group, c.id.clone())) || hovered_now.as_ref().is_some_and(|(k, id)| *k == Kind::Group && *id == c.id));
             let title_color = mix(title_color, blue(), lit);
@@ -151,6 +185,9 @@ impl App {
             }
             // Rounded corners (screen px), never more than half the short side
             let rd = (img.corner * z).clamp(0.0, r.width().min(r.height()) / 2.0);
+            // Cut to a rounded frame's corners (None: away from them, drawn as usual)
+            let cut = round_cut(&img.id, r, rd).filter(|(_, safe)| !safe).map(|(poly, _)| poly);
+            if cut.is_none() {
             p.add(
                 egui::epaint::Shadow {
                     offset: vec2(0.0, 4.0 * z),
@@ -160,8 +197,11 @@ impl App {
                 }
                 .as_shape(r, Rounding::same(rd)),
             );
+            }
             if let Some((tex, _)) = self.textures.get(&img.asset_file_name) {
-                if rd > 0.0 {
+                if let Some(poly) = &cut {
+                    p.add(egui::Shape::mesh(super::round_clip::textured_poly(poly, r, tex.id(), Color32::WHITE)));
+                } else if rd > 0.0 {
                     let mut rs = egui::epaint::RectShape::filled(r, rd, Color32::WHITE);
                     rs.fill_texture_id = tex.id();
                     rs.uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
@@ -169,6 +209,8 @@ impl App {
                 } else {
                     p.image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                 }
+            } else if let Some(poly) = cut.as_ref().filter(|q| q.len() >= 3) {
+                p.add(egui::Shape::convex_polygon(poly.clone(), rgba(30, 41, 59, 255), EStroke::NONE));
             } else {
                 p.rect_filled(r, rd, rgba(30, 41, 59, 255));
                 let msg = if self.missing.contains(&img.asset_file_name) { "Image file missing" } else { "Loading…" };

@@ -11,5 +11,6 @@ mod multi_edit;
 mod visibility;
 mod nesting;
 mod glide;
+pub(crate) mod round_clip;
 pub(crate) mod align;
 pub(crate) use align::Align;
