@@ -61,6 +61,7 @@ impl App {
             let pk = ui.painter().clone().with_clip_rect(ctx.screen_rect());
             let mut p = pk.clone();
             p.multiply_opacity(ez(kk));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
 

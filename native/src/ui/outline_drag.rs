@@ -70,6 +70,7 @@ pub(crate) fn paint_ghost(ctx: &egui::Context, at: egui::Pos2, name: &str, k: Ki
     let font = FontId::proportional(12.0);
     let w = ctx.fonts(|f| f.layout_no_wrap(name.to_string(), font.clone(), Color32::WHITE).size().x) + 40.0;
     let r = Rect::from_min_size(at + vec2(12.0, 4.0), vec2(w, 24.0));
+    p.rect_filled(r.translate(vec2(0.0, 2.0)), 7.0, Color32::from_black_alpha(80));
     p.rect_filled(r, 7.0, mix(frame_bg(), blue(), 0.35));
     // What's being moved: the same kind glyph as its row
     super::icons::kind_icon(&p, k, r.left_center() + vec2(15.0, 0.0), Color32::WHITE);

@@ -100,6 +100,7 @@ impl App {
             .show(ctx, |ui| {
                 let _ = ui.allocate_rect(main, Sense::hover());
                 let p = &ui.painter().clone().with_clip_rect(ctx.screen_rect());
+                p.rect_filled(bg.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * t) as u8));
                 glass(&p, bg, 10.0, t);
                 p.rect_stroke(bg, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(t)));
                 for (i, c) in rows.iter().enumerate() {
@@ -200,6 +201,7 @@ impl App {
                 .show(ctx, |ui| {
                     let _ = ui.allocate_rect(r0, Sense::hover());
                     let p = &ui.painter().clone().with_clip_rect(ctx.screen_rect());
+                    p.rect_filled(r0.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * st) as u8));
                     p.rect_filled(r0, 10.0, popup().gamma_multiply(st));
                     p.rect_stroke(r0, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(st)));
                     if c == 'c' {
@@ -240,6 +242,7 @@ impl App {
                             let sq = Rect::from_center_size(ctr, vec2(rad * 2.0, rad * 2.0));
                             let round = rad * (1.0 - 0.62 * m * m);
                             let a = st * sp;
+                            p.rect_filled(sq.translate(vec2(0.0, 1.5 + 2.0 * m)), round, Color32::from_black_alpha(((50.0 + 40.0 * m) * a) as u8));
                             p.rect_filled(sq, round, col.gamma_multiply(a));
                             p.rect_stroke(sq, round, EStroke::new(1.0_f32, Color32::from_white_alpha((40.0 + 50.0 * m) as u8).gamma_multiply(a)));
                             if on > 0.01 {
@@ -256,6 +259,7 @@ impl App {
                         let bar = Rect::from_min_size(pos2(r0.min.x + 12.0, top + 3.0 * 30.0 + 4.0), vec2(r0.width() - 24.0, 14.0));
                         let rr = bar.height() / 2.0;
                         let hue = |f: f32| -> Color32 { egui::ecolor::Hsva::new(f, 0.8, 0.95, 1.0).into() };
+                        p.rect_filled(bar.translate(vec2(0.0, 2.0)), rr, Color32::from_black_alpha((60.0 * st) as u8));
                         p.circle_filled(pos2(bar.min.x + rr, bar.center().y), rr, hue(0.0).gamma_multiply(st));
                         p.circle_filled(pos2(bar.max.x - rr, bar.center().y), rr, hue(0.999).gamma_multiply(st));
                         // One gradient mesh (separate slices left hairline seams between them)
@@ -281,6 +285,7 @@ impl App {
                         let ch = egui::ecolor::Hsva::from(hex(&self.pen_color));
                         let kx = inner.min.x + inner.width() * ch.h;
                         let kr = 8.0 + 1.5 * hv;
+                        p.circle_filled(pos2(kx, bar.center().y + 1.5), kr, Color32::from_black_alpha((80.0 * st) as u8));
                         p.circle_filled(pos2(kx, bar.center().y), kr, Color32::WHITE.gamma_multiply(st));
                         p.circle_filled(pos2(kx, bar.center().y), kr - 2.5, hue(ch.h).gamma_multiply(st));
                         if resp.clicked() || resp.dragged() {

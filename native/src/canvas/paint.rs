@@ -197,7 +197,8 @@ impl App {
             if let (Some(t), Some(tex)) = (&tilt, tex) {
                 p.add(egui::Shape::mesh(t.mesh([img.x, img.y, img.width, img.height], |x, y| v.s(x, y), tex.id(), Color32::WHITE)));
             } else {
-            if cut.is_none() && self.parent_of(&img.id).is_none() {
+            // Only pictures straight on the board, and not ones with cut-out holes (it shows grey through)
+            if cut.is_none() && self.parent_of(&img.id).is_none() && !img.edit.as_ref().is_some_and(|e| !e.cuts.is_empty()) {
             p.add(
                 egui::epaint::Shadow {
                     offset: vec2(0.0, 4.0 * z),

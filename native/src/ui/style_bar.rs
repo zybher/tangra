@@ -323,6 +323,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let sw = (w * (0.12 + 0.88 * f) * (1.0 + wob)).max(h);
         let sh = h * (0.8 + 0.2 * f.min(1.0)) * (1.0 - wob * 0.6);
         let shown = Rect::from_center_size(bar.center() + vec2(0.0, (1.0 - f) * 6.0), vec2(sw, sh));
+        p.rect_filled(shown.translate(vec2(0.0, 3.0)), sh / 2.0, Color32::from_black_alpha((60.0 * a) as u8));
         p.rect_filled(shown, sh / 2.0, frame_bg().gamma_multiply(a));
         p.rect_stroke(shown, sh / 2.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
         ui.interact(bar, bid.with("bg"), Sense::click_and_drag());
@@ -648,6 +649,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let mut p = pk.clone();
             p.multiply_opacity(ez(k1));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
             let custom_on: bool = ctx.data(|d| d.get_temp(cid)).unwrap_or(false);
@@ -754,6 +756,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let mut p = pk.clone();
             p.multiply_opacity(ez(k2));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
             // "None": the frame stops arranging/hugging; pasted images keep their size and spot
@@ -794,6 +797,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let mut p = pk.clone();
             p.multiply_opacity(ez(k3));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
             for (i, (name, rt)) in RATIOS.iter().enumerate() {
@@ -850,6 +854,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let mut p = pk.clone();
             p.multiply_opacity(ez(k4));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
             for (i, (name, al, across)) in rows_def.iter().enumerate() {
@@ -905,6 +910,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let mut p = pk.clone();
             p.multiply_opacity(ez(k5));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
             for (i, (name, v)) in rows_def.iter().enumerate() {

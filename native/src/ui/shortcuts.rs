@@ -50,6 +50,7 @@ impl App {
             .show(ctx, |ui| {
                 let p = ui.painter().clone();
                 let a = t;
+                p.rect_filled(r.translate(vec2(0.0, 4.0)), 12.0, Color32::from_black_alpha((90.0 * a) as u8));
                 glass(&p, r, 12.0, a);
                 p.rect_stroke(r, 12.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
                 let a0 = stagger(ot, 0).min(t);

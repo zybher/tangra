@@ -259,6 +259,7 @@ impl App {
                     ui.set_opacity(tk.clamp(0.0, 1.0));
                     let (r, _) = ui.allocate_exact_size(vec2(TAB_W, 40.0), Sense::hover());
                     let p = ui.painter();
+                    p.rect_filled(r.translate(vec2(0.0, 3.0)), 12.0, Color32::from_black_alpha(70));
                     p.rect_filled(r, 12.0, frame_bg());
                     p.rect_stroke(r, 12.0, EStroke::new(1.0_f32, border()));
                     paint_logo(p, pos2(r.min.x + 22.0, r.center().y), 18.0, 1.0);
@@ -388,6 +389,7 @@ impl App {
                 #[allow(non_snake_case)]
                 let W = width();
                 let shell = Rect::from_min_size(pos, vec2(W, h));
+                ui.painter().rect_filled(shell.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
                 egui::Frame::none().fill(frame_bg()).stroke(EStroke::new(1.0_f32, border())).rounding(10.0).inner_margin(6.0).show(ui, |ui| {
                     ui.set_width(W - 12.0);
                     ui.set_height(h - 12.0);

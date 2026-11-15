@@ -77,6 +77,7 @@ impl App {
                         let e = 1.0 - (1.0 - e).powi(3);
                         (e, (1.0 - e) * 18.0)
                     };
+                    p.rect_filled(pop.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * t) as u8));
                     glass(&p, pop, 10.0, t);
                     p.rect_stroke(pop, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(t)));
                     let lx = pop.min.x + 14.0;
