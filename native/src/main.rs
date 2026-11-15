@@ -2,6 +2,7 @@
 
 mod model;
 mod image_names;
+mod image_edit;
 mod platform;
 mod theme;
 mod app;
@@ -72,6 +73,8 @@ enum Tool {
     Arrow,
     /// Click to drop a frame (chosen preset), or drag one out
     Frame,
+    /// Loop part of a picture, then Delete cuts it out
+    Lasso,
 }
 
 /// Shapes are stored as ordinary strokes, so the eraser, undo, selection and
@@ -126,6 +129,7 @@ enum TbIcon {
     Pixelate,
     Text,
     Eraser,
+    Lasso,
 }
 
 fn paint_icon(p: &egui::Painter, icon: TbIcon, c: Pos2, s: f32, col: Color32) {
@@ -183,6 +187,16 @@ fn paint_icon(p: &egui::Painter, icon: TbIcon, c: Pos2, s: f32, col: Color32) {
             p.line_segment([q(-2.5, -3.5), q(3.0, 2.0)], st);
             p.line_segment([q(-3.0, 6.5), q(6.0, 6.5)], st);
         }
+        TbIcon::Lasso => {
+            let ring: Vec<Pos2> = (0..20)
+                .map(|i| {
+                    let a = i as f32 / 20.0 * std::f32::consts::TAU;
+                    q(0.5 + 5.5 * a.cos(), -1.5 + 4.0 * a.sin())
+                })
+                .collect();
+            p.add(Shape::closed_line(ring, st));
+            p.add(Shape::line(vec![q(-3.0, 1.8), q(-4.0, 4.0), q(-2.5, 5.5), q(-4.5, 7.0)], st));
+        }
     }
 }
 
@@ -206,6 +220,8 @@ enum Drag {
     /// Resizing a multi-selection from its box: start rects of the items and of frame contents
     MultiResize { start: Pt, bx: [f32; 4], left: bool, top: bool, rx: bool, ry: bool, items: Vec<(Sel, [f32; 4])>, follow: Vec<(Sel, [f32; 4], usize)> },
     Gap { idx: usize, axis: usize, start: Pt, gap0: f32, items: Vec<(Sel, [f32; 4])>, follow: Vec<(Sel, [f32; 4], usize)> },
+    /// Drawing the lasso loop (points in `App::lasso`)
+    Lasso,
 }
 
 enum EditTarget {
@@ -238,6 +254,11 @@ struct SettingsDraft {
 
 #[allow(dead_code)]
 enum Act {
+    /// Image adjust / 3D row scrubbed: (field, value, first frame of the drag)
+    ImageEdit(u8, f32, bool),
+    ResetAdjust,
+    ResetTilt,
+    RestoreCuts,
     /// Shrink / grow the selected frames to wrap what's inside them
     FitFrame,
     /// Corner radius for the selected pictures
@@ -378,6 +399,12 @@ struct App {
     pending: HashSet<String>,
     /// Coarse copies of images that have pixelated areas (a few KB each).
     mosaics: HashMap<String, TextureHandle>,
+    /// Lasso loop in world coords, waiting for Delete
+    lasso: Option<Vec<Pt>>,
+    /// Pixels the image edits are worked from, per file (capped size)
+    edit_base: HashMap<String, (u32, u32, Vec<u8>)>,
+    /// Edited copy per picture id, with the settings it was made from
+    edited: HashMap<String, (u64, TextureHandle)>,
     // F3 performance read-out
     stats_on: bool,
     frames: std::collections::VecDeque<f64>,
@@ -533,6 +560,9 @@ impl App {
             done,
             pending: HashSet::new(),
             mosaics: HashMap::new(),
+            lasso: None,
+            edit_base: HashMap::new(),
+            edited: HashMap::new(),
             stats_on: false,
             frames: Default::default(),
             ui_ms: 0.0,
@@ -848,6 +878,7 @@ impl eframe::App for App {
             self.input(ctx, &resp, canvas_rect);
             view = self.view(canvas_rect);
             self.ensure_textures(ctx, view, canvas_rect);
+            self.ensure_edits(ctx);
 
             // Canvas painter clipped strictly to canvas_rect so zoomed/panned items never bleed into titlebar
             let canvas_painter = ui.painter().with_clip_rect(canvas_rect);

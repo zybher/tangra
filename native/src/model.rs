@@ -106,6 +106,9 @@ pub struct ImageNode {
     /// Corner radius in world units (0 = square)
     #[serde(default, skip_serializing_if = "is_zero")]
     pub corner: f32,
+    /// Colour adjustments, cut-out areas and 3D tilt (see image_edit.rs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit: Option<crate::image_edit::ImageEdit>,
 }
 
 impl ImageNode {
@@ -267,6 +270,7 @@ impl Board {
             z_index: self.images.len() as f64 + 1.0,
             base_scale: None,
             corner: 0.0,
+            edit: None,
         });
         self.name_image(&id, None);
         id

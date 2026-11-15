@@ -69,7 +69,7 @@ pub(crate) const MENU_INSET: f32 = 10.0;
 /// Menu row whose number is changed by dragging left / right (same as the placement bar's
 /// scrubs). Returns (new value, true on the first frame of the drag) while dragging.
 #[allow(dead_code)]
-pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32, lo: f32, hi: f32) -> Option<(f32, bool)> {
+pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32, lo: f32, hi: f32, glyph: bool) -> Option<(f32, bool)> {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().max(160.0), 26.0), Sense::drag());
     let (h, pr) = hover_fx(ui.ctx(), &resp, true);
     let (a, dy) = cm_anim(ui, rect.min.y);
@@ -88,8 +88,10 @@ pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32
     let vx = tile.max.x - 10.0;
     let vg = p.layout_no_wrap(format!("{}", value.round() as i32), FontId::proportional(12.0), col);
     let ic = pos2(vx - vg.size().x - 12.0, tile.center().y);
-    let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
-    p.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
+    if glyph {
+        let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
+        p.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
+    }
     p.galley(pos2(vx - vg.size().x, tile.center().y - vg.size().y / 2.0), vg, col);
     if resp.hovered() || resp.dragged() {
         ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);

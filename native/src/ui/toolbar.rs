@@ -7,7 +7,7 @@ impl App {
     pub(crate) fn toolbar_ui(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>, rect: Rect) {
         use TbIcon as I;
         // None = divider. A tool of None means "add this item to the middle of the view".
-        let items: [Option<(I, &str, Option<Tool>)>; 13] = [
+        let items: [Option<(I, &str, Option<Tool>)>; 14] = [
             Some((I::Select, "Select / move  (V)", Some(Tool::Select))),
             None,
             Some((I::Frame, "Frame  ·  click or drag on the canvas", Some(Tool::Frame))),
@@ -21,6 +21,7 @@ impl App {
             Some((I::Pixelate, "Pixelate: hide part of an image  (B)", Some(Tool::Pixelate))),
             Some((I::Text, "Text  (T)", Some(Tool::Text))),
             Some((I::Eraser, "Eraser  (E)", Some(Tool::Eraser))),
+            Some((I::Lasso, "Lasso cut: loop part of an image, then Delete  (K)", Some(Tool::Lasso))),
         ];
         let (bw, gap, div, pad, h) = (34.0_f32, 2.0_f32, 11.0_f32, 5.0_f32, 44.0_f32);
         // Dock-style magnify: the hovered button swells and lifts, its neighbours a little;

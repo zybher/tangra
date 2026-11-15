@@ -58,6 +58,8 @@ impl App {
                 Some(Tool::Arrow)
             } else if i.key_pressed(Key::F) {
                 Some(Tool::Frame)
+            } else if i.key_pressed(Key::K) {
+                Some(Tool::Lasso)
             } else {
                 None
             };
@@ -144,18 +146,21 @@ impl App {
         if redo {
             self.redo();
         }
-        if del {
+        if del && !self.lasso_cut() {
             self.delete_selected();
         }
         if let Some(t) = tool {
             if t != self.tool {
+                self.lasso = None;
                 self.tool_menu = None;
                 self.tool_sub = None;
             }
             self.tool = t;
         }
         if esc {
-            if self.tool != Tool::Select {
+            if self.lasso.take().is_some() {
+                // First Esc just drops the loop
+            } else if self.tool != Tool::Select {
                 self.tool = Tool::Select;
             } else {
                 self.deselect_all();
@@ -236,6 +241,7 @@ impl App {
                 self.drag_changed = self.erase_at(w);
                 self.drag = Drag::Erase;
             }
+            Tool::Lasso => self.begin_lasso(w),
             Tool::Text => {}
             Tool::Select => {
                 if let Some((run, i)) = self.gap_handle_at(w) {
@@ -402,6 +408,7 @@ impl App {
             Drag::Erase => {
                 self.drag_changed |= self.erase_at(w);
             }
+            Drag::Lasso => self.extend_lasso(w),
             Drag::Frame { start, id } => {
                 // A tiny drag is a click: keep the preset size centred on it
                 let (_, fw, fh) = FRAME_SIZES[0];
@@ -503,6 +510,9 @@ impl App {
     }
 
     pub(crate) fn end_drag(&mut self) {
+        if let Drag::Lasso = self.drag {
+            self.end_lasso();
+        }
         if let Drag::Frame { start, id } = &self.drag {
             // A click (or a tiny drag) drops a default-size frame centred on it
             let (_, fw, fh) = FRAME_SIZES[0];
@@ -647,7 +657,7 @@ impl App {
             }
         } else if resp.hovered() {
             ctx.set_cursor_icon(match self.tool {
-                Tool::Pen | Tool::Highlighter | Tool::Pixelate | Tool::Rect | Tool::Ellipse | Tool::Arrow | Tool::Frame => egui::CursorIcon::Crosshair,
+                Tool::Pen | Tool::Highlighter | Tool::Pixelate | Tool::Rect | Tool::Ellipse | Tool::Arrow | Tool::Frame | Tool::Lasso => egui::CursorIcon::Crosshair,
                 Tool::Text => egui::CursorIcon::Text,
                 Tool::Eraser => egui::CursorIcon::None,
                 Tool::Select => egui::CursorIcon::Default,

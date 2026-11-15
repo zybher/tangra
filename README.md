@@ -60,6 +60,9 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Geometry** | `canvas/geometry.rs` | Pure math helpers: rect/segment tests, stroke hits, shape constraints; rectangles / ellipses draw as one closed line (never pen-smoothed); line widths have no screen-pixel floor, so everything keeps its size relative to the board at any zoom (only frame titles stay one screen size) |
 | **Pen stroke mesh** | `canvas/stroke_mesh.rs` | Pen / highlighter lines as one smooth mesh: thinned + Chaikin-rounded points, round caps, 1px soft edge (no square cuts at zoom, no dark end dots when see-through); hovering a drawing traces its line instead of a box |
 | **Image names** | `image_names.rs` | Pasted / screenshotted pictures are named Image 1, Image 2, ... (next number after the highest); a dropped file keeps its own name unless it is a random id; older boards name their id-named pictures on load |
+| **Image edits** | `image_edit.rs` | Per-picture colour adjust (brightness, contrast, saturation, hue, warmth), lasso cut-outs and 3D tilt settings; edited copy rebuilt on the CPU when they change; right-click a picture → ADJUST / 3D rows |
+| **3D tilt** | `canvas/tilt3d.rs` | Tilt / turn / spin a picture in 3D with perspective depth, drawn as a 16×16 grid mesh; strokes on it follow the tilt; maps points back for the lasso |
+| **Lasso cut** | `canvas/lasso.rs` | Lasso tool (K): drag a loop, Delete cuts it out of the pictures under it (selected ones first), Esc drops it; marching-ants outline |
 | **Textures** | `canvas/textures.rs` | Uploading images to the GPU, pixelate/mosaic, lazy loading |
 | **Title bar & tabs** | `ui/titlebar.rs` | Tabs, board switching, window buttons |
 | **Bottom toolbar** | `ui/toolbar.rs` | Tool buttons with magnify, zoom/undo pill |

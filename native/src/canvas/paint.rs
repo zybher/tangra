@@ -191,6 +191,12 @@ impl App {
             let rd = (img.corner * z).clamp(0.0, r.width().min(r.height()) / 2.0);
             // Cut to a rounded frame's corners (None: away from them, drawn as usual)
             let cut = round_cut(&img.id, r, rd).filter(|(_, safe)| !safe).map(|(poly, _)| poly);
+            let tilt = img.edit.as_ref().filter(|e| e.has_tilt()).map(|e| super::tilt3d::Tilt::new(e, img.x, img.y, img.width, img.height));
+            // An adjusted / cut picture shows its edited copy
+            let tex = self.edited.get(&img.id).map(|t| &t.1).or(self.textures.get(&img.asset_file_name).map(|t| &t.0));
+            if let (Some(t), Some(tex)) = (&tilt, tex) {
+                p.add(egui::Shape::mesh(t.mesh([img.x, img.y, img.width, img.height], |x, y| v.s(x, y), tex.id(), Color32::WHITE)));
+            } else {
             if cut.is_none() {
             p.add(
                 egui::epaint::Shadow {
@@ -202,7 +208,7 @@ impl App {
                 .as_shape(r, Rounding::same(rd)),
             );
             }
-            if let Some((tex, _)) = self.textures.get(&img.asset_file_name) {
+            if let Some(tex) = tex {
                 if let Some(poly) = &cut {
                     p.add(egui::Shape::mesh(super::round_clip::textured_poly(poly, r, tex.id(), Color32::WHITE)));
                 } else if rd > 0.0 {
@@ -220,13 +226,26 @@ impl App {
                 let msg = if self.missing.contains(&img.asset_file_name) { "Image file missing" } else { "Loading…" };
                 p.text(r.center(), Align2::CENTER_CENTER, msg, FontId::proportional(12.0), TEXT_FAINT);
             }
+            }
             let (sx, sy) = img.scale();
-            let ip = p.with_clip_rect(r.intersect(p.clip_rect()));
+            // Strokes follow the tilt; their clip is the tilted outline's box
+            let clip = match &tilt {
+                Some(t) => Rect::from_points(&t.corners([img.x, img.y, img.width, img.height]).map(|(x, y)| v.s(x, y))),
+                None => r,
+            };
+            let ip = p.with_clip_rect(clip.intersect(p.clip_rect()));
+            let to_s = |x: f32, y: f32| match &tilt {
+                Some(t) => {
+                    let (x, y) = t.fwd(x, y);
+                    v.s(x, y)
+                }
+                None => v.s(x, y),
+            };
             for s in img.annotations.strokes.iter().filter(|s| s.pixelate) {
                 self.paint_pixelate(&ip, img, s, v);
             }
             for s in img.annotations.strokes.iter().filter(|s| !s.pixelate) {
-                paint_stroke(&ip, s, |q| v.s(img.x + q.x * sx, img.y + q.y * sy), s.width * z);
+                paint_stroke(&ip, s, |q| to_s(img.x + q.x * sx, img.y + q.y * sy), s.width * z);
             }
             for t in &img.annotations.texts {
                 let fs = if t.font_size > 0.0 { t.font_size } else { 16.0 };
@@ -549,6 +568,8 @@ impl App {
             p.rect_stroke(marquee, 0.0, EStroke::new(1.0_f32, blue()));
         }
 
+        self.paint_lasso(p, v);
+
         // Eraser cursor
         if let (Tool::Eraser, Some(h)) = (self.tool, hover) {
             let panning = p.ctx().input(|i| i.key_down(Key::Space) || i.pointer.middle_down()) && self.edit.is_none();
@@ -590,6 +611,7 @@ impl App {
             Tool::Ellipse => Some("Ellipse  ·  drag to draw"),
             Tool::Arrow => Some("Arrow  ·  drag to draw"),
             Tool::Frame => Some("Frame  ·  click to place, drag to size"),
+            Tool::Lasso => Some("Lasso  ·  loop part of a picture, then Delete"),
         };
         // Indicator pill retired: the shortcut list and toolbar already show the tool
         let tool: Option<&str> = tool.filter(|_| false);
@@ -666,7 +688,7 @@ impl App {
 
         // Hotkey list, bottom-left above the status bar; the active tool is lit
         {
-            let keys: [(&str, &str, Option<Tool>); 11] = [
+            let keys: [(&str, &str, Option<Tool>); 12] = [
                 ("V", "Select", Some(Tool::Select)),
                 ("F", "Frame", Some(Tool::Frame)),
                 ("R", "Rectangle", Some(Tool::Rect)),
@@ -677,6 +699,7 @@ impl App {
                 ("B", "Blur", Some(Tool::Pixelate)),
                 ("T", "Text", Some(Tool::Text)),
                 ("E", "Eraser", Some(Tool::Eraser)),
+                ("K", "Lasso cut", Some(Tool::Lasso)),
                 ("F3", "Stats", None),
             ];
             let ctx = p.ctx().clone();
