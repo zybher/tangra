@@ -181,25 +181,6 @@ impl App {
         self.glide_to(moves);
     }
 
-    /// One image: scale it to cover its frame (keeping its shape), centred; the frame crops the rest
-    pub(crate) fn fill_frame(&mut self, cover: bool) {
-        let targets = self.place_targets();
-        let [(Kind::Image, id)] = targets.as_slice() else { return };
-        let (Some(f), Some(r)) = (self.place_bounds(&targets), self.rect_of(Kind::Image, id)) else { return };
-        if r[2] <= 0.0 || r[3] <= 0.0 {
-            return;
-        }
-        let (kx, ky) = (f[2] / r[2], f[3] / r[3]);
-        let k = if cover { kx.max(ky) } else { kx.min(ky) };
-        let (w, h) = (r[2] * k, r[3] * k);
-        let nr = [f[0] + (f[2] - w) / 2.0, f[1] + (f[3] - h) / 2.0, w, h];
-        if (0..4).all(|i| (nr[i] - r[i]).abs() < 0.01) {
-            return;
-        }
-        self.snapshot();
-        self.glide_to(vec![((Kind::Image, id.clone()), nr)]);
-    }
-
     /// Set the opacity of every selected object (no undo step: the caller snapshots once per drag)
     pub(crate) fn set_selection_opacity(&mut self, v: f32) {
         let v = v.clamp(0.0, 1.0);

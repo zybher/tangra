@@ -274,6 +274,12 @@ pub(crate) fn list_wave(ctx: &egui::Context, id: egui::Id, area: Rect, first: f3
 /// the chosen one) grow taller and poke out to the right; the left edge stays put and
 /// the panel grows upward from its bottom. Returns (row rects, magnify per row, panel).
 pub(crate) fn wave_rows(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, pinned: &[f32]) -> (Vec<Rect>, Vec<f32>, Rect) {
+    wave_rows_k(ctx, id, left, bottom, w, pitch, n, pinned, 1.0)
+}
+
+/// `wave_rows` with the wave scaled by `k` (1 = the menus' wave)
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, pinned: &[f32], k: f32) -> (Vec<Rect>, Vec<f32>, Rect) {
     if n == 0 {
         let r = Rect::from_min_max(pos2(left, bottom - 8.0), pos2(left + w, bottom));
         return (Vec::new(), Vec::new(), r);
@@ -285,7 +291,7 @@ pub(crate) fn wave_rows(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f3
     let m: Vec<f32> = (0..n)
         .map(|i| {
             let c = first + i as f32 * pitch;
-            (wa * (-((c - fy) / pitch).powi(2)).exp()).max(pinned.get(i).copied().unwrap_or(0.0))
+            (k * wa * (-((c - fy) / pitch).powi(2)).exp()).max(pinned.get(i).copied().unwrap_or(0.0))
         })
         .collect();
     let hs: Vec<f32> = m.iter().map(|k| pitch * (1.0 + 0.22 * k)).collect();

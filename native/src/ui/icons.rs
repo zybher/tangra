@@ -122,19 +122,6 @@ pub(crate) fn distribute(p: &egui::Painter, c: Pos2, size: f32, col: Color32, ho
     p.rect_filled(grid_rect(c, size, t, [5.75, 4.0, 10.25, 12.0]), 1.0 * k, col);
 }
 
-/// Fill (picture covers the frame) or fit (picture sits inside it)
-pub(crate) fn fill_fit(p: &egui::Painter, c: Pos2, size: f32, col: Color32, cover: bool) {
-    let c = snap(p, c);
-    let k = size / 16.0;
-    let outer = grid_rect(c, size, false, [2.0, 3.0, 14.0, 13.0]);
-    p.rect_stroke(outer, 1.5 * k, Stroke::new(SW, col));
-    if cover {
-        p.rect_filled(outer.shrink(2.0 * k), 0.5 * k, col.gamma_multiply(0.55));
-    } else {
-        p.rect_filled(grid_rect(c, size, false, [5.5, 5.5, 10.5, 10.5]), 0.5 * k, col);
-    }
-}
-
 /// Opacity: a small checkerboard square
 pub(crate) fn opacity(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
     let c = snap(p, c);

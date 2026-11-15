@@ -1,24 +1,25 @@
-//! Picture dropdowns on the placement bar: Adjust (colour) and 3D (tilt). Same wave list as
-//! the style bar's dropdowns; each value row scrubs sideways like the bars' number fields
-//! (double-click resets it), and a reset row sits at the bottom.
-//! The panel opens beside the picture, not over it, so the edit stays in view; with no room
-//! on either side it drops under the bar and the other rows fade while one is being dragged.
+//! Picture dropdowns from the side bar (image_side.rs): Adjust (colour) and 3D (tilt). Same
+//! wave list as the style bar's dropdowns, a softer wave since every row is dragged; each
+//! value row scrubs sideways like the bars' number fields (double-click resets it), and a
+//! reset row sits at the bottom. Opens next to the side bar, away from the picture.
 
 use crate::image_edit::{ImageEdit, ADJUST_ROWS, TILT_ROWS};
 use crate::*;
 
 const PITCH: f32 = 26.0;
-const PANEL_W: f32 = 168.0;
+pub(crate) const PANEL_W: f32 = 168.0;
+/// Wave strength for these rows (the menus use 1)
+const SOFT: f32 = 0.4;
 
 impl App {
-    /// Draws the open dropdown (1 = Adjust, 2 = 3D) for picture `img` shown at `fr` (screen).
-    /// Returns the panel's rect while one is open.
-    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, fr: Rect, pop: u8, img: &str, bid: egui::Id) -> Rect {
+    /// Draws the open dropdown (1 = Adjust, 2 = 3D) for picture `img`, beside the side bar
+    /// `anchor` (to its right when `right`). Returns the panel's rect while one is open.
+    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, anchor: Rect, right: bool, pop: u8, img: &str) -> Rect {
         let ctx = ui.ctx().clone();
+        let bid = egui::Id::new("qd_img_pop");
         let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
         let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
-        let left_edge = rect.min.x + crate::ui::outline::hud_shift(&ctx) + 8.0;
-        let mut open_rect = Rect::NOTHING;
+                let mut open_rect = Rect::NOTHING;
         for kind in [1u8, 2] {
             let kk = ctx.animate_bool_with_time(bid.with(("ipop", kind)), pop == kind, 0.22 * anim_k());
             if kk <= 0.001 {
@@ -39,27 +40,18 @@ impl App {
             let n = sliders.len() + resets.len();
             let ph = n as f32 * PITCH + 8.0;
 
-            // Beside the picture (right, else left), level with its top; else under the bar
-            let top_y = fr.min.y.max(bar.max.y + 6.0).clamp(rect.min.y + 8.0, (rect.max.y - 70.0 - ph).max(rect.min.y + 8.0));
-            let (left, top, sg) = if fr.max.x + 12.0 + PANEL_W <= rect.max.x - 8.0 {
-                (fr.max.x + 12.0, top_y, 1.0)
-            } else if fr.min.x - 12.0 - PANEL_W >= left_edge {
-                (fr.min.x - 12.0 - PANEL_W, top_y, 1.0)
-            } else {
-                let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
-                let x = (bar.center().x - PANEL_W / 2.0).clamp(left_edge, (rect.max.x - 8.0 - PANEL_W).max(left_edge));
-                (x, if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 }, if up { -1.0 } else { 1.0 })
-            };
+            let left = if right { anchor.max.x + 8.0 } else { anchor.min.x - 8.0 - PANEL_W };
+            let top = anchor.min.y.min((rect.max.y - 70.0 - ph).max(rect.min.y + 8.0));
+            let sg = 1.0;
             let top = top + (1.0 - ez(kk)) * -8.0 * sg;
 
-            // The row being dragged stays raised; the others fade so the picture shows through
+            // The row being dragged stays raised
             let drag_id = bid.with(("idrag", kind));
             let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
-            let pinned: Vec<f32> = (0..n).map(|i| if dragging == Some(i) { 1.0 } else { 0.0 }).collect();
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned);
+            let pinned: Vec<f32> = (0..n).map(|i| if dragging == Some(i) { SOFT } else { 0.0 }).collect();
+            let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
-            let ghost = ease(&ctx, bid.with(("ighost", kind)), dragging.is_some());
             let live = pop == kind;
             if live {
                 open_rect = pr;
@@ -67,7 +59,7 @@ impl App {
             }
             let pk = ui.painter().clone().with_clip_rect(ctx.screen_rect());
             let mut p = pk.clone();
-            p.multiply_opacity(ez(kk) * (1.0 - 0.75 * ghost));
+            p.multiply_opacity(ez(kk));
             p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
@@ -76,9 +68,8 @@ impl App {
             for i in 0..n {
                 let rk = ez(kk * 1.5 - i as f32 * 0.12);
                 let (rr, wm) = (rows[i].translate(vec2(0.0, dy - sg * (1.0 - rk) * 10.0)), mags[i]);
-                let fade = if dragging.is_some() && dragging != Some(i) { 1.0 - 0.75 * ghost } else { 1.0 };
                 let mut p = pk.clone();
-                p.multiply_opacity(ez(kk) * rk * fade);
+                p.multiply_opacity(ez(kk) * rk);
                 let k = 1.0 + 0.14 * wm;
                 if let Some(&(f, label, lo, hi)) = sliders.get(i) {
                     let mut e = ed.clone();
