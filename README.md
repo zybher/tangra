@@ -51,7 +51,7 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Undo & selection state** | `app/state.rs` | Undo/redo, saving, select/deselect, label editing bookkeeping |
 | **Board operations** | `app/board_ops.rs` | Delete, bring to front / send to back, text editing commit, eraser, switch board, zoom-to-fit, hide/quit |
 | **Input** | `canvas/input.rs` | Keyboard shortcuts, pointer drags (move, resize, draw, marquee), input routing |
-| **Drawing the board** | `canvas/paint.rs` | Background, items, annotations, hover/selection outlines, multi-select box, marquee |
+| **Drawing the board** | `canvas/paint.rs` | Background, items (only pictures straight on the board cast a shadow; the UI is flat), annotations, hover/selection outlines, multi-select box, marquee |
 | **Size numbers** | `canvas/size_pills.rs` | Width/height pills around the selection (glide, merge, rolling digits) |
 | **Smart move & measuring** | `canvas/snap.rs` | Snapping to other on-screen objects' edges/centres with red guide lines (closest wins), equal-gap spacing in rows/columns, size matching while resizing, Shift axis lock, Ctrl to move freely, Alt-hover gap/edge measurement, Alt-drag duplicate distance to the original with round-number gap snapping (100/50/10) |
 | **Bulk spacing handles** | `canvas/gap_handles.rs` | When a selection is an evenly spaced row/column, a handle sits in each gap; dragging one changes every gap at once, Shift-drag changes just that gap (frames bring their contents) |

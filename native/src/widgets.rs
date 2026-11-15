@@ -150,8 +150,7 @@ pub(crate) fn hand_cursor(ctx: &egui::Context, at: Pos2, closed: bool) {
         p.circle_filled(a, w / 2.0, col);
         p.circle_filled(b, w / 2.0, col);
     };
-    // Soft shadow, outline, then fill
-    p.rect_filled(palm.translate(vec2(0.8, 1.2)).expand(1.6), round, Color32::from_black_alpha(60));
+    // Outline, then fill
     for &(a, b, w) in &caps {
         cap(a, b, w + 2.6, ink);
     }
@@ -316,7 +315,6 @@ pub(crate) fn wave_tile(p: &egui::Painter, r: Rect, m: f32, fill: Color32, a: f3
     if m <= 0.01 {
         return;
     }
-    p.rect_filled(r.translate(vec2(0.0, 3.0 * m)), 8.0, Color32::from_black_alpha((60.0 * m * a) as u8));
     p.rect_filled(r, 8.0, fill.gamma_multiply(m * a));
 }
 

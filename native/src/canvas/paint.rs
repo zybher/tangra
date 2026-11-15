@@ -197,7 +197,7 @@ impl App {
             if let (Some(t), Some(tex)) = (&tilt, tex) {
                 p.add(egui::Shape::mesh(t.mesh([img.x, img.y, img.width, img.height], |x, y| v.s(x, y), tex.id(), Color32::WHITE)));
             } else {
-            if cut.is_none() {
+            if cut.is_none() && self.parent_of(&img.id).is_none() {
             p.add(
                 egui::epaint::Shadow {
                     offset: vec2(0.0, 4.0 * z),

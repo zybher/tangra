@@ -74,10 +74,6 @@ impl App {
         let pill = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 10.0 - h / 2.0), vec2(width, h));
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_tb_pill"), pill));
         let p = ui.painter().clone();
-        p.add(
-            egui::epaint::Shadow { offset: vec2(0.0, 6.0), blur: 20.0, spread: 0.0, color: Color32::from_black_alpha(100) }
-                .as_shape(pill, Rounding::same(13.0)),
-        );
         p.rect_filled(pill, 13.0, frame_bg());
         p.rect_stroke(pill, 13.0, EStroke::new(1.0_f32, border()));
         // Swallow clicks in the gaps so they never reach the canvas underneath
@@ -103,7 +99,6 @@ impl App {
             if m > 0.01 {
                 // a soft lifted tile behind the swelling button; stays as the base the
                 // liquid fills when it's picked
-                p.rect_filled(r.translate(vec2(0.0, 3.0 * m)), 10.0, Color32::from_black_alpha((60.0 * m) as u8));
                 p.rect_filled(r, 10.0, mix(frame_bg(), Color32::from_gray(90), 0.22).gamma_multiply(m));
             }
             p.rect_filled(r, 8.0 + 2.0 * m, hover_fill(hv, pr));

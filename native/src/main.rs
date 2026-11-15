@@ -1026,17 +1026,8 @@ fn setup_style(ctx: &egui::Context) {
     v.window_stroke = EStroke::new(1.0_f32, border());
     v.window_rounding = Rounding::same(10.0);
     v.menu_rounding = Rounding::same(10.0);
-    let shadow = egui::epaint::Shadow {
-        // Kept nearly centred: a shadow pushed far down darkens only the area under
-        // a popup, which makes its bottom border read as a bright line.
-        // The blur must stay well under the height of the smallest popup (a one-line
-        // tooltip, ~26 px): egui draws the blur as edge feathering, and when it is as
-        // big as the popup itself the shape folds over and leaves a pale line.
-        offset: vec2(0.0, 3.0),
-        blur: 8.0,
-        spread: 1.0,
-        color: Color32::from_black_alpha(90),
-    };
+    // Flat UI: only pictures on the board cast a shadow
+    let shadow = egui::epaint::Shadow::NONE;
     v.window_stroke = EStroke::new(1.0_f32, border());
     v.window_shadow = shadow;
     v.popup_shadow = shadow;

@@ -290,7 +290,6 @@ pub(crate) fn cm_ghost(ctx: &egui::Context) {
     ctx.set_transform_layer(lid, egui::emath::TSTransform::new(o.to_vec2() * (1.0 - sc), sc));
     let mut p = ctx.layer_painter(lid);
     let a = 1.0 - e;
-    p.rect_filled(g.translate(vec2(0.0, 4.0)), v.menu_rounding, Color32::from_black_alpha((50.0 * a) as u8));
     p.rect_filled(g, v.menu_rounding, v.window_fill.gamma_multiply(a));
     p.rect_stroke(g, v.menu_rounding, EStroke::new(v.window_stroke.width, v.window_stroke.color.gamma_multiply(a)));
     // The menu's own rows fade out with it instead of vanishing first
@@ -345,7 +344,6 @@ pub(crate) fn swatches(ui: &mut egui::Ui, colors: &[&str], current: &str) -> Opt
         let rad = 7.0 + 2.0 * m - pr * 1.2;
         let sq = Rect::from_center_size(centre, vec2(rad * 2.0, rad * 2.0));
         let round = rad * (1.0 - 0.6 * m * m);
-        p.rect_filled(sq.translate(vec2(0.0, 1.0 + 1.5 * m)), round, Color32::from_black_alpha(((40.0 + 50.0 * m) * a) as u8));
         p.rect_filled(sq, round, hex(c).gamma_multiply(a));
         p.rect_stroke(sq, round, EStroke::new(1.0_f32, Color32::from_white_alpha((35.0 + 40.0 * m) as u8).gamma_multiply(a)));
         if on > 0.01 {
