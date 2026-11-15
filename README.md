@@ -82,7 +82,8 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Align & opacity** | `canvas/align.rs` | Align / distribute (row by row on grids) / fill / fit / opacity operations, Ctrl+F (or Ctrl+Alt+G) wraps the selection in a new frame (no fill, square corners; toast names the kind: "Framed 3 images", "objects" when mixed); pressing an align again on objects already lined up moves them as a block to that edge of their frame; opacity is stored per object (`board.opacity`) and a frame fades what's inside it (not its title) |
 | **Glides** | `canvas/glide.rs` | Align, distribute, fill/fit and resize-to-fit ease objects into place instead of snapping |
 | **Rounded clipping** | `canvas/round_clip.rs` | Images and nested frames inside a rounded clipping frame are cut to its rounded corners (convex polygon clip, textured mesh) |
-| **Line icons** | `ui/icons.rs` | Eye, lock, align, distribute, fill / fit and opacity icons drawn on a 16-unit grid, pixel-snapped |
+| **Icon pack** | `ui/svg_icons.rs` | The app's 138 line icons (24-unit SVG, one style) and a small drawer: each SVG is parsed once into polylines and painted as vector strokes (fills, stroke widths, dashes), so icons stay sharp at any size and in the magnify; used by the toolbar tools, outline rows, bars and dropdowns |
+| **Line icons** | `ui/icons.rs` | Named helpers (eye, lock, align, distribute, opacity, adjust, 3D, per-kind outline glyphs) that draw from the icon pack |
 | **Hide / lock** | `canvas/visibility.rs` | Hidden objects skip painting; hidden or locked ones skip picking; a frame passes its state to everything inside |
 | **App icon** | `native/build.rs`, `native/assets/icon.ico` | Embeds the icon into `tangra.exe` at build time (regenerate the .ico from `icon128.png`) |
 | **Right-click menu** | `ui/menus.rs` | Context menu contents |

@@ -4,6 +4,7 @@ mod shortcuts;
 mod side_panel;
 pub(crate) mod outline;
 pub(crate) mod icons;
+pub(crate) mod svg_icons;
 mod place_bar;
 pub(crate) mod image_sliders;
 mod place_align;

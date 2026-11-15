@@ -89,8 +89,7 @@ pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32
     let vg = p.layout_no_wrap(format!("{}", value.round() as i32), FontId::proportional(12.0), col);
     let ic = pos2(vx - vg.size().x - 12.0, tile.center().y);
     if glyph {
-        let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
-        p.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
+        crate::ui::svg_icons::draw(&p, "corner-radius", ic, 16.5, col);
     }
     p.galley(pos2(vx - vg.size().x, tile.center().y - vg.size().y / 2.0), vg, col);
     if resp.hovered() || resp.dragged() {

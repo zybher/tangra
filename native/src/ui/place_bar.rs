@@ -365,7 +365,7 @@ impl App {
                     let gc = mix(TEXT_DIM, Color32::WHITE, hh.max(lq)).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
                     super::icons::align(&pl, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
                     let cv = pos2(r.max.x - 10.0, cyy);
-                    pl.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    crate::ui::svg_icons::draw(&pl, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() && pop == 0 {
                         tip = Some((r.center().x, if enabled { "Align" } else { "The frame arranges this picture" }));
                     }
@@ -413,8 +413,7 @@ impl App {
                     }
                     // Same corner glyph as the style bar's
                     let ic = pos2(r.min.x + 14.0, cyy);
-                    let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
-                    pl.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
+                    crate::ui::svg_icons::draw(&pl, "corner-radius", ic, 16.5, col);
                     zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}", corner as i32), 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));

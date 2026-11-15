@@ -428,8 +428,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     let st = EStroke::new(1.3_f32, if icon == 3 { mix(TEXT_DIM, Color32::WHITE, hh) } else { mix(TEXT_DIM, TEXT, hh) }.gamma_multiply(ca));
                     match icon {
                         0 => {
-                            let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
-                            p.add(egui::Shape::line(pts, st));
+                            crate::ui::svg_icons::draw(&p, "corner-radius", ic, 16.5, st.color);
                         }
                         1 => {
                             p.rect_stroke(Rect::from_center_size(ic, vec2(11.0, 11.0)), 2.0, st);
@@ -474,7 +473,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     p.rect_stroke(ic, 1.5, EStroke::new(1.2_f32, gc));
                     p.line_segment([ic.left_bottom() + vec2(2.5, -2.5), ic.right_top() + vec2(-2.5, 2.5)], EStroke::new(1.0_f32, gc));
                     let cv = pos2(r.max.x - 10.0, cyy);
-                    p.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() {
                         tip = Some((r.center().x, "Aspect ratio"));
                     }
@@ -498,7 +497,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
                     stroke_pos_icon(&p, pos2(r.min.x + 14.0, cyy), 1.0, gc, stroke_pos);
                     let cv = pos2(r.max.x - 10.0, cyy);
-                    p.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() {
                         tip = Some((r.center().x, "Stroke position"));
                     }
@@ -523,7 +522,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
                     super::icons::align(&p, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
                     let cv = pos2(r.max.x - 10.0, cyy);
-                    p.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() {
                         tip = Some((r.center().x, "Align"));
                     }
@@ -551,7 +550,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         p.rect_filled(Rect::from_center_size(ic + vec2(dx, dy), vec2(5.0, 5.0)), 1.0, gc);
                     }
                     let cv = pos2(r.max.x - 10.0, cyy);
-                    p.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() {
                         tip = Some((r.center().x, "Arrange images"));
                     }

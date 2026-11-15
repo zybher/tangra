@@ -23,9 +23,7 @@ const TAB_W: f32 = 150.0;
 
 /// Sidebar glyph: a small window with its left pane marked
 fn sidebar_glyph(p: &egui::Painter, c: Pos2, col: Color32) {
-    let g = Rect::from_center_size(p.round_pos_to_pixels(c), vec2(14.0, 11.0));
-    p.rect_stroke(g, 2.5, EStroke::new(1.2_f32, col));
-    p.line_segment([pos2(g.min.x + 4.5, g.min.y + 0.5), pos2(g.min.x + 4.5, g.max.y - 0.5)], EStroke::new(1.2_f32, col));
+    super::svg_icons::draw(p, "panel-left", c, 17.0, col);
 }
 
 /// Light "semantic" match: every word must hit the name (substring or in-order letters) or

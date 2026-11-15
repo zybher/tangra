@@ -133,85 +133,22 @@ enum TbIcon {
 }
 
 fn paint_icon(p: &egui::Painter, icon: TbIcon, c: Pos2, s: f32, col: Color32) {
-    let st = EStroke::new(1.4_f32, col);
-    let q = |x: f32, y: f32| pos2(c.x + x * s, c.y + y * s);
-    let poly = |pts: &[(f32, f32)]| Shape::closed_line(pts.iter().map(|&(x, y)| q(x, y)).collect(), st);
-    match icon {
-        TbIcon::Select => {
-            // Pointer: same 13px height as the other icons, tail kept short so it reads at a glance
-            p.add(poly(&[(-4.0, -6.5), (-4.0, 5.5), (-1.0, 2.8), (1.1, 6.8), (3.0, 5.9), (1.0, 2.0), (4.8, 2.0)]));
-        }
-        TbIcon::Frame => {
-            for d in [-3.0_f32, 3.0] {
-                p.line_segment([q(d, -6.5), q(d, 6.5)], st);
-                p.line_segment([q(-6.5, d), q(6.5, d)], st);
-            }
-        }
-        TbIcon::Note => {
-            p.add(poly(&[(-5.5, -5.5), (5.5, -5.5), (5.5, 1.0), (1.0, 5.5), (-5.5, 5.5)]));
-            p.line_segment([q(1.0, 5.5), q(1.0, 1.0)], st);
-            p.line_segment([q(1.0, 1.0), q(5.5, 1.0)], st);
-        }
-        TbIcon::Rect => {
-            p.rect_stroke(Rect::from_center_size(c, vec2(12.0 * s, 12.0 * s)), 1.5, st);
-        }
-        TbIcon::Ellipse => {
-            p.circle_stroke(c, 6.2 * s, st);
-        }
-        TbIcon::Arrow => {
-            p.line_segment([q(-5.0, 5.0), q(5.0, -5.0)], st);
-            p.line_segment([q(5.0, -5.0), q(-0.5, -5.0)], st);
-            p.line_segment([q(5.0, -5.0), q(5.0, 0.5)], st);
-        }
-        TbIcon::Pen => {
-            p.add(poly(&[(-6.0, 6.0), (-5.0, 2.2), (2.3, -5.2), (5.2, -2.3), (-2.2, 5.0)]));
-        }
-        TbIcon::Highlighter => {
-            // Marker leaning right with a chisel tip, over a soft ink stripe
-            p.add(poly(&[(-2.0, 1.5), (3.5, -4.0), (6.0, -1.5), (0.5, 4.0)]));
-            p.add(poly(&[(-2.0, 1.5), (0.5, 4.0), (-1.0, 5.0), (-3.0, 3.0)]));
-            p.rect_filled(Rect::from_min_max(q(-6.5, 5.6), q(2.5, 7.4)), 1.0, col.gamma_multiply(0.45));
-        }
-        TbIcon::Text => {
-            p.line_segment([q(-5.0, -5.5), q(5.0, -5.5)], st);
-            p.line_segment([q(-5.0, -5.5), q(-5.0, -3.5)], st);
-            p.line_segment([q(5.0, -5.5), q(5.0, -3.5)], st);
-            p.line_segment([q(0.0, -5.5), q(0.0, 6.0)], st);
-            p.line_segment([q(-2.0, 6.0), q(2.0, 6.0)], st);
-        }
-        TbIcon::Pixelate => {
-            p.rect_stroke(Rect::from_min_max(q(-5.5, -5.5), q(5.5, 5.5)), 1.0, st);
-            for (x, y) in [(-5.5, -5.5), (0.0, 0.0)] {
-                p.rect_filled(Rect::from_min_max(q(x, y), q(x + 5.5, y + 5.5)), 0.0, col);
-            }
-        }
-        TbIcon::Eraser => {
-            // Block eraser on a slant, rubber end filled, resting on a line
-            p.add(poly(&[(-6.0, 1.5), (1.0, -5.5), (6.0, -0.5), (-1.0, 6.5)]));
-            p.add(Shape::convex_polygon(vec![q(-6.0, 1.5), q(-2.5, -2.0), q(2.5, 3.0), q(-1.0, 6.5)], col.gamma_multiply(0.55), st));
-            p.line_segment([q(-1.0, 6.5), q(6.5, 6.5)], st);
-        }
-        TbIcon::Lasso => {
-            // Rope loop with a knot and a short tail
-            let ring: Vec<Pos2> = (0..=28)
-                .map(|i| {
-                    let a = 2.35 + i as f32 / 28.0 * (std::f32::consts::TAU - 0.5);
-                    q(0.8 + 5.7 * a.cos(), -2.0 + 4.2 * a.sin())
-                })
-                .collect();
-            p.add(Shape::line(ring, st));
-            p.circle_stroke(q(-3.2, 1.6), 1.3 * s, st);
-            let tail: Vec<Pos2> = (0..=8)
-                .map(|i| {
-                    let t = i as f32 / 8.0;
-                    let (a, b, c2) = ((-3.6, 2.9), (-5.2, 5.0), (-2.0, 6.8));
-                    let u = 1.0 - t;
-                    q(u * u * a.0 + 2.0 * u * t * b.0 + t * t * c2.0, u * u * a.1 + 2.0 * u * t * b.1 + t * t * c2.1)
-                })
-                .collect();
-            p.add(Shape::line(tail, st));
-        }
-    }
+    // From the icon pack (ui/svg_icons.rs); 17.5 px box = the old 13 px glyph height
+    let name = match icon {
+        TbIcon::Select => "cursor",
+        TbIcon::Frame => "frame",
+        TbIcon::Note => "sticky-note",
+        TbIcon::Rect => "rectangle",
+        TbIcon::Ellipse => "ellipse",
+        TbIcon::Arrow => "arrow",
+        TbIcon::Pen => "pencil",
+        TbIcon::Highlighter => "highlighter",
+        TbIcon::Pixelate => "pixelate",
+        TbIcon::Text => "text",
+        TbIcon::Eraser => "eraser",
+        TbIcon::Lasso => "lasso",
+    };
+    crate::ui::svg_icons::draw(p, name, c, 17.5 * s, col);
 }
 
 /// Frame titles are drawn at this size on screen, whatever the zoom
