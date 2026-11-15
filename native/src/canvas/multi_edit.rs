@@ -23,7 +23,7 @@ impl App {
         out
     }
 
-    fn selected_rects(&self) -> Vec<(Sel, [f32; 4])> {
+    pub(crate) fn selected_rects(&self) -> Vec<(Sel, [f32; 4])> {
         self.selected.iter().filter_map(|s| self.rect_of(s.0, &s.1).map(|r| (s.clone(), r))).collect()
     }
 

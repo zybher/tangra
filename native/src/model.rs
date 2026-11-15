@@ -373,6 +373,8 @@ pub struct Settings {
     pub aura_motion: u8,
     /// Outline panel width in points (0 = default)
     pub outline_width: f32,
+    /// Height of the properties section under the outline (0 = default)
+    pub props_height: f32,
 }
 
 impl Default for Settings {
@@ -394,6 +396,7 @@ impl Default for Settings {
             aura_palette: 0,
             aura_motion: 0,
             outline_width: 0.0,
+            props_height: 0.0,
         }
     }
 }
