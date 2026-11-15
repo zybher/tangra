@@ -382,9 +382,31 @@ pub(crate) fn font(size: f32) -> Option<FontId> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn zoom_text(pl: &egui::Painter, tv: egui::Vec2, sc: f32, pos: Pos2, align: Align2, text: impl ToString, size: f32, col: Color32) {
     const S: f32 = 1.25;
+    let ctx = pl.ctx();
     let lid = pl.layer_id();
     let tid = egui::LayerId::new(lid.order, lid.id.with("ztxt"));
-    pl.ctx().set_transform_layer(tid, egui::emath::TSTransform::new(tv, sc / S));
+    // egui scales text as a bitmap, so any scale but 1 resamples it (soft). While the size holds
+    // still, draw real glyphs at the swollen size instead; only the grow / shrink is resampled.
+    let pass = ctx.cumulative_pass_nr();
+    let sid = tid.id.with("still");
+    let (last, seen, mut still): (f32, u64, bool) = ctx.data(|d| d.get_temp(sid)).unwrap_or((sc, 0, true));
+    if seen != pass {
+        still = (sc - last).abs() < 0.0015;
+        ctx.data_mut(|d| d.insert_temp(sid, (sc, pass, still)));
+    }
+    if still {
+        let c = pl.clip_rect();
+        let tf = |q: Pos2| pos2(q.x * sc + tv.x, q.y * sc + tv.y);
+        let cid = egui::LayerId::new(lid.order, lid.id.with("ztxt_crisp"));
+        ctx.set_transform_layer(cid, egui::emath::TSTransform::IDENTITY);
+        let p = pl.clone().with_layer_id(cid).with_clip_rect(Rect::from_min_max(tf(c.min), tf(c.max)));
+        // Quarter-pixel sizes: sharp, and only a handful of sizes ever reach the glyph atlas
+        let fs = (size * sc * 4.0).round() / 4.0;
+        p.text(tf(pos), align, text.to_string(), FontId::proportional(fs), col);
+        return;
+    }
+    ctx.request_repaint();
+    ctx.set_transform_layer(tid, egui::emath::TSTransform::new(tv, sc / S));
     let c = pl.clip_rect();
     let p = pl.clone().with_layer_id(tid).with_clip_rect(Rect::from_min_max(pos2(c.min.x * S, c.min.y * S), pos2(c.max.x * S, c.max.y * S)));
     p.text(pos2(pos.x * S, pos.y * S), align, text.to_string(), FontId::proportional(size * S), col);
