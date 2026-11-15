@@ -8,8 +8,8 @@ use crate::*;
 
 const PITCH: f32 = 26.0;
 pub(crate) const PANEL_W: f32 = 168.0;
-/// Wave strength for these rows (the menus use 1)
-const SOFT: f32 = 0.4;
+/// Wave spread for these rows (the menus use 1): the hovered row rises fully, neighbours less
+const SOFT: f32 = 0.55;
 
 impl App {
     /// Draws the open dropdown (1 = Adjust, 2 = 3D) for picture `img`, beside the side bar
@@ -19,7 +19,8 @@ impl App {
         let bid = egui::Id::new("qd_img_pop");
         let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
         let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
-                let mut open_rect = Rect::NOTHING;
+        let mut open_rect = Rect::NOTHING;
+        let mut any_drag = false;
         for kind in [1u8, 2] {
             let kk = ctx.animate_bool_with_time(bid.with(("ipop", kind)), pop == kind, 0.22 * anim_k());
             if kk <= 0.001 {
@@ -45,11 +46,11 @@ impl App {
             let sg = 1.0;
             let top = top + (1.0 - ez(kk)) * -8.0 * sg;
 
-            // The row being dragged stays raised
+            // The row being dragged stays raised and the others stay flat until it is let go
             let drag_id = bid.with(("idrag", kind));
             let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
-            let pinned: Vec<f32> = (0..n).map(|i| if dragging == Some(i) { SOFT } else { 0.0 }).collect();
-            let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT);
+            let pinned: Vec<f32> = (0..n).map(|i| if dragging == Some(i) { 1.0 } else { 0.0 }).collect();
+            let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT, dragging.is_some());
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let live = pop == kind;
@@ -114,11 +115,14 @@ impl App {
                     }
                 }
             }
+            any_drag |= now_drag.is_some();
             ctx.data_mut(|d| d.insert_temp(drag_id, now_drag));
             if kk < 1.0 {
                 ctx.request_repaint();
             }
         }
+        // The side bar holds its magnify still while a row is dragged
+        ctx.data_mut(|d| d.insert_temp(bid.with("dragging"), any_drag));
         open_rect
     }
 }

@@ -1,28 +1,17 @@
 //! Placement bar: shows up once the selection sits inside a frame (the frame gives a clear
-//! boundary). Align left / centre / right / top / middle / bottom, opacity, fill / fit for a
-//! picture, and even spacing for 3+ objects. Sits beside the style bar when the object has
+//! boundary). An Align dropdown (left / centre / right / top / middle / bottom, even spacing
+//! for 3+ objects, same as the frame bar's), opacity with the liquid fill, corners for a picture. Sits beside the style bar when the object has
 //! one (frames, shapes, text), else above the object. Same pill, entrance, magnify, hover
 //! and tooltip as the style bar.
 use crate::*;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Seg {
-    Al(Align),
-    Dist(bool),
+    /// Align dropdown
+    AlignPop,
     Opacity,
     Corner,
     Div,
-}
-
-fn align_code(a: Align) -> u8 {
-    match a {
-        Align::Left => 0,
-        Align::HCenter => 1,
-        Align::Right => 2,
-        Align::Top => 3,
-        Align::VCenter => 4,
-        Align::Bottom => 5,
-    }
 }
 
 impl App {
@@ -140,24 +129,11 @@ impl App {
         let Some([ix, iy, iw, ih]) = item else { return };
 
         let single_img = matches!(targets.as_slice(), [(Kind::Image, _)]);
-        let mut segs = vec![
-            Seg::Al(Align::Left),
-            Seg::Al(Align::HCenter),
-            Seg::Al(Align::Right),
-            Seg::Div,
-            Seg::Al(Align::Top),
-            Seg::Al(Align::VCenter),
-            Seg::Al(Align::Bottom),
-            Seg::Div,
-            Seg::Opacity,
-        ];
+        let mut segs = vec![Seg::AlignPop, Seg::Div, Seg::Opacity];
         if free_img {
             segs = vec![Seg::Opacity, Seg::Corner];
         } else if single_img {
             segs.push(Seg::Corner);
-        }
-        if targets.len() >= 3 {
-            segs.extend([Seg::Div, Seg::Dist(true), Seg::Dist(false)]);
         }
         let layout_locked = self.place_locked_by_layout(&targets);
         let opacity = (self.opacity_of(&targets[0].1) * 100.0).round();
@@ -168,6 +144,7 @@ impl App {
         let key = format!("{}|{}", targets.iter().map(|t| t.1.as_str()).collect::<Vec<_>>().join(","), segs.len());
         let was: String = ctx.data(|d| d.get_temp(bid.with("on"))).unwrap_or_default();
         if key != was {
+            ctx.data_mut(|d| d.insert_temp(bid.with("pop"), 0u8));
             let glide = !was.is_empty();
             ctx.data_mut(|d| {
                 d.insert_temp(bid.with("on"), key.clone());
@@ -190,8 +167,8 @@ impl App {
         let seg_w = |s: &Seg| match s {
             Seg::Opacity => 62.0,
             Seg::Corner => 50.0,
+            Seg::AlignPop => 40.0,
             Seg::Div => 9.0,
-            _ => 28.0,
         };
         let was_scrub: bool = ctx.data(|d| d.get_temp(bid.with("scrub"))).unwrap_or(false);
         let was_cscrub: bool = ctx.data(|d| d.get_temp(bid.with("cscrub"))).unwrap_or(false);
@@ -222,6 +199,8 @@ impl App {
                 }
             }
             ctx.data_mut(|d| d.insert_temp(fid, focus));
+            // The Align button stays swollen while its dropdown is open (as the style bar's)
+            let open: u8 = ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0);
             segs.iter()
                 .enumerate()
                 .map(|(i, sg)| {
@@ -229,7 +208,8 @@ impl App {
                         return 0.0;
                     }
                     let d = (offs[i] - focus) / (seg_w(sg) * 1.05);
-                    sa * (-d * d).exp()
+                    let act = spring(&ctx, bid.with(("mag_on", i)), *sg == Seg::AlignPop && open == 1 && closing.is_none(), 18.0);
+                    (sa * (-d * d).exp()).max(act)
                 })
                 .collect()
         };
@@ -307,8 +287,10 @@ impl App {
         p.rect_stroke(shown, sh / 2.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
         ui.interact(bar, bid.with("bg"), Sense::click_and_drag());
 
+        let pop: u8 = if closing.is_some() { 0 } else { ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0) };
+        let mut set_pop = pop;
+        let mut align_btn = Rect::NOTHING;
         let mut tip: Option<(f32, &str)> = None;
-        let mut clicked: Option<Seg> = None;
         let mut scrub: Option<f32> = None;
         let mut cscrub: Option<f32> = None;
         let mut reset_opacity = false;
@@ -346,34 +328,32 @@ impl App {
             if ca <= 0.0 {
                 continue;
             }
-            let enabled = !(layout_locked && matches!(s, Seg::Al(_)));
+            let enabled = !(layout_locked && *s == Seg::AlignPop);
             let sense = if matches!(s, Seg::Opacity | Seg::Corner) { Sense::click_and_drag() } else { Sense::click() };
             let resp = ui.interact(r, bid.with(("b", i)), sense);
             let (hh, pp) = hover_fx(&ctx, &resp, enabled);
             pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
             let col = mix(TEXT_DIM, TEXT, hh).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
             match *s {
-                Seg::Al(al) => {
-                    super::icons::align(&pl, r.center(), 16.0, col, align_code(al));
-                    if resp.hovered() {
-                        tip = Some((
-                            r.center().x,
-                            match (al, enabled) {
-                                (_, false) => "The frame arranges this picture",
-                                (Align::Left, _) => "Align left  ·  Alt+A",
-                                (Align::HCenter, _) => "Align centre  ·  Alt+H",
-                                (Align::Right, _) => "Align right  ·  Alt+D",
-                                (Align::Top, _) => "Align top  ·  Alt+W",
-                                (Align::VCenter, _) => "Align middle  ·  Alt+V",
-                                (Align::Bottom, _) => "Align bottom  ·  Alt+S",
-                            },
-                        ));
+                Seg::AlignPop => {
+                    align_btn = r;
+                    // Open: accent liquid fill, like the style bar's dropdown buttons
+                    let lq = ctx.animate_bool_with_time(bid.with("liquid_al"), pop == 1, 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    if lq >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lq > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 4.0);
                     }
-                }
-                Seg::Dist(hz) => {
-                    super::icons::distribute(&pl, r.center(), 16.0, col, hz);
-                    if resp.hovered() {
-                        tip = Some((r.center().x, if hz { "Even spacing across" } else { "Even spacing down" }));
+                    let gc = mix(TEXT_DIM, Color32::WHITE, hh.max(lq)).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
+                    super::icons::align(&pl, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
+                    let cv = pos2(r.max.x - 10.0, cyy);
+                    pl.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    if resp.hovered() && pop == 0 {
+                        tip = Some((r.center().x, if enabled { "Align" } else { "The frame arranges this picture" }));
+                    }
+                    if enabled && resp.clicked() {
+                        set_pop = if pop == 1 { 0 } else { 1 };
                     }
                 }
                 Seg::Opacity => {
@@ -381,8 +361,22 @@ impl App {
                         ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
                         tip = Some((r.center().x, "Opacity  ·  drag, 0-9 keys"));
                     }
-                    super::icons::opacity(&pl, pos2(r.min.x + 14.0, cyy), 14.0, col);
-                    pb.text(tf(pos2(r.max.x - 9.0, cyy)), Align2::RIGHT_CENTER, format!("{}%", opacity as i32), FontId::proportional(12.0 * sc), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    // On hover the pill fills with accent liquid up to the value (as the style bar)
+                    let lq = ctx.animate_bool_with_time(bid.with("liquid_op"), resp.hovered() || resp.dragged(), 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    let lvl = ctx.animate_value_with_time(bid.with("lvl"), (opacity / 100.0).clamp(0.0, 1.0), 0.12 * anim_k()) * lq;
+                    if lvl >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lvl > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lvl, ctx.input(|i| i.time) as f32 + 2.0);
+                    }
+                    if lq > 0.001 {
+                        ctx.request_repaint();
+                    }
+                    let hh = hh.max(lq);
+                    super::icons::opacity(&pl, pos2(r.min.x + 14.0, cyy), 14.0, mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca));
+                    // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
+                    pl.text(pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}%", opacity as i32), FontId::proportional(12.0), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("v0"), opacity));
                     }
@@ -404,7 +398,7 @@ impl App {
                     let ic = pos2(r.min.x + 14.0, cyy);
                     let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
                     pl.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
-                    pb.text(tf(pos2(r.max.x - 9.0, cyy)), Align2::RIGHT_CENTER, format!("{}", corner as i32), FontId::proportional(12.0 * sc), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    pl.text(pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}", corner as i32), FontId::proportional(12.0), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));
                     }
@@ -415,9 +409,6 @@ impl App {
                     }
                 }
                 Seg::Div => {}
-            }
-            if enabled && resp.clicked() && !matches!(s, Seg::Opacity | Seg::Corner) {
-                clicked = Some(*s);
             }
         }
 
@@ -445,16 +436,19 @@ impl App {
             self.snapshot();
             self.set_selection_opacity(1.0);
         }
-        match clicked {
-            Some(Seg::Al(al)) => self.align_selection(al),
-            Some(Seg::Dist(hz)) => self.distribute_selection(hz),
-            _ => {}
+        let pop_rect = self.place_align_pop(ui, rect, bar, align_btn, pop, targets.len() >= 3);
+        if pop != 0 && set_pop == pop && ctx.input(|i| i.pointer.any_pressed()) {
+            let q = ctx.input(|i| i.pointer.interact_pos());
+            if !q.is_some_and(|q| bar.contains(q) || pop_rect.contains(q)) {
+                set_pop = 0;
+            }
         }
+        ctx.data_mut(|d| d.insert_temp(bid.with("pop"), set_pop));
         // Adjust / 3D live on their own pill beside the picture
         if single_img {
             self.image_side_ui(ui, rect, fr, &targets[0].1, closing.is_none());
         }
-        ui_block(&ctx, bar);
+        ui_block(&ctx, if pop_rect.is_positive() { bar.union(pop_rect) } else { bar });
 
         // Tooltip above the pill, same as the style bar's
         let tk = ease(&ctx, bid.with("tip"), tip.is_some());

@@ -274,12 +274,13 @@ pub(crate) fn list_wave(ctx: &egui::Context, id: egui::Id, area: Rect, first: f3
 /// the chosen one) grow taller and poke out to the right; the left edge stays put and
 /// the panel grows upward from its bottom. Returns (row rects, magnify per row, panel).
 pub(crate) fn wave_rows(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, pinned: &[f32]) -> (Vec<Rect>, Vec<f32>, Rect) {
-    wave_rows_k(ctx, id, left, bottom, w, pitch, n, pinned, 1.0)
+    wave_rows_k(ctx, id, left, bottom, w, pitch, n, pinned, 1.0, false)
 }
 
-/// `wave_rows` with the wave scaled by `k` (1 = the menus' wave)
+/// `wave_rows` with the wave's spread scaled by `k` (1 = the menus' wave).
+/// `lock`: only the pinned rows rise (the others stay flat, e.g. while it's being dragged).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, pinned: &[f32], k: f32) -> (Vec<Rect>, Vec<f32>, Rect) {
+pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, pinned: &[f32], k: f32, lock: bool) -> (Vec<Rect>, Vec<f32>, Rect) {
     if n == 0 {
         let r = Rect::from_min_max(pos2(left, bottom - 8.0), pos2(left + w, bottom));
         return (Vec::new(), Vec::new(), r);
@@ -288,10 +289,12 @@ pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: 
     let base = Rect::from_min_max(pos2(left, bottom - base_h), pos2(left + w, bottom));
     let first = base.min.y + 4.0 + pitch / 2.0;
     let (fy, wa) = list_wave(ctx, id, base.expand2(vec2(14.0, 6.0)), first, first + (n as f32 - 1.0) * pitch);
+    // `k` narrows the wave: the row under the pointer still rises fully, its neighbours less
     let m: Vec<f32> = (0..n)
         .map(|i| {
             let c = first + i as f32 * pitch;
-            (k * wa * (-((c - fy) / pitch).powi(2)).exp()).max(pinned.get(i).copied().unwrap_or(0.0))
+            let wv = if lock { 0.0 } else { wa * (-((c - fy) / (pitch * k)).powi(2)).exp() };
+            wv.max(pinned.get(i).copied().unwrap_or(0.0))
         })
         .collect();
     let hs: Vec<f32> = m.iter().map(|k| pitch * (1.0 + 0.22 * k)).collect();

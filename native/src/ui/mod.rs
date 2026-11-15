@@ -7,6 +7,7 @@ pub(crate) mod icons;
 mod place_bar;
 pub(crate) mod image_sliders;
 mod image_side;
+mod place_align;
 mod bar_morph;
 pub(crate) mod outline_drag;
 mod style_bar;
