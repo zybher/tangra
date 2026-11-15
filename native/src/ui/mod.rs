@@ -5,6 +5,7 @@ mod side_panel;
 pub(crate) mod outline;
 pub(crate) mod icons;
 mod place_bar;
+mod image_sliders;
 mod bar_morph;
 pub(crate) mod outline_drag;
 mod style_bar;

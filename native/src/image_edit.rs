@@ -80,8 +80,8 @@ pub(crate) const ADJUST_ROWS: [(u8, &str, f32, f32); 5] = [
 ];
 /// Same for the 3D rows
 pub(crate) const TILT_ROWS: [(u8, &str, f32, f32); 4] = [
-    (5, "Tilt  ↕", -80.0, 80.0),
-    (6, "Turn  ↔", -80.0, 80.0),
+    (5, "Tilt", -80.0, 80.0),
+    (6, "Turn", -80.0, 80.0),
     (7, "Spin", -180.0, 180.0),
     (8, "Depth", -100.0, 100.0),
 ];
@@ -219,15 +219,9 @@ impl App {
         self.edit_base.retain(|k, _| files.contains(k));
     }
 
-    /// Pictures an edit from the menu applies to: the selected ones, else the one right-clicked.
+    /// Pictures the bar's sliders apply to: the selected ones
     fn edit_targets(&self) -> Vec<String> {
-        let mut ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Image).map(|s| s.1.clone()).collect();
-        if let Some((Kind::Image, id)) = self.menu_hit.as_ref().map(|h| (h.0, h.1.clone())) {
-            if !ids.contains(&id) {
-                ids = vec![id];
-            }
-        }
-        ids
+        self.selected.iter().filter(|s| s.0 == Kind::Image).map(|s| s.1.clone()).collect()
     }
 
     fn edit_each(&mut self, f: impl Fn(&mut ImageEdit)) {
@@ -237,6 +231,7 @@ impl App {
             f(&mut e);
             img.edit = (!e.is_empty()).then_some(e);
         }
+        self.mark_dirty();
     }
 
     /// One scrub row moved (first frame of the drag takes the undo step)
@@ -260,14 +255,5 @@ impl App {
     pub(crate) fn restore_cuts(&mut self) {
         self.snapshot();
         self.edit_each(|e| e.cuts.clear());
-    }
-
-    /// The edit of the picture the menu is open on
-    pub(crate) fn menu_image_edit(&self) -> ImageEdit {
-        self.menu_hit
-            .as_ref()
-            .and_then(|h| self.board.images.iter().find(|i| i.id == h.1))
-            .and_then(|i| i.edit.clone())
-            .unwrap_or_default()
     }
 }

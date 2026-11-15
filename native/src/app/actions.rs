@@ -169,10 +169,6 @@ impl App {
                 }
             }
             Act::FitFrame => self.fit_frames_to_content(),
-            Act::ImageEdit(k, v, first) => self.set_image_edit(k, v, first),
-            Act::ResetAdjust => self.reset_adjust(),
-            Act::ResetTilt => self.reset_tilt(),
-            Act::RestoreCuts => self.restore_cuts(),
             Act::ImageCorner(v, first) => {
                 if first {
                     self.snapshot();

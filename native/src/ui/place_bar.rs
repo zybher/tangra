@@ -12,6 +12,10 @@ enum Seg {
     Fill(bool),
     Opacity,
     Corner,
+    /// Picture colour sliders (dropdown)
+    Adjust,
+    /// Picture 3D tilt sliders (dropdown)
+    Tilt,
     Div,
 }
 
@@ -104,6 +108,9 @@ impl App {
             cx >= fr.min.x && cx <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y
         });
         let show = in_frame && on_screen && self.edit.is_none() && self.sel_label.is_none() && !alt && !cm_open;
+        if !show {
+            ctx.data_mut(|d| d.insert_temp(bid.with("pop"), 0u8));
+        }
 
         let k = anim_k().max(1e-3);
         let p = ui.painter().clone();
@@ -153,9 +160,9 @@ impl App {
             Seg::Opacity,
         ];
         if free_img {
-            segs = vec![Seg::Opacity, Seg::Corner];
+            segs = vec![Seg::Opacity, Seg::Corner, Seg::Div, Seg::Adjust, Seg::Tilt];
         } else if single_img {
-            segs.extend([Seg::Corner, Seg::Div, Seg::Fill(true), Seg::Fill(false)]);
+            segs.extend([Seg::Corner, Seg::Div, Seg::Fill(true), Seg::Fill(false), Seg::Div, Seg::Adjust, Seg::Tilt]);
         }
         if targets.len() >= 3 {
             segs.extend([Seg::Div, Seg::Dist(true), Seg::Dist(false)]);
@@ -169,6 +176,7 @@ impl App {
         let key = format!("{}|{}", targets.iter().map(|t| t.1.as_str()).collect::<Vec<_>>().join(","), segs.len());
         let was: String = ctx.data(|d| d.get_temp(bid.with("on"))).unwrap_or_default();
         if key != was {
+            ctx.data_mut(|d| d.insert_temp(bid.with("pop"), 0u8));
             let glide = !was.is_empty();
             ctx.data_mut(|d| {
                 d.insert_temp(bid.with("on"), key.clone());
@@ -308,6 +316,7 @@ impl App {
         p.rect_stroke(shown, sh / 2.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
         ui.interact(bar, bid.with("bg"), Sense::click_and_drag());
 
+        let mut pop: u8 = if closing.is_some() { 0 } else { ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0) };
         let mut tip: Option<(f32, &str)> = None;
         let mut clicked: Option<Seg> = None;
         let mut scrub: Option<f32> = None;
@@ -351,6 +360,8 @@ impl App {
             let sense = if matches!(s, Seg::Opacity | Seg::Corner) { Sense::click_and_drag() } else { Sense::click() };
             let resp = ui.interact(r, bid.with(("b", i)), sense);
             let (hh, pp) = hover_fx(&ctx, &resp, enabled);
+            // The button whose dropdown is open stays lit
+            let hh = if (pop == 1 && *s == Seg::Adjust) || (pop == 2 && *s == Seg::Tilt) { hh.max(1.0) } else { hh };
             pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
             let col = mix(TEXT_DIM, TEXT, hh).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
             match *s {
@@ -421,6 +432,18 @@ impl App {
                         cscrub = Some((v0 + dx * 0.5).round().clamp(0.0, 400.0));
                     }
                 }
+                Seg::Adjust => {
+                    super::icons::adjust(&pl, r.center(), 16.0, col);
+                    if resp.hovered() && pop == 0 {
+                        tip = Some((r.center().x, "Adjust colours"));
+                    }
+                }
+                Seg::Tilt => {
+                    super::icons::cube(&pl, r.center(), 16.0, col);
+                    if resp.hovered() && pop == 0 {
+                        tip = Some((r.center().x, "3D tilt"));
+                    }
+                }
                 Seg::Div => {}
             }
             if enabled && resp.clicked() && !matches!(s, Seg::Opacity | Seg::Corner) {
@@ -456,9 +479,20 @@ impl App {
             Some(Seg::Al(al)) => self.align_selection(al),
             Some(Seg::Dist(hz)) => self.distribute_selection(hz),
             Some(Seg::Fill(cover)) => self.fill_frame(cover),
+            Some(Seg::Adjust) => pop = if pop == 1 { 0 } else { 1 },
+            Some(Seg::Tilt) => pop = if pop == 2 { 0 } else { 2 },
             _ => {}
         }
-        ui_block(&ctx, bar);
+        let pop_rect = self.image_pop(ui, rect, bar, pop, &targets[0].1, bid);
+        // A press anywhere else closes the dropdown
+        if pop != 0 && ctx.input(|i| i.pointer.primary_pressed()) {
+            let q = ctx.input(|i| i.pointer.interact_pos());
+            if !q.is_some_and(|q| bar.contains(q) || pop_rect.contains(q)) {
+                pop = 0;
+            }
+        }
+        ctx.data_mut(|d| d.insert_temp(bid.with("pop"), pop));
+        ui_block(&ctx, if pop_rect.is_positive() { bar.union(pop_rect) } else { bar });
 
         // Tooltip above the pill, same as the style bar's
         let tk = ease(&ctx, bid.with("tip"), tip.is_some());

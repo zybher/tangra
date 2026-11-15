@@ -146,3 +146,26 @@ pub(crate) fn opacity(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
         p.rect_filled(grid_rect(c, size, false, [x0, y0, x0 + 2.0, y0 + 2.0]), 0.0, col.gamma_multiply(0.6));
     }
 }
+
+/// Adjust: two slider lines with knobs
+pub(crate) fn adjust(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
+    let k = size / 16.0;
+    let st = Stroke::new(SW, col);
+    for (y, kx) in [(-3.0_f32, 2.5_f32), (3.0, -2.5)] {
+        p.line_segment([c + vec2(-6.0 * k, y * k), c + vec2(6.0 * k, y * k)], st);
+        p.circle_filled(c + vec2(kx * k, y * k), 2.6 * k, crate::frame_bg());
+        p.circle_stroke(c + vec2(kx * k, y * k), 2.2 * k, st);
+    }
+}
+
+/// 3D: a cube in outline
+pub(crate) fn cube(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
+    let k = size / 16.0;
+    let st = Stroke::new(SW, col);
+    let q = |x: f32, y: f32| c + vec2(x * k, y * k);
+    let (t, l, r, m, bl, br, b) = (q(0.0, -6.5), q(-5.8, -3.2), q(5.8, -3.2), q(0.0, 0.1), q(-5.8, 3.3), q(5.8, 3.3), q(0.0, 6.6));
+    p.add(egui::Shape::closed_line(vec![t, r, br, b, bl, l], st));
+    p.line_segment([l, m], st);
+    p.line_segment([r, m], st);
+    p.line_segment([m, b], st);
+}

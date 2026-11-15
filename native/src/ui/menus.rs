@@ -85,30 +85,6 @@ impl App {
                 if item(ui, "Copy original", "Ctrl+Shift+C", true) {
                     acts.push(Act::CopyClean);
                 }
-                let ed = self.menu_image_edit();
-                header(ui, "   ADJUST");
-                for (k, label, lo, hi) in crate::image_edit::ADJUST_ROWS {
-                    let mut e = ed.clone();
-                    if let Some((v, first)) = scrub_item(ui, label, *e.field(k), 0.5, lo, hi, false) {
-                        acts.push(Act::ImageEdit(k, v, first));
-                    }
-                }
-                if item(ui, "Reset adjustments", "", ed.has_color()) {
-                    acts.push(Act::ResetAdjust);
-                }
-                header(ui, "   3D");
-                for (k, label, lo, hi) in crate::image_edit::TILT_ROWS {
-                    let mut e = ed.clone();
-                    if let Some((v, first)) = scrub_item(ui, label, *e.field(k), 0.3, lo, hi, false) {
-                        acts.push(Act::ImageEdit(k, v, first));
-                    }
-                }
-                if item(ui, "Reset 3D", "", ed.has_tilt() || ed.depth != 0.0) {
-                    acts.push(Act::ResetTilt);
-                }
-                if item(ui, "Restore cut areas", "", !ed.cuts.is_empty()) {
-                    acts.push(Act::RestoreCuts);
-                }
                 divider(ui);
                 if item(ui, "Clear annotations", "", true) {
                     acts.push(Act::ClearAnnotations);
