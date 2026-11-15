@@ -54,7 +54,8 @@ impl App {
             // The row being dragged stays raised and the others stay flat until it is let go
             let drag_id = bid.with(("idrag", kind));
             let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
-            let pinned: Vec<f32> = (0..n).map(|i| if dragging == Some(i) { 1.0 } else { 0.0 }).collect();
+            // Eased like the toolbar menu's pinned rows: letting go plays the rise backwards
+            let pinned: Vec<f32> = (0..n).map(|i| ease(&ctx, bid.with(("ipin", kind, i)), dragging == Some(i))).collect();
             let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT, dragging.is_some());
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));

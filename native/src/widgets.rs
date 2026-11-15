@@ -258,11 +258,13 @@ pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: 
     let base = Rect::from_min_max(pos2(left, bottom - base_h), pos2(left + w, bottom));
     let first = base.min.y + 4.0 + pitch / 2.0;
     let (fy, wa) = list_wave(ctx, id, base.expand2(vec2(14.0, 6.0)), first, first + (n as f32 - 1.0) * pitch);
+    // The other rows settle / come back with the same easing both ways (no snap on let-go)
+    let lk = ease(ctx, id.with("lock"), lock);
     // `k` narrows the wave: the row under the pointer still rises fully, its neighbours less
     let m: Vec<f32> = (0..n)
         .map(|i| {
             let c = first + i as f32 * pitch;
-            let wv = if lock { 0.0 } else { wa * (-((c - fy) / (pitch * k)).powi(2)).exp() };
+            let wv = (1.0 - lk) * wa * (-((c - fy) / (pitch * k)).powi(2)).exp();
             wv.max(pinned.get(i).copied().unwrap_or(0.0))
         })
         .collect();
