@@ -483,7 +483,7 @@ impl App {
             Some(Seg::Tilt) => pop = if pop == 2 { 0 } else { 2 },
             _ => {}
         }
-        let pop_rect = self.image_pop(ui, rect, bar, pop, &targets[0].1, bid);
+        let pop_rect = self.image_pop(ui, rect, bar, fr, pop, &targets[0].1, bid);
         // A press anywhere else closes the dropdown
         if pop != 0 && ctx.input(|i| i.pointer.primary_pressed()) {
             let q = ctx.input(|i| i.pointer.interact_pos());

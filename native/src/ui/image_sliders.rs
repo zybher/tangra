@@ -1,20 +1,23 @@
-//! Picture dropdowns on the placement bar: Adjust (colour) and 3D (tilt). Figma-style rows,
-//! a label on the left and a slider track with a white knob; a reset row at the bottom.
-//! Same glass panel, entrance and row stagger as the style bar's dropdowns.
+//! Picture dropdowns on the placement bar: Adjust (colour) and 3D (tilt). Same wave list as
+//! the style bar's dropdowns; each value row scrubs sideways like the bars' number fields
+//! (double-click resets it), and a reset row sits at the bottom.
+//! The panel opens beside the picture, not over it, so the edit stays in view; with no room
+//! on either side it drops under the bar and the other rows fade while one is being dragged.
 
 use crate::image_edit::{ImageEdit, ADJUST_ROWS, TILT_ROWS};
 use crate::*;
 
-const ROW_H: f32 = 30.0;
-const PANEL_W: f32 = 250.0;
+const PITCH: f32 = 26.0;
+const PANEL_W: f32 = 168.0;
 
 impl App {
-    /// Draws the open dropdown (1 = Adjust, 2 = 3D) for picture `img`, under / over `bar`.
+    /// Draws the open dropdown (1 = Adjust, 2 = 3D) for picture `img` shown at `fr` (screen).
     /// Returns the panel's rect while one is open.
-    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, pop: u8, img: &str, bid: egui::Id) -> Rect {
+    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, fr: Rect, pop: u8, img: &str, bid: egui::Id) -> Rect {
         let ctx = ui.ctx().clone();
         let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
         let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
+        let left_edge = rect.min.x + crate::ui::outline::hud_shift(&ctx) + 8.0;
         let mut open_rect = Rect::NOTHING;
         for kind in [1u8, 2] {
             let kk = ctx.animate_bool_with_time(bid.with(("ipop", kind)), pop == kind, 0.22 * anim_k());
@@ -22,6 +25,7 @@ impl App {
                 continue;
             }
             let sliders: &[(u8, &str, f32, f32)] = if kind == 1 { &ADJUST_ROWS } else { &TILT_ROWS };
+            let per_px = if kind == 1 { 0.5 } else { 0.3 };
             // Reset rows: (label, enabled, which)
             let mut resets: Vec<(&str, bool, u8)> = Vec::new();
             if kind == 1 {
@@ -32,13 +36,30 @@ impl App {
             } else {
                 resets.push(("Reset 3D", ed.has_tilt() || ed.depth != 0.0, 2));
             }
-            let ph = sliders.len() as f32 * ROW_H + 9.0 + resets.len() as f32 * 26.0 + 10.0;
-            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
-            let sg = if up { -1.0 } else { 1.0 };
-            let slide = (1.0 - ez(kk)) * -8.0 * sg;
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide;
-            let x0 = bar.center().x.clamp(rect.min.x + PANEL_W / 2.0 + 8.0, (rect.max.x - PANEL_W / 2.0 - 8.0).max(rect.min.x + PANEL_W / 2.0 + 8.0)) - PANEL_W / 2.0;
-            let pr = Rect::from_min_size(pos2(x0, top), vec2(PANEL_W, ph));
+            let n = sliders.len() + resets.len();
+            let ph = n as f32 * PITCH + 8.0;
+
+            // Beside the picture (right, else left), level with its top; else under the bar
+            let top_y = fr.min.y.max(bar.max.y + 6.0).clamp(rect.min.y + 8.0, (rect.max.y - 70.0 - ph).max(rect.min.y + 8.0));
+            let (left, top, sg) = if fr.max.x + 12.0 + PANEL_W <= rect.max.x - 8.0 {
+                (fr.max.x + 12.0, top_y, 1.0)
+            } else if fr.min.x - 12.0 - PANEL_W >= left_edge {
+                (fr.min.x - 12.0 - PANEL_W, top_y, 1.0)
+            } else {
+                let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+                let x = (bar.center().x - PANEL_W / 2.0).clamp(left_edge, (rect.max.x - 8.0 - PANEL_W).max(left_edge));
+                (x, if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 }, if up { -1.0 } else { 1.0 })
+            };
+            let top = top + (1.0 - ez(kk)) * -8.0 * sg;
+
+            // The row being dragged stays raised; the others fade so the picture shows through
+            let drag_id = bid.with(("idrag", kind));
+            let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
+            let pinned: Vec<f32> = (0..n).map(|i| if dragging == Some(i) { 1.0 } else { 0.0 }).collect();
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned);
+            let dy = top - pr.min.y;
+            let pr = pr.translate(vec2(0.0, dy));
+            let ghost = ease(&ctx, bid.with(("ighost", kind)), dragging.is_some());
             let live = pop == kind;
             if live {
                 open_rect = pr;
@@ -46,80 +67,63 @@ impl App {
             }
             let pk = ui.painter().clone().with_clip_rect(ctx.screen_rect());
             let mut p = pk.clone();
-            p.multiply_opacity(ez(kk));
+            p.multiply_opacity(ez(kk) * (1.0 - 0.75 * ghost));
             p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
             glass(&p, pr, 10.0, 1.0);
             p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
 
-            let mut y = pr.min.y + 4.0;
-            let mut n = 0usize;
-            for &(k, label, lo, hi) in sliders {
-                let rk = ez(kk * 1.5 - n as f32 * 0.1);
-                n += 1;
-                let row = Rect::from_min_size(pos2(pr.min.x, y + sg * (1.0 - rk) * 10.0), vec2(PANEL_W, ROW_H));
-                y += ROW_H;
+            let mut now_drag: Option<usize> = None;
+            for i in 0..n {
+                let rk = ez(kk * 1.5 - i as f32 * 0.12);
+                let (rr, wm) = (rows[i].translate(vec2(0.0, dy - sg * (1.0 - rk) * 10.0)), mags[i]);
+                let fade = if dragging.is_some() && dragging != Some(i) { 1.0 - 0.75 * ghost } else { 1.0 };
                 let mut p = pk.clone();
-                p.multiply_opacity(ez(kk) * rk);
-                let mut e = ed.clone();
-                let v = *e.field(k);
-                let track = Rect::from_min_max(pos2(row.min.x + 104.0, row.center().y - 9.0), pos2(row.max.x - 14.0, row.center().y + 9.0));
-                let resp = ui.interact(track.expand2(vec2(4.0, 5.0)), bid.with(("islider", k)), if live { Sense::click_and_drag() } else { Sense::hover() });
-                let (hh, _) = hover_fx(&ctx, &resp, live);
-                let down = live && resp.is_pointer_button_down_on();
-                let col = mix(TEXT_DIM, TEXT, hh.max(down as u8 as f32));
-                p.text(pos2(row.min.x + 14.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), col);
-                if v != 0.0 {
-                    p.text(pos2(track.min.x - 8.0, row.center().y), Align2::RIGHT_CENTER, format!("{}", v.round() as i32), FontId::proportional(11.0), TEXT_FAINT);
-                }
-                p.rect_filled(track, 9.0, Color32::from_white_alpha(8 + (6.0 * hh) as u8));
-                p.rect_stroke(track, 9.0, EStroke::new(1.0_f32, border()));
-                let (kx0, kx1) = (track.min.x + 9.0, track.max.x - 9.0);
-                let t = ((v - lo) / (hi - lo)).clamp(0.0, 1.0);
-                let knob = pos2(kx0 + t * (kx1 - kx0), track.center().y);
-                p.circle_filled(knob + vec2(0.0, 1.0), 8.0, Color32::from_black_alpha(60));
-                p.circle_filled(knob, 8.0 + 0.6 * hh, Color32::WHITE);
-                if resp.hovered() || down {
-                    ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
-                }
-                // A press anywhere on the track sets the value; one undo step per press
-                let wid = bid.with(("islider_down", k));
-                let was_down: bool = ctx.data(|d| d.get_temp(wid)).unwrap_or(false);
-                ctx.data_mut(|d| d.insert_temp(wid, down));
-                if resp.double_clicked() {
-                    self.set_image_edit(k, 0.0, true);
-                } else if down {
-                    if let Some(q) = ctx.input(|i| i.pointer.interact_pos()) {
-                        let nv = (lo + ((q.x - kx0) / (kx1 - kx0)).clamp(0.0, 1.0) * (hi - lo)).round();
-                        if nv != v || !was_down {
-                            self.set_image_edit(k, nv, !was_down);
+                p.multiply_opacity(ez(kk) * rk * fade);
+                let k = 1.0 + 0.14 * wm;
+                if let Some(&(f, label, lo, hi)) = sliders.get(i) {
+                    let mut e = ed.clone();
+                    let v = *e.field(f);
+                    let resp = ui.interact(rr, bid.with(("islider", f)), if live { Sense::click_and_drag() } else { Sense::hover() });
+                    wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                    let col = mix(TEXT_DIM, TEXT, wm);
+                    p.text(pos2(rr.min.x + 12.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0 * k), col);
+                    let vcol = if v != 0.0 { mix(TEXT_DIM, TEXT, 0.6 + 0.4 * wm) } else { TEXT_FAINT };
+                    p.text(pos2(rr.max.x - 12.0, rr.center().y), Align2::RIGHT_CENTER, format!("{}", v.round() as i32), FontId::proportional(12.0 * k), vcol);
+                    if live && (resp.hovered() || resp.dragged()) {
+                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                    }
+                    if live && resp.double_clicked() {
+                        self.set_image_edit(f, 0.0, true);
+                    }
+                    if live && resp.drag_started() {
+                        ctx.data_mut(|d| d.insert_temp(bid.with(("iv0", f)), v));
+                    }
+                    if live && resp.dragged() {
+                        now_drag = Some(i);
+                        let v0: f32 = ctx.data(|d| d.get_temp(bid.with(("iv0", f)))).unwrap_or(v);
+                        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+                        let nv = (v0 + dx * per_px).round().clamp(lo, hi);
+                        if nv != v || resp.drag_started() {
+                            self.set_image_edit(f, nv, resp.drag_started());
+                        }
+                    }
+                } else {
+                    let (label, enabled, which) = resets[i - sliders.len()];
+                    let resp = ui.interact(rr, bid.with(("ireset", which)), if live { Sense::click() } else { Sense::hover() });
+                    let wm = if enabled { wm } else { 0.0 };
+                    wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                    let col = if enabled { mix(TEXT_DIM, TEXT, wm) } else { TEXT_FAINT };
+                    p.text(pos2(rr.min.x + 12.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0 * k), col);
+                    if live && enabled && resp.clicked() {
+                        match which {
+                            0 => self.reset_adjust(),
+                            1 => self.restore_cuts(),
+                            _ => self.reset_tilt(),
                         }
                     }
                 }
             }
-            // Divider, then the reset rows
-            let dy = y + 4.0;
-            p.line_segment([pos2(pr.min.x + 10.0, dy), pos2(pr.max.x - 10.0, dy)], EStroke::new(1.0_f32, border()));
-            y += 9.0;
-            for (label, enabled, which) in resets {
-                let rk = ez(kk * 1.5 - n as f32 * 0.1);
-                n += 1;
-                let rr = Rect::from_min_size(pos2(pr.min.x + 4.0, y + sg * (1.0 - rk) * 10.0), vec2(PANEL_W - 8.0, 26.0));
-                y += 26.0;
-                let mut p = pk.clone();
-                p.multiply_opacity(ez(kk) * rk);
-                let resp = ui.interact(rr, bid.with(("ireset", which)), if live { Sense::click() } else { Sense::hover() });
-                let (hh, _) = hover_fx(&ctx, &resp, live && enabled);
-                wave_tile(&p, rr, hh, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
-                let col = if enabled { mix(TEXT_DIM, TEXT, hh) } else { TEXT_FAINT };
-                p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), col);
-                if live && enabled && resp.clicked() {
-                    match which {
-                        0 => self.reset_adjust(),
-                        1 => self.restore_cuts(),
-                        _ => self.reset_tilt(),
-                    }
-                }
-            }
+            ctx.data_mut(|d| d.insert_temp(drag_id, now_drag));
             if kk < 1.0 {
                 ctx.request_repaint();
             }
