@@ -71,6 +71,8 @@ impl App {
         // Frames
         // The title lights with the hover outline (one source of truth, set below last frame)
         let hovered_now: Option<Sel> = p.ctx().data(|d| d.get_temp::<Option<Sel>>(egui::Id::new("qd_hover_now"))).flatten();
+        // Frame strokes go on after the objects, so content never covers a frame's edge
+        let mut late_strokes: Vec<(egui::Painter, egui::Shape)> = Vec::new();
         // Parents paint before the frames inside them, so a nested frame is never hidden
         for c in self.frames_paint_order() {
             if hid.contains(&c.id) {
@@ -128,12 +130,12 @@ impl App {
             if bw > 0.0 {
                 match round_cut(&c.id, sr, sfr).filter(|(_, safe)| !safe) {
                     Some((poly, _)) if poly.len() >= 3 => {
-                        p.add(egui::Shape::closed_line(poly, EStroke::new(bw, stroke_color)));
+                        late_strokes.push((p.clone(), egui::Shape::closed_line(poly, EStroke::new(bw, stroke_color))));
                     }
                     Some(_) => {}
                     None => {
                         // rect_stroke paints outward from the rect: hand it the inner edge
-                        p.rect_stroke(sr.shrink(bw / 2.0), (sfr - bw / 2.0).max(0.0), EStroke::new(bw, stroke_color));
+                        late_strokes.push((p.clone(), egui::Shape::rect_stroke(sr.shrink(bw / 2.0), (sfr - bw / 2.0).max(0.0), EStroke::new(bw, stroke_color))));
                     }
                 }
             }
@@ -374,6 +376,9 @@ impl App {
             }
         }
 
+        for (lp, s) in late_strokes {
+            lp.add(s);
+        }
         // Stroke being drawn right now
         if let Some((target, s)) = &self.active {
             match target.as_ref().and_then(|id| b.images.iter().find(|i| &i.id == id)) {

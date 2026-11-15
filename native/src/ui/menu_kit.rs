@@ -68,6 +68,7 @@ pub(crate) fn choice_row(ui: &mut egui::Ui, choices: &[(&str, f32)], current: f3
 pub(crate) const MENU_INSET: f32 = 10.0;
 /// Menu row whose number is changed by dragging left / right (same as the placement bar's
 /// scrubs). Returns (new value, true on the first frame of the drag) while dragging.
+#[allow(dead_code)]
 pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32, lo: f32, hi: f32) -> Option<(f32, bool)> {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().max(160.0), 26.0), Sense::drag());
     let (h, pr) = hover_fx(ui.ctx(), &resp, true);

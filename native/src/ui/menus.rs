@@ -95,11 +95,6 @@ impl App {
                 if item(ui, "Reset stretch", "", stretched) {
                     acts.push(Act::ResetStretch);
                 }
-                // Drag left / right, same as the placement bar's corner control
-                let cur_corner = self.menu_hit.as_ref().and_then(|h| self.board.images.iter().find(|i| i.id == h.1)).map_or(0.0, |i| i.corner);
-                if let Some((v, first)) = scrub_item(ui, "Corners", cur_corner, 0.5, 0.0, 400.0) {
-                    acts.push(Act::ImageCorner(v, first));
-                }
                 divider(ui);
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);

@@ -47,7 +47,7 @@ impl App {
             let t_out = ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(bid.with("t_out"), || self.now));
             let e = ((self.now - t_out) as f32 / (0.3 * anim_k().max(1e-3))).clamp(0.0, 1.0);
             // The object may be gone (deleted): still animate out where it was
-            if e < 1.0 && self.edit.is_none() && (self.rect_of(lt.0, &lt.1).is_some() || ctx.data(|d| d.get_temp::<[f32; 4]>(bid.with("last_r"))).is_some()) {
+            if e < 1.0 && self.edit.is_none() && !super::bar_morph::taken(&ctx, bid, self.now) && (self.rect_of(lt.0, &lt.1).is_some() || ctx.data(|d| d.get_temp::<[f32; 4]>(bid.with("last_r"))).is_some()) {
                 target = Some(lt);
                 closing = Some(e);
                 ctx.request_repaint();
@@ -81,8 +81,11 @@ impl App {
                             Seg::Num("border", 1, g.border.unwrap_or(1.0), 0.0, 12.0, 0.06, "Stroke  ·  drag"),
                             Seg::StrokePos,
                             Seg::Aspect,
-                            Seg::Arrange,
                         ];
+                        // Auto-arrange would pull a nested frame apart: only for frames of pictures
+                        if !self.descendants(id).iter().any(|s| s.0 == Kind::Group) {
+                            segs.push(Seg::Arrange);
+                        }
                     }
                 }
                 Kind::Stroke => {
@@ -148,6 +151,9 @@ impl App {
                 }
                 d.insert_temp(bid.with("pop"), 0u8);
             });
+            if !glide && !now_key.is_empty() {
+                super::bar_morph::take(&ctx, bid, egui::Id::new("qd_place_bar"), self.now);
+            }
             ctx.request_repaint();
         }
         let t0: f64 = ctx.data(|d| d.get_temp(bid.with("t0"))).unwrap_or(0.0);
@@ -287,6 +293,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 ctx.request_repaint();
             }
             ctx.data_mut(|d| d.insert_temp(bid.with("glide"), (gx, gy, gw)));
+            if closing.is_none() {
+                super::bar_morph::publish(&ctx, bid, (gx, gy, gw));
+            }
             (gx, gy, gw)
         };
         let bar = Rect::from_center_size(pos2(gx, gy), vec2(gw, h));

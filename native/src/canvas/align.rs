@@ -98,6 +98,26 @@ impl App {
                 self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
             }
         }
+        // Several objects already lined up on that edge: press again and they move as one
+        // block to the same edge (or centre) of their frame
+        if moves.is_empty() && targets.len() > 1 {
+            let frame = self.parent_of(&targets[0].1).filter(|_| self.share_frame(&targets)).and_then(|p| self.rect_of(Kind::Group, p));
+            if let Some(fb) = frame {
+                let (dx, dy) = match how {
+                    Align::Left => (fb[0] - f[0], 0.0),
+                    Align::HCenter => (fb[0] + (fb[2] - f[2]) / 2.0 - f[0], 0.0),
+                    Align::Right => (fb[0] + fb[2] - f[2] - f[0], 0.0),
+                    Align::Top => (0.0, fb[1] - f[1]),
+                    Align::VCenter => (0.0, fb[1] + (fb[3] - f[3]) / 2.0 - f[1]),
+                    Align::Bottom => (0.0, fb[1] + fb[3] - f[3] - f[1]),
+                };
+                if dx.abs() + dy.abs() > 0.01 {
+                    for s in &targets {
+                        self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
+                    }
+                }
+            }
+        }
         if moves.is_empty() {
             return;
         }

@@ -60,7 +60,7 @@ impl App {
             self.fit_frames_to_content();
         }
         // Ctrl+Alt+G: wrap the selection in a new frame (Figma)
-        if ctx.input(|i| i.modifiers.command && i.modifiers.alt && !i.modifiers.shift && i.key_pressed(Key::G)) {
+        if ctx.input(|i| i.modifiers.command && !i.modifiers.shift && ((i.modifiers.alt && i.key_pressed(Key::G)) || (!i.modifiers.alt && i.key_pressed(Key::F)))) {
             self.frame_selection();
         }
         // Shift+Enter: select the frame around the selection (Figma)
@@ -103,6 +103,9 @@ impl App {
         // Hidden: the pill shrinks and fades where it was (same exit as the style bar)
         let (Some([ix, iy, iw, ih]), true) = (item, show) else {
             ctx.data_mut(|d| d.insert_temp(bid.with("on"), String::new()));
+            if super::bar_morph::taken(&ctx, bid, self.now) {
+                ctx.data_mut(|d| d.remove::<Rect>(bid));
+            }
             if let Some(r) = ctx.data(|d| d.get_temp::<Rect>(bid)) {
                 let t_gone: f64 = ctx.data(|d| d.get_temp(bid.with("t_gone"))).unwrap_or(self.now);
                 let e = ((self.now - t_gone) as f32 / (0.25 * k)).clamp(0.0, 1.0);
@@ -143,6 +146,7 @@ impl App {
         let opacity = (self.opacity_of(&targets[0].1) * 100.0).round();
         let corner = self.board.images.iter().find(|i| i.id == targets[0].1).map_or(0.0, |i| i.corner.round());
 
+        let mut morphed = false;
         // Entrance replays when the selection changes
         let key = format!("{}|{}", targets.iter().map(|t| t.1.as_str()).collect::<Vec<_>>().join(","), segs.len());
         let was: String = ctx.data(|d| d.get_temp(bid.with("on"))).unwrap_or_default();
@@ -155,6 +159,9 @@ impl App {
                     d.remove::<(f32, f32, f32)>(bid.with("glide"));
                 }
             });
+            if !glide {
+                morphed = super::bar_morph::take(&ctx, bid, egui::Id::new("qd_style_bar"), self.now);
+            }
             ctx.request_repaint();
         }
         let t0: f64 = ctx.data(|d| d.get_temp(bid.with("t0"))).unwrap_or(0.0);
@@ -247,7 +254,7 @@ impl App {
         }
         let (gx, gy, gw) = {
             // A fresh entrance starts where it belongs (no slide in from where it was last time)
-            let cur: Option<(f32, f32, f32)> = if was_shown { ctx.data(|d| d.get_temp(bid.with("glide"))) } else { None };
+            let cur: Option<(f32, f32, f32)> = if was_shown || morphed { ctx.data(|d| d.get_temp(bid.with("glide"))) } else { None };
             let (mut gx, mut gy, mut gw) = cur.unwrap_or((cx, cy, w));
             let dt = ctx.input(|i| i.stable_dt).min(0.05);
             let kf = if anim_k() == 0.0 { 1.0 } else { 1.0 - (-dt * 16.0 / anim_k()).exp() };
@@ -260,6 +267,7 @@ impl App {
                 ctx.request_repaint();
             }
             ctx.data_mut(|d| d.insert_temp(bid.with("glide"), (gx, gy, gw)));
+            super::bar_morph::publish(&ctx, bid, (gx, gy, gw));
             (gx, gy, gw)
         };
         let bar = Rect::from_center_size(pos2(gx, gy), vec2(gw, h));
