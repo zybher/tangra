@@ -257,11 +257,23 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // A right-click menu puts the bar away too (same exit), since both share the top layer
         // and the bar would draw over the menu
         let cm_open = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_cm_open"))).unwrap_or(false);
-        let vis = ctx.animate_bool_with_time(bid.with("inview"), inview && !cm_open, 0.25 * anim_k());
-        if vis <= 0.0 {
+        let up = inview && !cm_open;
+        let vis = ctx.animate_bool_with_time(bid.with("inview"), up, 0.25 * anim_k());
+        // Back on screen (or the menu closed): play the normal entrance, not the exit backwards
+        // (which showed an empty pill for a moment)
+        let was_up = ctx.data(|d| d.get_temp::<bool>(bid.with("was_up"))).unwrap_or(true);
+        ctx.data_mut(|d| d.insert_temp(bid.with("was_up"), up));
+        let back = up && !was_up;
+        if back {
+            let now = self.now;
+            ctx.data_mut(|d| d.insert_temp(bid.with("t0"), now));
+            ctx.request_repaint();
+        }
+        if vis <= 0.0 && !up {
             return;
         }
-        if closing.is_none() && vis < 1.0 {
+        let x = if back { 0.0 } else { x };
+        if closing.is_none() && !up && vis < 1.0 {
             closing = Some(1.0 - vis);
         }
 
