@@ -206,7 +206,8 @@ impl App {
             let prev = ctx.data(|d| d.get_temp::<Rect>(bid)).unwrap_or(Rect::NOTHING);
             let ptr = ctx.pointer_hover_pos();
             // While scrubbing a value the magnify freezes on that segment
-            let inside = was_scrub || ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q));
+            let typing = super::num_edit::active(&ctx);
+            let inside = was_scrub || typing || ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q));
             let sa = spring(&ctx, bid.with("mag_a"), inside, 18.0);
             let base = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
             let mut offs = Vec::new();
@@ -217,7 +218,7 @@ impl App {
             }
             let fid = bid.with("mag_f");
             let mut focus = ctx.data(|d| d.get_temp::<f32>(fid)).unwrap_or(0.0);
-            if let (true, Some(q), false) = (inside, ptr, was_scrub) {
+            if let (true, Some(q), false) = (inside, ptr, was_scrub || typing) {
                 let target = q.x - prev.center().x;
                 if sa < 0.05 {
                     focus = target;
@@ -334,7 +335,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let font = FontId::proportional(12.0);
         let mut tip: Option<(f32, &str)> = None;
         let mut scrubbed: Vec<(&'static str, f32)> = Vec::new();
-        let mut reset_opacity = false;
+        let reset_opacity = false;
         let mut xx = bar.center().x - content_w / 2.0 + pad;
         let n = segs.len();
         // Each dropdown sits centred over its own button, like the toolbar menu
@@ -405,8 +406,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 Seg::Num(key, icon, val, lo, hi, per_px, name) => {
                     let id = bid.with(key);
                     let resp = ui.interact(r, id, Sense::click_and_drag());
+                    // Double-click to type it (num_edit.rs)
+                    let ne = super::num_edit::NumEdit::run(&ctx, &resp, true, val, lo, hi);
+                    if let Some(v) = ne.apply {
+                        scrubbed.push((key, v));
+                    }
                     let (hh, pp) = hover_fx(&ctx, &resp, true);
-                    if resp.hovered() || resp.dragged() {
+                    if (resp.hovered() || resp.dragged()) && ne.text.is_none() {
                         ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
                         tip = Some((r.center().x, name));
                     }
@@ -445,12 +451,14 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                             zoom_text(&p, tv, sc, ic, Align2::CENTER_CENTER, "Aa", 12.0, st.color);
                         }
                     }
-                    let txt = if icon == 3 { format!("{}%", val.round() as i32) } else { format!("{}", val.round() as i32) };
+                    let txt = match &ne.text {
+                        Some(t) => t.clone(),
+                        None if icon == 3 => format!("{}%", val.round() as i32),
+                        None => format!("{}", val.round() as i32),
+                    };
+                    ne.draw(&p, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
-                    zoom_text(&p, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
-                    if icon == 3 && resp.double_clicked() {
-                        reset_opacity = true;
-                    }
+                    zoom_text(&p, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(id.with("v0"), val));
                     }

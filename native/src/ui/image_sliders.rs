@@ -85,13 +85,19 @@ impl App {
                     wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
                     let col = mix(TEXT_DIM, TEXT, wm);
                     p.text(pos2(rr.min.x + 12.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0 * k), col);
-                    let vcol = if v != 0.0 { mix(TEXT_DIM, TEXT, 0.6 + 0.4 * wm) } else { TEXT_FAINT };
-                    p.text(pos2(rr.max.x - 12.0, rr.center().y), Align2::RIGHT_CENTER, format!("{}", v.round() as i32), FontId::proportional(12.0 * k), vcol);
-                    if live && (resp.hovered() || resp.dragged()) {
-                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
+                    // Double-click to type it (num_edit.rs)
+                    let ne = super::num_edit::NumEdit::run(&ctx, &resp, live, v, lo, hi);
+                    if let Some(nv) = ne.apply {
+                        self.set_image_edit(f, nv, ne.first);
                     }
-                    if live && resp.double_clicked() {
-                        self.set_image_edit(f, 0.0, true);
+                    let vcol = if v != 0.0 { mix(TEXT_DIM, TEXT, 0.6 + 0.4 * wm) } else { TEXT_FAINT };
+                    let vcol = mix(vcol, TEXT, ne.e);
+                    let vr = pos2(rr.max.x - 12.0, rr.center().y);
+                    ne.draw(&p, None, vr, 12.0 * k);
+                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}", v.round() as i32));
+                    p.text(vr, Align2::RIGHT_CENTER, txt, FontId::proportional(12.0 * k), vcol);
+                    if live && (resp.hovered() || resp.dragged()) && ne.text.is_none() {
+                        ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
                     }
                     if live && resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with(("iv0", f)), v));

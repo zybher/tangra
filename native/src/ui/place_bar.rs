@@ -186,7 +186,8 @@ impl App {
             let ptr = ctx.pointer_hover_pos();
             // Holds still while a picture dropdown row is dragged
             let img_drag: bool = ctx.data(|d| d.get_temp(egui::Id::new("qd_img_pop").with("dragging"))).unwrap_or(false);
-            let inside = was_scrub || was_cscrub || (!img_drag && ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q)));
+            let typing = super::num_edit::active(&ctx);
+            let inside = was_scrub || was_cscrub || typing || (!img_drag && ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q)));
             let sa = spring(&ctx, bid.with("mag_a"), inside, 18.0);
             let base = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>();
             let mut offs = Vec::new();
@@ -197,7 +198,7 @@ impl App {
             }
             let fid = bid.with("mag_f");
             let mut focus = ctx.data(|d| d.get_temp::<f32>(fid)).unwrap_or(0.0);
-            if let (true, Some(q), false) = (inside, ptr, was_scrub || was_cscrub) {
+            if let (true, Some(q), false) = (inside, ptr, was_scrub || was_cscrub || typing) {
                 let target = q.x - prev.center().x;
                 if sa < 0.05 {
                     focus = target;
@@ -310,7 +311,7 @@ impl App {
         let mut tip: Option<(f32, &str)> = None;
         let mut scrub: Option<f32> = None;
         let mut cscrub: Option<f32> = None;
-        let mut reset_opacity = false;
+        let reset_opacity = false;
         let mut xx = bar.center().x - w / 2.0 + pad;
         let mut gi_n = 0usize;
         for (i, s) in segs.iter().enumerate() {
@@ -392,8 +393,15 @@ impl App {
                     }
                     let hh = hh.max(lq);
                     super::icons::opacity(&pl, pos2(r.min.x + 14.0, cyy), 14.0, mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca));
+                    // Double-click to type it (num_edit.rs)
+                    let ne = super::num_edit::NumEdit::run(&ctx, &resp, true, opacity, 0.0, 100.0);
+                    if let Some(v) = ne.apply {
+                        scrub = Some(v);
+                    }
+                    ne.draw(&pl, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
+                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}%", opacity.round() as i32));
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
-                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}%", opacity as i32), 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("v0"), opacity));
                     }
@@ -401,9 +409,6 @@ impl App {
                         let v0: f32 = ctx.data(|d| d.get_temp(bid.with("v0"))).unwrap_or(opacity);
                         let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
                         scrub = Some((v0 + dx * 0.5).round().clamp(0.0, 100.0));
-                    }
-                    if resp.double_clicked() {
-                        reset_opacity = true;
                     }
                 }
                 Seg::Corner => {
@@ -414,7 +419,13 @@ impl App {
                     // Same corner glyph as the style bar's
                     let ic = pos2(r.min.x + 14.0, cyy);
                     crate::ui::svg_icons::draw(&pl, "corner-radius", ic, 16.5, col);
-                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}", corner as i32), 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    let ne = super::num_edit::NumEdit::run(&ctx, &resp, true, corner, 0.0, 400.0);
+                    if let Some(v) = ne.apply {
+                        cscrub = Some(v);
+                    }
+                    ne.draw(&pl, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
+                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}", corner.round() as i32));
+                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));
                     }

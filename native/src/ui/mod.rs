@@ -9,6 +9,7 @@ mod place_bar;
 pub(crate) mod image_sliders;
 mod place_align;
 pub(crate) mod drop_anim;
+pub(crate) mod num_edit;
 pub(crate) mod props;
 mod bar_morph;
 pub(crate) mod outline_drag;
