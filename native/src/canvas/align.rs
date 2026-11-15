@@ -47,6 +47,18 @@ impl App {
         b
     }
 
+    /// One object in a frame, or several that share a frame (align then has a clear boundary)
+    pub(crate) fn share_frame(&self, targets: &[Sel]) -> bool {
+        match targets {
+            [] => false,
+            [(_, id)] => self.parent_of(id).is_some(),
+            ts => {
+                let p0 = self.parent_of(&ts[0].1);
+                p0.is_some() && ts.iter().all(|t| self.parent_of(&t.1) == p0)
+            }
+        }
+    }
+
     /// True when one object sits in an auto-arranging frame (the frame decides where it goes)
     pub(crate) fn place_locked_by_layout(&self, targets: &[Sel]) -> bool {
         matches!(targets, [(Kind::Image, id)] if self.parent_of(id).is_some_and(|p| self.board.group_cards.iter().any(|g| g.id == p && g.layout > 0)))

@@ -17,6 +17,8 @@ impl App {
             Num(&'static str, u8, f32, f32, f32, f32, &'static str),
             Arrange,
             Aspect,
+            /// Align / even spacing dropdown (only for something inside a frame)
+            Align,
         }
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_style_bar");
@@ -98,6 +100,13 @@ impl App {
                 _ => {}
             }
         }
+        // Inside a frame: align (dropdown) and opacity join this bar, so there's one bar, not two
+        let place_targets = self.place_targets();
+        let opacity_now = place_targets.first().map_or(100.0, |t| (self.opacity_of(&t.1) * 100.0).round());
+        if !segs.is_empty() && self.share_frame(&place_targets) {
+            segs.push(Seg::Align);
+            segs.push(Seg::Num("opacity", 3, opacity_now, 0.0, 100.0, 0.5, "Opacity  ·  drag, double-click resets"));
+        }
         // Remember the controls too, so a deleted object's bar can domino out like a normal close
         if closing.is_none() && !segs.is_empty() {
             let c = (segs.clone(), color.clone(), layout);
@@ -169,9 +178,11 @@ impl App {
         let (pad, dv, h) = (4.0_f32, 9.0_f32, 34.0_f32);
         let seg_w = |s: &Seg| match s {
             Seg::Color => 30.0,
+            Seg::Num("opacity", ..) => 62.0,
             Seg::Num(..) => 50.0,
             Seg::Arrange => 40.0,
             Seg::Aspect => 40.0,
+            Seg::Align => 40.0,
         };
         // Dock-style magnify, like the bottom toolbar: a smoothed focus follows the pointer
         // and each segment swells (and the bar widens) by its distance from it
@@ -206,7 +217,7 @@ impl App {
             let open: u8 = ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0);
             segs.iter().enumerate().map(|(i, sg)| {
                 let d = (offs[i] - focus) / (seg_w(sg) * 1.05);
-                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, _ => 0 };
+                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, _ => 0 };
                 let act = spring(&ctx, bid.with(("mag_on", i)), k != 0 && open == k, 18.0);
                 (sa * (-d * d).exp()).max(act)
             }).collect()
@@ -288,6 +299,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let font = FontId::proportional(12.0);
         let mut tip: Option<(f32, &str)> = None;
         let mut scrubbed: Vec<(&'static str, f32)> = Vec::new();
+        let mut reset_opacity = false;
         let mut xx = bar.center().x - content_w / 2.0 + pad;
         let n = segs.len();
         for (i, s) in segs.iter().enumerate() {
@@ -369,11 +381,16 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                             p.rect_stroke(Rect::from_center_size(ic, vec2(11.0, 11.0)), 2.0, st);
                             p.rect_stroke(Rect::from_center_size(ic, vec2(5.0, 5.0)), 1.0, EStroke::new(1.0_f32, st.color.gamma_multiply(0.5)));
                         }
+                        3 => super::icons::opacity(&p, ic, 14.0, st.color),
                         _ => {
                             pb.text(tf(ic), Align2::CENTER_CENTER, "Aa", FontId::proportional(12.0 * sc), st.color);
                         }
                     }
-                    pb.text(tf(pos2(r.max.x - 9.0, cyy)), Align2::RIGHT_CENTER, format!("{}", val.round() as i32), FontId::proportional(12.0 * sc), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    let txt = if icon == 3 { format!("{}%", val.round() as i32) } else { format!("{}", val.round() as i32) };
+                    pb.text(tf(pos2(r.max.x - 9.0, cyy)), Align2::RIGHT_CENTER, txt, FontId::proportional(12.0 * sc), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    if icon == 3 && resp.double_clicked() {
+                        reset_opacity = true;
+                    }
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(id.with("v0"), val));
                     }
@@ -408,6 +425,31 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     }
                     if resp.clicked() {
                         set_pop = if pop == 3 { 0 } else { 3 };
+                    }
+                }
+                Seg::Align => {
+                    let resp = ui.interact(r, bid.with("aln"), Sense::click());
+                    let (hh, pp) = hover_fx(&ctx, &resp, true);
+                    let on = pop == 4;
+                    pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
+                    // Open: accent liquid fill, like the other dropdown buttons
+                    let lq = ctx.animate_bool_with_time(bid.with(("liquid", 4)), on, 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    if lq >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lq > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 4.0);
+                    }
+                    let hh = hh.max(lq);
+                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
+                    super::icons::align(&p, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
+                    let cv = pos2(r.max.x - 10.0, cyy);
+                    p.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    if resp.hovered() {
+                        tip = Some((r.center().x, "Align"));
+                    }
+                    if resp.clicked() {
+                        set_pop = if pop == 4 { 0 } else { 4 };
                     }
                 }
                 Seg::Arrange => {
@@ -447,7 +489,15 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             self.snapshot();
         }
         ctx.data_mut(|d| d.insert_temp(bid.with("scrub"), scrubbing));
-        if let (true, Some((kind, id))) = (scrubbing, &target) {
+        if let Some(v) = scrubbed.iter().find(|s| s.0 == "opacity").map(|s| s.1) {
+            self.set_selection_opacity(v / 100.0);
+        }
+        scrubbed.retain(|s| s.0 != "opacity");
+        if reset_opacity && opacity_now < 100.0 {
+            self.snapshot();
+            self.set_selection_opacity(1.0);
+        }
+        if let (true, Some((kind, id))) = (scrubbing && !scrubbed.is_empty(), &target) {
             for (key, v) in scrubbed {
                 match kind {
                     Kind::Group => {
@@ -688,6 +738,73 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 if pop == 3 && resp.clicked() {
                     acts.push(Act::FrameAspect(*rt));
                     set_pop = 0;
+                }
+            }
+        }
+        // Align dropdown: icon rows like the placement bar's buttons, even spacing for 3+
+        let k4 = ctx.animate_bool_with_time(bid.with("k4"), pop == 4, 0.22 * anim_k());
+        if k4 > 0.001 {
+            let pk = p.clone();
+            let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
+            let slide = (1.0 - ez(k4)) * -8.0;
+            let mut rows_def: Vec<(&str, Option<Align>, bool)> = vec![
+                ("Left", Some(Align::Left), false),
+                ("Centre", Some(Align::HCenter), false),
+                ("Right", Some(Align::Right), false),
+                ("Top", Some(Align::Top), false),
+                ("Middle", Some(Align::VCenter), false),
+                ("Bottom", Some(Align::Bottom), false),
+            ];
+            if place_targets.len() >= 3 {
+                rows_def.push(("Space across", None, true));
+                rows_def.push(("Space down", None, false));
+            }
+            let n = rows_def.len();
+            let ph = n as f32 * 26.0 + 8.0;
+            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let sg = if up { -1.0 } else { 1.0 };
+            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave4"), bar.max.x - 160.0, top + n as f32 * 26.0 + 8.0, 130.0, 26.0, n, &[]);
+            let dy = top - pr.min.y;
+            let pr = pr.translate(vec2(0.0, dy));
+            if pop != 0 {
+                pop_rect = pr.expand2(vec2(14.0, 0.0));
+            }
+            if pop == 4 {
+                ui.interact(pr, bid.with("pop4"), Sense::click());
+            }
+            let mut p = pk.clone();
+            p.multiply_opacity(ez(k4));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
+            glass(&p, pr, 10.0, 1.0);
+            p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
+            for (i, (name, al, across)) in rows_def.iter().enumerate() {
+                let rk = ez(k4 * 1.5 - i as f32 * 0.12);
+                let (rr, wm) = (rows[i].translate(vec2(0.0, dy - sg * (1.0 - rk) * 10.0)), mags[i]);
+                let mut p = pk.clone();
+                p.multiply_opacity(ez(k4) * rk);
+                let resp = ui.interact(rr, bid.with(("aln", i)), Sense::click());
+                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                let k = 1.0 + 0.14 * wm;
+                let col = mix(TEXT_DIM, TEXT, wm);
+                let ic = pos2(rr.min.x + 16.0, rr.center().y);
+                match al {
+                    Some(a) => super::icons::align(&p, ic, 15.0 * k, col, match a {
+                        Align::Left => 0,
+                        Align::HCenter => 1,
+                        Align::Right => 2,
+                        Align::Top => 3,
+                        Align::VCenter => 4,
+                        Align::Bottom => 5,
+                    }),
+                    None => super::icons::distribute(&p, ic, 15.0 * k, col, *across),
+                }
+                p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
+                if pop == 4 && resp.clicked() {
+                    match al {
+                        Some(a) => self.align_selection(*a),
+                        None => self.distribute_selection(*across),
+                    }
                 }
             }
         }

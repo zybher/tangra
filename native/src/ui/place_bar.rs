@@ -78,15 +78,12 @@ impl App {
         self.place_keys(&ctx);
 
         let targets = self.place_targets();
-        // One object in a frame, or several that share a frame
-        let in_frame = match targets.as_slice() {
-            [] => false,
-            [(_, id)] => self.parent_of(id).is_some(),
-            ts => {
-                let p0 = self.parent_of(&ts[0].1);
-                p0.is_some() && ts.iter().all(|t| self.parent_of(&t.1) == p0)
-            }
-        };
+        // One object in a frame, or several that share a frame. When the style bar is up it
+        // carries align + opacity itself (one bar, not two stacked)
+        let sbid0 = egui::Id::new("qd_style_bar");
+        let style_up = !ctx.data(|d| d.get_temp::<String>(sbid0.with("on"))).unwrap_or_default().is_empty()
+            && !ctx.data(|d| d.get_temp::<bool>(sbid0.with("closing"))).unwrap_or(false);
+        let in_frame = self.share_frame(&targets) && !style_up;
         let alt = ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed) && matches!(self.drag, Drag::None);
         let cm_open = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_cm_open"))).unwrap_or(false);
         let item = if targets.len() == 1 { self.rect_of(targets[0].0, &targets[0].1) } else { self.place_bounds(&targets) };
