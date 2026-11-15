@@ -108,7 +108,7 @@ impl App {
             ctx.data_mut(|d| d.insert_temp::<Last>(bid.with("last"), (targets.clone(), free_img, r)));
         } else {
             let t_gone: f64 = ctx.data(|d| d.get_temp(bid.with("t_gone"))).unwrap_or(self.now);
-            let e = ((self.now - t_gone) as f32 / (0.3 * k)).clamp(0.0, 1.0);
+            let e = ((self.now - t_gone) as f32 / (0.6 * k)).clamp(0.0, 1.0);
             match ctx.data(|d| d.get_temp::<Last>(bid.with("last"))) {
                 Some((t, fi, r)) if e < 1.0 && !t.is_empty() && self.edit.is_none() && !super::bar_morph::taken(&ctx, bid, self.now) => {
                     (targets, free_img, item) = (t, fi, Some(r));
@@ -251,15 +251,14 @@ impl App {
         };
 
         // Pill springs open sideways with the same jelly as the style bar
-        let mut f = 1.0 - (-4.5 * x).exp() * (8.0 * x).cos();
-        let mut wob = (-5.5 * x).exp() * (16.0 * x).sin() * 0.06;
-        let mut a = (x / 0.15).min(1.0);
-        if let Some(e) = closing {
-            // Shrink back toward a small pill, fading at the very end (as the style bar)
-            f = 1.0 - egui::emath::easing::cubic_in(e);
-            wob = 0.0;
-            a = ((1.0 - e) / 0.35).min(1.0);
-        }
+        // Closing plays the entrance backwards (from wherever the entrance had got to)
+        let x = match closing {
+            Some(e) => x.min(1.0 - e),
+            None => x,
+        };
+        let f = 1.0 - (-4.5 * x).exp() * (8.0 * x).cos();
+        let wob = (-5.5 * x).exp() * (16.0 * x).sin() * 0.06;
+        let a = (x / 0.15).min(1.0);
         if x < 1.0 {
             ctx.request_repaint();
         }
@@ -310,14 +309,7 @@ impl App {
                 continue;
             }
             // Each control rises into place one after another as the pill widens
-            let gi = match closing {
-                // Domino from the ends in, ahead of the shrinking edge (same as the style bar)
-                Some(_) => {
-                    let d = (xx + wd / 2.0 - bar.center().x).abs() + seg_w(s) / 2.0;
-                    ((sw / 2.0 - d - 2.0) / 20.0).clamp(0.0, 1.0)
-                }
-                None => ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0),
-            };
+            let gi = ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0);
             gi_n += 1;
             let ca = 1.0 - (1.0 - gi).powi(3);
             let cyy = bar.center().y + (1.0 - ca) * 9.0;
