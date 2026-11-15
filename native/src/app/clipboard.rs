@@ -216,7 +216,12 @@ impl App {
                 self.snapshot();
             }
             self.put_texture(ctx, &file, w, h, rgba);
-            ids.push(self.board.add_image(file, w, h, at));
+            let id = self.board.add_image(file, w, h, at);
+            // A file with a real name keeps it; a random-id name stays Image N
+            if let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().to_string()).filter(|s| !crate::image_names::junk_name(s)) {
+                self.board.layer_names.insert(id.clone(), stem);
+            }
+            ids.push(id);
             at = Pt { x: at.x + 32.0, y: at.y + 32.0 };
         }
         // Dropped onto a frame: file them into it. Otherwise they stay where they were dropped,

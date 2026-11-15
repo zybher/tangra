@@ -59,6 +59,7 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Hit-testing** | `canvas/hit_test.rs` | Item rects, what's under the pointer, items in a marquee; a selected drawing grabs anywhere inside its box |
 | **Geometry** | `canvas/geometry.rs` | Pure math helpers: rect/segment tests, stroke hits, shape constraints; rectangles / ellipses draw as one closed line (never pen-smoothed); line widths have no screen-pixel floor, so everything keeps its size relative to the board at any zoom (only frame titles stay one screen size) |
 | **Pen stroke mesh** | `canvas/stroke_mesh.rs` | Pen / highlighter lines as one smooth mesh: thinned + Chaikin-rounded points, round caps, 1px soft edge (no square cuts at zoom, no dark end dots when see-through); hovering a drawing traces its line instead of a box |
+| **Image names** | `image_names.rs` | Pasted / screenshotted pictures are named Image 1, Image 2, ... (next number after the highest); a dropped file keeps its own name unless it is a random id; older boards name their id-named pictures on load |
 | **Textures** | `canvas/textures.rs` | Uploading images to the GPU, pixelate/mosaic, lazy loading |
 | **Title bar & tabs** | `ui/titlebar.rs` | Tabs, board switching, window buttons |
 | **Bottom toolbar** | `ui/toolbar.rs` | Tool buttons with magnify, zoom/undo pill |

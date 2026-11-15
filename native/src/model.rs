@@ -268,6 +268,7 @@ impl Board {
             base_scale: None,
             corner: 0.0,
         });
+        self.name_image(&id, None);
         id
     }
 
@@ -450,6 +451,7 @@ pub fn load_board(id: &str) -> Board {
         match serde_json::from_str::<Board>(&content) {
             Ok(mut b) => {
                 b.id = id.to_string();
+                b.name_unnamed_images();
                 if b.camera.zoom <= 0.0 || !b.camera.zoom.is_finite() {
                     b.camera.zoom = 1.0;
                 }

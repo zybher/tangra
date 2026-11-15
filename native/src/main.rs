@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod model;
+mod image_names;
 mod platform;
 mod theme;
 mod app;
