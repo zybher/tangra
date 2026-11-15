@@ -311,8 +311,11 @@ impl App {
             }
             // Each control rises into place one after another as the pill widens
             let gi = match closing {
-                // Domino: left to right, each icon slides down and out a beat after the last
-                Some(e) => 1.0 - ((e - gi_n as f32 * 0.07) / 0.3).clamp(0.0, 1.0),
+                // Domino from the ends in, ahead of the shrinking edge (same as the style bar)
+                Some(_) => {
+                    let d = (xx + wd / 2.0 - bar.center().x).abs() + seg_w(s) / 2.0;
+                    ((sw / 2.0 - d - 2.0) / 20.0).clamp(0.0, 1.0)
+                }
                 None => ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0),
             };
             gi_n += 1;

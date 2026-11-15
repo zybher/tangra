@@ -324,8 +324,12 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         for (i, s) in segs.iter().enumerate() {
             // Each group rises into place one after another as the pill widens
             let gi = match closing {
-                // Domino: left to right, each icon slides down and out a beat after the last
-                Some(e) => 1.0 - ((e - i as f32 * 0.07) / 0.3).clamp(0.0, 1.0),
+                // Domino from the ends in: each icon drops out just before the shrinking
+                // pill's edge reaches it, so none hang outside (any number of controls)
+                Some(_) => {
+                    let d = (xx + seg_ws(i, s) / 2.0 - bar.center().x).abs() + seg_w(s) / 2.0;
+                    ((sw / 2.0 - d - 2.0) / 20.0).clamp(0.0, 1.0)
+                }
                 None => ((x - 0.02 - i as f32 * 0.06) / 0.3).clamp(0.0, 1.0),
             };
             let ca = 1.0 - (1.0 - gi).powi(3);
