@@ -104,7 +104,7 @@ impl App {
                         let bar_here = (fresh || bar_kind) && bar_top == tl;
                         let w_hidden = bar_here || !inside.contains_rect(Rect::from_center_size(pos2(r.center().x, wy), gw.size() + vec2(14.0, 6.0)));
                         // One side out of view: fold its number into the other pill
-                        let side = ctx.data(|d| d.get_temp::<(Rect, u64)>(egui::Id::new("qd_img_side_zone"))).filter(|z| ctx.cumulative_pass_nr().saturating_sub(z.1) <= 1).map(|z| z.0);
+                        let side = ctx.data(|d| d.get_temp::<(Rect, u64)>(egui::Id::new("qd_img_side_zone"))).filter(|z| z.0.is_positive() && ctx.cumulative_pass_nr().saturating_sub(z.1) <= 1).map(|z| z.0);
                         let h_hidden = (!inside.contains_rect(hp) || side.is_some_and(|z| z.intersects(hp.expand(4.0)))) && !w_hidden;
                         let mk = ctx.animate_bool_with_time_and_easing(egui::Id::new(("qd_dims_merge", "qd")), h_hidden, 0.3 * anim_k(), egui::emath::easing::cubic_out);
                         let mw = ctx.animate_bool_with_time_and_easing(egui::Id::new(("qd_dims_mergew", "qd")), w_hidden && inside.contains_rect(hp), 0.3 * anim_k(), egui::emath::easing::cubic_out);

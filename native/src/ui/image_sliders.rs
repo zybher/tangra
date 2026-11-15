@@ -1,7 +1,7 @@
-//! Picture dropdowns from the side bar (image_side.rs): Adjust (colour) and 3D (tilt). Same
+//! Picture dropdowns from the placement bar (place_bar.rs): Adjust (colour) and 3D (tilt). Same
 //! wave list as the style bar's dropdowns, a softer wave since every row is dragged; each
 //! value row scrubs sideways like the bars' number fields (double-click resets it), and a
-//! reset row sits at the bottom. Opens next to the side bar, away from the picture.
+//! reset row sits at the bottom. Opens under (or over) the bar, from its button.
 
 use crate::image_edit::{ImageEdit, ADJUST_ROWS, TILT_ROWS};
 use crate::*;
@@ -12,9 +12,10 @@ pub(crate) const PANEL_W: f32 = 168.0;
 const SOFT: f32 = 0.55;
 
 impl App {
-    /// Draws the open dropdown (1 = Adjust, 2 = 3D) for picture `img`, beside the side bar
-    /// `anchor` (to its right when `right`). Returns the panel's rect while one is open.
-    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, anchor: Rect, right: bool, pop: u8, img: &str) -> Rect {
+    /// Draws the open dropdown (bar's `pop` 2 = Adjust, 3 = 3D) for picture `img`, under (or
+    /// over) `bar`, starting at its button in `btns`. Returns the panel's rect while one is open.
+    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, btns: [Rect; 2], pop: u8, img: &str) -> Rect {
+        let pop = pop.saturating_sub(1);
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_img_pop");
         let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
@@ -41,10 +42,14 @@ impl App {
             let n = sliders.len() + resets.len();
             let ph = n as f32 * PITCH + 8.0;
 
-            let left = if right { anchor.max.x + 8.0 } else { anchor.min.x - 8.0 - PANEL_W };
-            let top = anchor.min.y.min((rect.max.y - 70.0 - ph).max(rect.min.y + 8.0));
-            let sg = 1.0;
-            let top = top + (1.0 - ez(kk)) * -8.0 * sg;
+            // Keep the last spot while it fades out (the button may already be gone)
+            let btn = btns[kind as usize - 1];
+            let xid = bid.with(("ix", kind));
+            let left = if btn.is_positive() { (btn.min.x - 4.0).min(rect.max.x - 8.0 - PANEL_W) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
+            ctx.data_mut(|d| d.insert_temp(xid, left));
+            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let sg = if up { -1.0 } else { 1.0 };
+            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + (1.0 - ez(kk)) * -8.0 * sg;
 
             // The row being dragged stays raised and the others stay flat until it is let go
             let drag_id = bid.with(("idrag", kind));
@@ -121,7 +126,7 @@ impl App {
                 ctx.request_repaint();
             }
         }
-        // The side bar holds its magnify still while a row is dragged
+        // The bar holds its magnify still while a row is dragged
         ctx.data_mut(|d| d.insert_temp(bid.with("dragging"), any_drag));
         open_rect
     }

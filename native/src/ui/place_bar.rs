@@ -1,6 +1,7 @@
 //! Placement bar: shows up once the selection sits inside a frame (the frame gives a clear
 //! boundary). An Align dropdown (left / centre / right / top / middle / bottom, even spacing
-//! for 3+ objects, same as the frame bar's), opacity with the liquid fill, corners for a picture. Sits beside the style bar when the object has
+//! for 3+ objects, same as the frame bar's), opacity with the liquid fill, corners for a picture,
+//! and a picture's Adjust and 3D dropdowns (image_sliders.rs). Sits beside the style bar when the object has
 //! one (frames, shapes, text), else above the object. Same pill, entrance, magnify, hover
 //! and tooltip as the style bar.
 use crate::*;
@@ -11,6 +12,9 @@ enum Seg {
     AlignPop,
     Opacity,
     Corner,
+    /// Picture dropdowns: colour adjust, 3D tilt
+    Adjust,
+    Tilt,
     Div,
 }
 
@@ -135,6 +139,9 @@ impl App {
         } else if single_img {
             segs.push(Seg::Corner);
         }
+        if single_img {
+            segs.extend([Seg::Div, Seg::Adjust, Seg::Tilt]);
+        }
         let layout_locked = self.place_locked_by_layout(&targets);
         let opacity = (self.opacity_of(&targets[0].1) * 100.0).round();
         let corner = self.board.images.iter().find(|i| i.id == targets[0].1).map_or(0.0, |i| i.corner.round());
@@ -168,6 +175,7 @@ impl App {
             Seg::Opacity => 62.0,
             Seg::Corner => 50.0,
             Seg::AlignPop => 40.0,
+            Seg::Adjust | Seg::Tilt => 32.0,
             Seg::Div => 9.0,
         };
         let was_scrub: bool = ctx.data(|d| d.get_temp(bid.with("scrub"))).unwrap_or(false);
@@ -176,7 +184,9 @@ impl App {
         let mags: Vec<f32> = {
             let prev = ctx.data(|d| d.get_temp::<Rect>(bid)).unwrap_or(Rect::NOTHING);
             let ptr = ctx.pointer_hover_pos();
-            let inside = was_scrub || was_cscrub || ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q));
+            // Holds still while a picture dropdown row is dragged
+            let img_drag: bool = ctx.data(|d| d.get_temp(egui::Id::new("qd_img_pop").with("dragging"))).unwrap_or(false);
+            let inside = was_scrub || was_cscrub || (!img_drag && ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q)));
             let sa = spring(&ctx, bid.with("mag_a"), inside, 18.0);
             let base = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>();
             let mut offs = Vec::new();
@@ -208,7 +218,13 @@ impl App {
                         return 0.0;
                     }
                     let d = (offs[i] - focus) / (seg_w(sg) * 1.05);
-                    let act = spring(&ctx, bid.with(("mag_on", i)), *sg == Seg::AlignPop && open == 1 && closing.is_none(), 18.0);
+                    let on = match sg {
+                        Seg::AlignPop => open == 1,
+                        Seg::Adjust => open == 2,
+                        Seg::Tilt => open == 3,
+                        _ => false,
+                    };
+                    let act = spring(&ctx, bid.with(("mag_on", i)), on && closing.is_none(), 18.0);
                     (sa * (-d * d).exp()).max(act)
                 })
                 .collect()
@@ -290,6 +306,7 @@ impl App {
         let pop: u8 = if closing.is_some() { 0 } else { ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0) };
         let mut set_pop = pop;
         let mut align_btn = Rect::NOTHING;
+        let mut img_btn = [Rect::NOTHING; 2];
         let mut tip: Option<(f32, &str)> = None;
         let mut scrub: Option<f32> = None;
         let mut cscrub: Option<f32> = None;
@@ -408,6 +425,30 @@ impl App {
                         cscrub = Some((v0 + dx * 0.5).round().clamp(0.0, 400.0));
                     }
                 }
+                Seg::Adjust | Seg::Tilt => {
+                    let (kind, label) = if *s == Seg::Adjust { (2u8, "Adjust") } else { (3u8, "3D") };
+                    img_btn[(kind - 2) as usize] = r;
+                    // Open: accent liquid fill, like the Align button
+                    let lq = ctx.animate_bool_with_time(bid.with(("liquid_img", kind)), pop == kind, 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    if lq >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lq > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + kind as f32);
+                    }
+                    let gc = mix(TEXT_DIM, Color32::WHITE, hh.max(lq)).gamma_multiply(ca);
+                    if kind == 2 {
+                        super::icons::adjust(&pl, pos2(r.center().x, cyy), 16.0, gc);
+                    } else {
+                        super::icons::cube(&pl, pos2(r.center().x, cyy), 16.0, gc);
+                    }
+                    if resp.hovered() && pop == 0 {
+                        tip = Some((r.center().x, label));
+                    }
+                    if resp.clicked() {
+                        set_pop = if pop == kind { 0 } else { kind };
+                    }
+                }
                 Seg::Div => {}
             }
         }
@@ -436,7 +477,16 @@ impl App {
             self.snapshot();
             self.set_selection_opacity(1.0);
         }
-        let pop_rect = self.place_align_pop(ui, rect, bar, align_btn, pop, targets.len() >= 3);
+        let mut pop_rect = self.place_align_pop(ui, rect, bar, align_btn, pop, targets.len() >= 3);
+        if single_img {
+            let ir = self.image_pop(ui, rect, bar, img_btn, pop, &targets[0].1);
+            if ir.is_positive() {
+                pop_rect = if pop_rect.is_positive() { pop_rect.union(ir) } else { ir };
+            }
+            // The size pills fold the height number away from an open dropdown
+            let nr = ctx.cumulative_pass_nr();
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_img_side_zone"), (ir, nr)));
+        }
         if pop != 0 && set_pop == pop && ctx.input(|i| i.pointer.any_pressed()) {
             let q = ctx.input(|i| i.pointer.interact_pos());
             if !q.is_some_and(|q| bar.contains(q) || pop_rect.contains(q)) {
@@ -444,10 +494,6 @@ impl App {
             }
         }
         ctx.data_mut(|d| d.insert_temp(bid.with("pop"), set_pop));
-        // Adjust / 3D live on their own pill beside the picture
-        if single_img {
-            self.image_side_ui(ui, rect, fr, &targets[0].1, closing.is_none());
-        }
         ui_block(&ctx, if pop_rect.is_positive() { bar.union(pop_rect) } else { bar });
 
         // Tooltip above the pill, same as the style bar's
