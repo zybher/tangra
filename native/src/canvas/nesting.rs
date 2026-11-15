@@ -206,6 +206,24 @@ impl App {
     }
 
     /// World-space clip box per object: the overlap of every clipping frame around it
+    /// How far in (world units) a frame crops its contents: to the inner edge of its stroke,
+    /// tucked half a pixel under it so no seam shows
+    pub(crate) fn clip_inset(&self, g: &Group) -> f32 {
+        let bw = g.border.unwrap_or(1.0).max(0.0);
+        let px = match g.stroke_pos {
+            1 => bw,
+            2 => 0.0,
+            _ => bw / 2.0,
+        };
+        (px - 0.5).max(0.0) / self.board.camera.zoom.max(0.0001)
+    }
+
+    /// A clipping frame's crop box (world): its rect pulled in to the stroke's inner edge
+    pub(crate) fn crop_box(&self, g: &Group) -> [f32; 4] {
+        let i = self.clip_inset(g).min(g.width / 2.0).min(g.height / 2.0);
+        [g.x + i, g.y + i, g.width - 2.0 * i, g.height - 2.0 * i]
+    }
+
     pub(crate) fn clip_boxes(&self) -> HashMap<String, [f32; 4]> {
         let frames: HashMap<&str, &Group> = self.board.group_cards.iter().map(|g| (g.id.as_str(), g)).collect();
         let mut out = HashMap::new();
@@ -215,11 +233,12 @@ impl App {
             for _ in 0..64 {
                 let Some(pid) = cur else { break };
                 if let Some(g) = frames.get(pid).filter(|g| g.clip) {
+                    let b = self.crop_box(g);
                     c = Some(match c {
-                        None => [g.x, g.y, g.width, g.height],
+                        None => b,
                         Some(a) => {
-                            let (x0, y0) = (a[0].max(g.x), a[1].max(g.y));
-                            let (x1, y1) = ((a[0] + a[2]).min(g.x + g.width), (a[1] + a[3]).min(g.y + g.height));
+                            let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
+                            let (x1, y1) = ((a[0] + a[2]).min(b[0] + b[2]), (a[1] + a[3]).min(b[1] + b[3]));
                             [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
                         }
                     });

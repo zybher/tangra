@@ -695,15 +695,6 @@ impl eframe::App for App {
         ui::scale::update_ui_scale(ctx);
         self.now = ctx.input(|i| i.time);
         self.tick_glides(ctx);
-        {
-            // Debug: report when the frame count changes (tracing Ctrl+Alt+G)
-            static LAST: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(usize::MAX);
-            let n = self.board.group_cards.len();
-            let was = LAST.swap(n, std::sync::atomic::Ordering::Relaxed);
-            if was != usize::MAX && was != n {
-                eprintln!("[frames] {was} -> {n}");
-            }
-        }
         self.stamp_parents();
         if matches!(self.drag, Drag::None) {
             let mut auto = Vec::new();

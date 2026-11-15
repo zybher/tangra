@@ -123,7 +123,9 @@ impl App {
             if let Some(g) = self.board.group_cards.iter().find(|g| g.id == pid && g.clip) {
                 let rad = group_radius(g);
                 any_round |= rad > 0.5;
-                out.push(([g.x, g.y, g.width, g.height], rad));
+                // Cropped at the stroke's inner edge, like the rect clip
+                let b = self.crop_box(g);
+                out.push((b, (rad - (b[0] - g.x)).max(0.0)));
             }
             cur = self.parent_of(pid);
         }

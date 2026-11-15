@@ -263,8 +263,10 @@ impl App {
         let id = self.board.add_group(Pt { x: 0.0, y: 0.0 });
         // Paint under any frame being wrapped (frames paint in list order)
         let first = self.board.group_cards.iter().position(|g| targets.iter().any(|t| t.0 == Kind::Group && t.1 == g.id));
-        if let (Some(at), Some(g)) = (first, self.board.group_cards.pop()) {
-            self.board.group_cards.insert(at, g);
+        if let Some(at) = first {
+            if let Some(g) = self.board.group_cards.pop() {
+                self.board.group_cards.insert(at, g);
+            }
         }
         if let Some(g) = self.board.group_cards.iter_mut().find(|g| g.id == id) {
             (g.x, g.y, g.width, g.height) = (b[0], b[1], b[2], b[3]);
@@ -276,9 +278,19 @@ impl App {
             self.board.parents.insert(t.clone(), id.clone());
         }
         let n = targets.len();
-        eprintln!("[frame_selection] made {id} in {:?} around {n} -> {} frames", self.board.parents.get(&id), self.board.group_cards.len());
+        // "Framed 3 images" when they're all one kind, "objects" when mixed
+        let kind = targets.first().map(|t| t.0).filter(|k| targets.iter().all(|t| t.0 == *k));
+        let noun = match kind {
+            Some(Kind::Image) => "image",
+            Some(Kind::Stroke) => "shape",
+            Some(Kind::Text) => "text",
+            Some(Kind::Group) => "frame",
+            Some(Kind::Note) => "note",
+            Some(Kind::Link) => "link",
+            None => "object",
+        };
         self.select_only((Kind::Group, id));
         self.mark_dirty();
-        self.toast(format!("Framed {n} object{}", if n == 1 { "" } else { "s" }));
+        self.toast(format!("Framed {n} {noun}{}", if n == 1 { "" } else { "s" }));
     }
 }

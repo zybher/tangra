@@ -388,8 +388,23 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         tip = Some((r.center().x, name));
                     }
                     pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
+                    // Opacity: on hover the pill fills with accent liquid up to the value
+                    // (100% = full), draining as it's dragged down; grey shows above it
+                    let mut hh = hh;
+                    if icon == 3 {
+                        let on = resp.hovered() || resp.dragged();
+                        let lq = ctx.animate_bool_with_time(id.with("liquid"), on, 0.5 * anim_k());
+                        let lq = lq * lq * (3.0 - 2.0 * lq);
+                        let lvl = ctx.animate_value_with_time(id.with("lvl"), ((val - lo) / (hi - lo)).clamp(0.0, 1.0), 0.12 * anim_k()) * lq;
+                        if lvl >= 0.999 {
+                            pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                        } else if lvl > 0.001 {
+                            liquid_fill(&pb, tr(r), 8.0 * sc, lvl, ctx.input(|i| i.time) as f32 + 2.0);
+                        }
+                        hh = hh.max(lq);
+                    }
                     let ic = pos2(r.min.x + 14.0, cyy);
-                    let st = EStroke::new(1.3_f32, mix(TEXT_DIM, TEXT, hh).gamma_multiply(ca));
+                    let st = EStroke::new(1.3_f32, if icon == 3 { mix(TEXT_DIM, Color32::WHITE, hh) } else { mix(TEXT_DIM, TEXT, hh) }.gamma_multiply(ca));
                     match icon {
                         0 => {
                             let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
