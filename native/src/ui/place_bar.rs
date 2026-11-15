@@ -108,7 +108,7 @@ impl App {
             ctx.data_mut(|d| d.insert_temp::<Last>(bid.with("last"), (targets.clone(), free_img, r)));
         } else {
             let t_gone: f64 = ctx.data(|d| d.get_temp(bid.with("t_gone"))).unwrap_or(self.now);
-            let e = ((self.now - t_gone) as f32 / (0.6 * k)).clamp(0.0, 1.0);
+            let e = ((self.now - t_gone) as f32 / (0.45 * k)).clamp(0.0, 1.0);
             match ctx.data(|d| d.get_temp::<Last>(bid.with("last"))) {
                 Some((t, fi, r)) if e < 1.0 && !t.is_empty() && self.edit.is_none() && !super::bar_morph::taken(&ctx, bid, self.now) => {
                     (targets, free_img, item) = (t, fi, Some(r));
@@ -251,14 +251,15 @@ impl App {
         };
 
         // Pill springs open sideways with the same jelly as the style bar
-        // Closing plays the entrance backwards (from wherever the entrance had got to)
-        let x = match closing {
-            Some(e) => x.min(1.0 - e),
-            None => x,
-        };
+        // Closing: the left end stays put and the pill folds toward it while it fades
+        // (no wobble); `fold` is how much of the width is left
+        let fold = closing.map(|e| 1.0 - egui::emath::easing::cubic_in_out(e));
         let f = 1.0 - (-4.5 * x).exp() * (8.0 * x).cos();
         let wob = (-5.5 * x).exp() * (16.0 * x).sin() * 0.06;
-        let a = (x / 0.15).min(1.0);
+        let a = match closing {
+            Some(e) => ((1.0 - e) / 0.4).min(1.0),
+            None => (x / 0.15).min(1.0),
+        };
         if x < 1.0 {
             ctx.request_repaint();
         }
@@ -284,9 +285,18 @@ impl App {
         };
         let bar = Rect::from_center_size(pos2(gx, gy), vec2(gw, h));
         ctx.data_mut(|d| d.insert_temp(bid, bar));
-        let sw = (gw * (0.12 + 0.88 * f) * (1.0 + wob)).max(h);
-        let sh = h * (0.8 + 0.2 * f.min(1.0)) * (1.0 - wob * 0.6);
-        let shown = Rect::from_center_size(bar.center() + vec2(0.0, (1.0 - f) * 6.0), vec2(sw, sh));
+        let (_, shown) = match fold {
+            Some(fd) => {
+                let sw = (gw * fd).max(h);
+                (sw, Rect::from_min_size(pos2(bar.min.x, bar.center().y - h / 2.0), vec2(sw, h)))
+            }
+            None => {
+                let sw = (gw * (0.12 + 0.88 * f) * (1.0 + wob)).max(h);
+                let sh = h * (0.8 + 0.2 * f.min(1.0)) * (1.0 - wob * 0.6);
+                (sw, Rect::from_center_size(bar.center() + vec2(0.0, (1.0 - f) * 6.0), vec2(sw, sh)))
+            }
+        };
+        let sh = shown.height();
         p.rect_filled(shown.translate(vec2(0.0, 3.0)), sh / 2.0, Color32::from_black_alpha((60.0 * a) as u8));
         p.rect_filled(shown, sh / 2.0, frame_bg().gamma_multiply(a));
         p.rect_stroke(shown, sh / 2.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
@@ -309,7 +319,11 @@ impl App {
                 continue;
             }
             // Each control rises into place one after another as the pill widens
-            let gi = ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0);
+            let gi = match fold {
+                // Stair out right to left: each icon drops just before the folding edge reaches it
+                Some(_) => ((shown.max.x - (xx + wd) - 2.0) / 20.0).clamp(0.0, 1.0),
+                None => ((x - 0.02 - gi_n as f32 * 0.06) / 0.3).clamp(0.0, 1.0),
+            };
             gi_n += 1;
             let ca = 1.0 - (1.0 - gi).powi(3);
             let cyy = bar.center().y + (1.0 - ca) * 9.0;
