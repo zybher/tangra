@@ -337,6 +337,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let mut reset_opacity = false;
         let mut xx = bar.center().x - content_w / 2.0 + pad;
         let n = segs.len();
+        // Each dropdown sits centred over its own button, like the toolbar menu
+        let mut btn_cx = [f32::NAN; 6];
         for (i, s) in segs.iter().enumerate() {
             // Each group rises into place one after another as the pill widens
             let gi = match closing {
@@ -349,6 +351,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let wd = seg_ws(i, s);
             let mg = mags[i];
             let r = Rect::from_center_size(pos2(xx + wd / 2.0, cyy), vec2(seg_w(s), 26.0));
+            let dk = match s { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, _ => 0 };
+            if dk != 0 {
+                btn_cx[dk] = r.center().x;
+            }
             // Swell + lift the segment's drawing on its own layer
             let lid = egui::LayerId::new(egui::Order::Foreground, bid.with(("seg", i)));
             let sc = 1.0 + 0.22 * mg;
@@ -616,6 +622,12 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // Colour: a vertical list like the other dropdowns, with "Custom" (a full picker) at the end
         // One panel for all of this bar's dropdowns, moving like the toolbar's menu (drop_anim.rs)
         let da = super::drop_anim::DropAnim::new(&ctx, bid.with("drop"), pop);
+        let drop_left = |k: usize| -> f32 {
+            let xid = bid.with(("dcx", k));
+            let cx = if btn_cx[k].is_finite() { btn_cx[k] } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.center().x) };
+            ctx.data_mut(|d| d.insert_temp(xid, cx));
+            super::drop_anim::left_for(cx, rect)
+        };
         let k1 = da.k(1);
         let cid = bid.with("custom");
         // Closing the dropdown lets the custom panel fade out with it; only when the colour
@@ -634,11 +646,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k1) * -8.0;
             // Frames get a last row, "No fill" (just the outline and title)
             let n = PEN_COLORS.len() + 1 + is_group as usize;
-            let ph = n as f32 * 26.0 + 8.0;
-            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let ph = n as f32 * 30.0 + 8.0;
+            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave1"), bar.min.x, top + n as f32 * 26.0 + 8.0, 120.0, 26.0, n, &[]);
+            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave1"), drop_left(1), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -741,11 +753,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let pk = p.clone();
             let slide = (1.0 - k2) * -8.0;
             // Open upward when the list wouldn't fit between the bar and the bottom toolbar
-            let ph = 5.0 * 26.0 + 8.0;
-            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let ph = 5.0 * 30.0 + 8.0;
+            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave2"), bar.max.x - 110.0, top + 5.0 * 26.0 + 8.0, 110.0, 26.0, 5, &[]);
+            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave2"), drop_left(2), top + ph, super::drop_anim::W, super::drop_anim::PITCH, 5, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -782,11 +794,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             const RATIOS: [(&str, f32); 6] = [("1 : 1", 1.0), ("4 : 3", 4.0 / 3.0), ("3 : 4", 0.75), ("16 : 9", 16.0 / 9.0), ("9 : 16", 9.0 / 16.0), ("3 : 2", 1.5)];
             let cur = target.as_ref().and_then(|(_, id)| self.board.group_cards.iter().find(|g| &g.id == id)).map_or(0.0, |g| g.width / g.height.max(1.0));
             let n = RATIOS.len();
-            let ph = n as f32 * 26.0 + 8.0;
-            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let ph = n as f32 * 30.0 + 8.0;
+            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave3"), bar.max.x - 150.0, top + n as f32 * 26.0 + 8.0, 110.0, 26.0, n, &[]);
+            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave3"), drop_left(3), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -839,11 +851,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 rows_def.push(("Space down", None, false));
             }
             let n = rows_def.len();
-            let ph = n as f32 * 26.0 + 8.0;
-            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let ph = n as f32 * 30.0 + 8.0;
+            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave4"), bar.max.x - 160.0, top + n as f32 * 26.0 + 8.0, 130.0, 26.0, n, &[]);
+            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave4"), drop_left(4), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -895,11 +907,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k5) * -8.0;
             let rows_def: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
             let n = rows_def.len();
-            let ph = n as f32 * 26.0 + 8.0;
-            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let ph = n as f32 * 30.0 + 8.0;
+            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave5"), bar.center().x - 55.0, top + n as f32 * 26.0 + 8.0, 110.0, 26.0, n, &[]);
+            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave5"), drop_left(5), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);

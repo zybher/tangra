@@ -5,6 +5,15 @@
 //! cascade in again. Closing plays the cascade backwards.
 use crate::*;
 
+/// Panel width and row pitch, the toolbar menu's (tool_menu.rs)
+pub(crate) const W: f32 = 190.0;
+pub(crate) const PITCH: f32 = 30.0;
+
+/// Left edge of a panel centred over a button at `cx`, kept inside `rect`
+pub(crate) fn left_for(cx: f32, rect: Rect) -> f32 {
+    (cx - W / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - W).max(rect.min.x + 8.0))
+}
+
 pub(crate) struct DropAnim {
     /// The dropdown shown (stays the last one while it closes); 0 = none yet
     pub kind: u8,
@@ -34,7 +43,7 @@ impl DropAnim {
             d.insert_temp(id.with("kind"), kind);
             d.insert_temp(id.with("since"), since);
         });
-        let kf = ((now - since) / (0.45 * anim_k().max(1e-3) as f64)).clamp(0.0, 1.0) as f32;
+        let kf = ((now - since) / 0.45).clamp(0.0, 1.0) as f32;
         if kf < 1.0 || (t > 0.0 && t < 1.0) {
             ctx.request_repaint();
         }
@@ -74,7 +83,7 @@ impl DropAnim {
             if self.t < 0.95 && self.kf >= 1.0 {
                 cur = target;
             } else {
-                let f = if anim_k() == 0.0 { 1.0 } else { 1.0 - (-dt * 16.0 / anim_k()).exp() };
+                let f = 1.0 - (-dt * 16.0).exp();
                 for j in 0..3 {
                     cur[j] += (target[j] - cur[j]) * f;
                 }
