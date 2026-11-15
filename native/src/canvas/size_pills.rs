@@ -91,7 +91,8 @@ impl App {
                         let hx = egui::lerp((r.max.x + gap + ph / 2.0)..=(r.min.x - gap - ph / 2.0), kx);
                         let hp = Rect::from_center_size(pos2(hx, r.center().y), vec2(th + 6.0, tw + 14.0));
                         let wy = egui::lerp((r.max.y + gap + ph / 2.0)..=(r.min.y - gap - ph / 2.0), ky);
-                        let inside = rect.shrink(4.0);
+                        let mut inside = rect.shrink(4.0);
+                        inside.min.x += crate::ui::outline::hud_shift(&ctx);
                         // The style bar sits on this edge: the width folds into the height pill
                         // (the bar is drawn after the pills, so on its first frame predict it the same way it
                         // places itself, instead of letting the pill flash on that edge for a frame)

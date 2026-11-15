@@ -132,7 +132,8 @@ impl App {
                     }
                     Some(_) => {}
                     None => {
-                        p.rect_stroke(sr, sfr, EStroke::new(bw, stroke_color));
+                        // rect_stroke paints outward from the rect: hand it the inner edge
+                        p.rect_stroke(sr.shrink(bw / 2.0), (sfr - bw / 2.0).max(0.0), EStroke::new(bw, stroke_color));
                     }
                 }
             }
@@ -395,7 +396,7 @@ impl App {
             let hov = ctx
                 .pointer_hover_pos()
                 .filter(|q| p.clip_rect().contains(*q) && idle && !ctx.is_pointer_over_area() && !ui_blocks(&ctx, *q))
-                .and_then(|q| self.hit_test(v.w(q)))
+                .and_then(|q| self.hit_test(v.w(q)).map(|h| self.pick(h, false)))
                 .or_else(|| crate::ui::outline::outline_hover(&ctx))
                 .filter(|h| !self.selected.contains(h));
             ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_hover_now"), hov.clone()));

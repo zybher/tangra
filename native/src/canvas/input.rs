@@ -323,6 +323,8 @@ impl App {
                         }
                     }
                 }
+                // Inside a frame the frame is picked first (double-click / Ctrl to reach in)
+                let hit = hit.map(|h| self.pick(h, false));
                 if let Some(target) = hit {
                     if self.selected.contains(&target) {
                         // Already in selection, keep current selection
@@ -653,7 +655,8 @@ impl App {
         }
 
         let v = self.view(rect);
-        let shift_or_ctrl = ctx.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.ctrl);
+        // Shift adds to the selection; Ctrl picks the deepest object (see scope_pick)
+        let shift_or_ctrl = ctx.input(|i| i.modifiers.shift);
         self.shift = ctx.input(|i| i.modifiers.shift);
         self.snap_off = ctx.input(|i| i.modifiers.ctrl);
 
@@ -691,7 +694,7 @@ impl App {
                 let w = v.w(p);
                 match self.tool {
                     Tool::Select => {
-                        let hit = self.hit_test(w);
+                        let hit = self.hit_test(w).map(|h| self.pick(h, false));
                         if let Some(l) = self.label_at(w).filter(|_| !shift_or_ctrl) {
                             // Text on an image wins over the image under it
                             self.deselect_all();
@@ -743,8 +746,11 @@ impl App {
                 self.select_only(hit.clone());
                 self.activate(hit);
             } else if let Some(hit) = wp.and_then(|p| self.hit_test(p)) {
+                // Step one level into the frame; on something already selected, open it as before
+                let hit = self.pick(hit, true);
+                let was = self.selected.contains(&hit);
                 self.select_only(hit.clone());
-                if hit.0 != Kind::Group {
+                if was && hit.0 != Kind::Group {
                     self.activate(hit);
                 }
             }

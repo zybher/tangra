@@ -19,6 +19,8 @@ impl App {
             Aspect,
             /// Align / even spacing dropdown (only for something inside a frame)
             Align,
+            /// Stroke inside / centre / outside (frames)
+            StrokePos,
         }
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_style_bar");
@@ -65,16 +67,19 @@ impl App {
         let mut segs: Vec<Seg> = Vec::new();
         let mut color = String::new();
         let mut layout = 0u8;
+        let mut stroke_pos = 0u8;
         if let Some((k, id)) = &target {
             match k {
                 Kind::Group => {
                     if let Some(g) = self.board.group_cards.iter().find(|g| &g.id == id) {
                         color = g.color.clone();
                         layout = g.layout;
+                        stroke_pos = g.stroke_pos;
                         segs = vec![
                             Seg::Color,
                             Seg::Num("corner", 0, group_radius(g), 0.0, 60.0, 0.25, "Corner radius  ·  drag"),
-                            Seg::Num("border", 1, g.border.unwrap_or(1.0), 0.0, 12.0, 0.06, "Border  ·  drag"),
+                            Seg::Num("border", 1, g.border.unwrap_or(1.0), 0.0, 12.0, 0.06, "Stroke  ·  drag"),
+                            Seg::StrokePos,
                             Seg::Aspect,
                             Seg::Arrange,
                         ];
@@ -103,8 +108,11 @@ impl App {
         // Inside a frame: align (dropdown) and opacity join this bar, so there's one bar, not two
         let place_targets = self.place_targets();
         let opacity_now = place_targets.first().map_or(100.0, |t| (self.opacity_of(&t.1) * 100.0).round());
-        if !segs.is_empty() && self.share_frame(&place_targets) {
-            segs.push(Seg::Align);
+        if !segs.is_empty() {
+            if self.share_frame(&place_targets) {
+                segs.push(Seg::Align);
+            }
+            // Always shown, so the 0-9 opacity keys have something visible to answer to
             segs.push(Seg::Num("opacity", 3, opacity_now, 0.0, 100.0, 0.5, "Opacity  ·  drag, double-click resets"));
         }
         // Remember the controls too, so a deleted object's bar can domino out like a normal close
@@ -183,6 +191,7 @@ impl App {
             Seg::Arrange => 40.0,
             Seg::Aspect => 40.0,
             Seg::Align => 40.0,
+            Seg::StrokePos => 40.0,
         };
         // Dock-style magnify, like the bottom toolbar: a smoothed focus follows the pointer
         // and each segment swells (and the bar widens) by its distance from it
@@ -217,7 +226,7 @@ impl App {
             let open: u8 = ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0);
             segs.iter().enumerate().map(|(i, sg)| {
                 let d = (offs[i] - focus) / (seg_w(sg) * 1.05);
-                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, _ => 0 };
+                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, _ => 0 };
                 let act = spring(&ctx, bid.with(("mag_on", i)), k != 0 && open == k, 18.0);
                 (sa * (-d * d).exp()).max(act)
             }).collect()
@@ -324,7 +333,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let tv = r.center().to_vec2() * (1.0 - sc) + vec2(0.0, -4.0 * mg);
             let tf = move |q: Pos2| pos2(q.x * sc + tv.x, q.y * sc + tv.y);
             let tr = move |rr: Rect| Rect::from_min_max(tf(rr.min), tf(rr.max));
-            let p = p.clone().with_layer_id(lid);
+            let p = p.clone().with_layer_id(lid).with_clip_rect(Rect::from_min_max(pos2(rect.min.x + crate::ui::outline::hud_shift(&ctx), -1e6), pos2(1e6, 1e6)));
             xx += wd;
             if i + 1 < n {
                 let lx = xx + dv / 2.0;
@@ -425,6 +434,30 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     }
                     if resp.clicked() {
                         set_pop = if pop == 3 { 0 } else { 3 };
+                    }
+                }
+                Seg::StrokePos => {
+                    let resp = ui.interact(r, bid.with("spos"), Sense::click());
+                    let (hh, pp) = hover_fx(&ctx, &resp, true);
+                    let on = pop == 5;
+                    pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
+                    let lq = ctx.animate_bool_with_time(bid.with(("liquid", 5)), on, 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    if lq >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lq > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 5.0);
+                    }
+                    let hh = hh.max(lq);
+                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
+                    stroke_pos_icon(&p, pos2(r.min.x + 14.0, cyy), 1.0, gc, stroke_pos);
+                    let cv = pos2(r.max.x - 10.0, cyy);
+                    p.add(egui::Shape::line(vec![cv + vec2(-3.0, -1.5), cv + vec2(0.0, 1.5), cv + vec2(3.0, -1.5)], EStroke::new(1.2_f32, gc)));
+                    if resp.hovered() {
+                        tip = Some((r.center().x, "Stroke position"));
+                    }
+                    if resp.clicked() {
+                        set_pop = if pop == 5 { 0 } else { 5 };
                     }
                 }
                 Seg::Align => {
@@ -808,6 +841,50 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 }
             }
         }
+        // Stroke position dropdown
+        let k5 = ctx.animate_bool_with_time(bid.with("k5"), pop == 5, 0.22 * anim_k());
+        if k5 > 0.001 {
+            let pk = p.clone();
+            let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
+            let slide = (1.0 - ez(k5)) * -8.0;
+            let rows_def: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
+            let n = rows_def.len();
+            let ph = n as f32 * 26.0 + 8.0;
+            let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
+            let sg = if up { -1.0 } else { 1.0 };
+            let top = if up { bar.min.y - 6.0 - ph } else { bar.max.y + 6.0 } + slide * sg;
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave5"), bar.center().x - 55.0, top + n as f32 * 26.0 + 8.0, 110.0, 26.0, n, &[]);
+            let dy = top - pr.min.y;
+            let pr = pr.translate(vec2(0.0, dy));
+            if pop != 0 {
+                pop_rect = pr.expand2(vec2(14.0, 0.0));
+            }
+            if pop == 5 {
+                ui.interact(pr, bid.with("pop5"), Sense::click());
+            }
+            let mut p = pk.clone();
+            p.multiply_opacity(ez(k5));
+            p.rect_filled(pr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
+            glass(&p, pr, 10.0, 1.0);
+            p.rect_stroke(pr, 10.0, EStroke::new(1.0_f32, border()));
+            for (i, (name, v)) in rows_def.iter().enumerate() {
+                let rk = ez(k5 * 1.5 - i as f32 * 0.12);
+                let (rr, wm) = (rows[i].translate(vec2(0.0, dy - sg * (1.0 - rk) * 10.0)), mags[i]);
+                let mut p = pk.clone();
+                p.multiply_opacity(ez(k5) * rk);
+                let resp = ui.interact(rr, bid.with(("spos", i)), Sense::click());
+                let cur = *v == stroke_pos;
+                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                let k = 1.0 + 0.14 * wm;
+                let col = if cur { blue() } else { mix(TEXT_DIM, TEXT, wm) };
+                stroke_pos_icon(&p, pos2(rr.min.x + 16.0, rr.center().y), k, col, *v);
+                p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
+                if pop == 5 && resp.clicked() {
+                    acts.push(Act::StrokePos(*v));
+                    set_pop = 0;
+                }
+            }
+        }
         if pop != 0 && set_pop == pop && started {
             let q = ui.input(|i| i.pointer.interact_pos());
             if !q.is_some_and(|q| bar.contains(q) || pop_rect.contains(q)) {
@@ -856,4 +933,16 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
         }
     }
+}
+
+/// Square with a thick edge sitting inside / on / outside a thin outline
+fn stroke_pos_icon(p: &egui::Painter, c: Pos2, k: f32, col: Color32, pos: u8) {
+    let r = Rect::from_center_size(c, vec2(10.0, 10.0) * k);
+    p.rect_stroke(r, 1.5, EStroke::new(1.0_f32, col.gamma_multiply(0.45)));
+    let thick = match pos {
+        1 => r.shrink(2.0 * k),
+        2 => r.expand(1.0 * k),
+        _ => r.shrink(0.5 * k),
+    };
+    p.rect_stroke(thick, 1.5, EStroke::new(1.6_f32, col));
 }

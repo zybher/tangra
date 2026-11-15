@@ -9,9 +9,14 @@ impl App {
                 let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Group).map(|s| s.1.clone()).collect();
                 if !ids.is_empty() {
                     self.snapshot();
-                    for g in self.board.group_cards.iter_mut().filter(|g| ids.contains(&g.id)) {
-                        g.height = (g.width / ratio).round();
-                    }
+                    let moves: Vec<(Sel, [f32; 4])> = self
+                        .board
+                        .group_cards
+                        .iter()
+                        .filter(|g| ids.contains(&g.id))
+                        .map(|g| ((Kind::Group, g.id.clone()), [g.x, g.y, g.width, (g.width / ratio).round()]))
+                        .collect();
+                    self.glide_to(moves);
                 }
             }
             // Arrange "None": stop auto-layout, leave everything where it is

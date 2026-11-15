@@ -256,6 +256,7 @@ impl App {
             self.board.parents.insert(t.clone(), id.clone());
         }
         let n = targets.len();
+        eprintln!("[frame_selection] made {id} in {:?} around {n} -> {} frames", self.board.parents.get(&id), self.board.group_cards.len());
         self.select_only((Kind::Group, id));
         self.mark_dirty();
         self.toast(format!("Framed {n} object{}", if n == 1 { "" } else { "s" }));

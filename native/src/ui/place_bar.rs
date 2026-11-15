@@ -83,7 +83,10 @@ impl App {
         let sbid0 = egui::Id::new("qd_style_bar");
         let style_up = !ctx.data(|d| d.get_temp::<String>(sbid0.with("on"))).unwrap_or_default().is_empty()
             && !ctx.data(|d| d.get_temp::<bool>(sbid0.with("closing"))).unwrap_or(false);
-        let in_frame = self.share_frame(&targets) && !style_up;
+        let framed = self.share_frame(&targets);
+        // A picture on its own (no frame) gets a short bar too: opacity + corners
+        let free_img = !framed && matches!(targets.as_slice(), [(Kind::Image, _)]);
+        let in_frame = (framed && !style_up) || free_img;
         let alt = ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed) && matches!(self.drag, Drag::None);
         let cm_open = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_cm_open"))).unwrap_or(false);
         let item = if targets.len() == 1 { self.rect_of(targets[0].0, &targets[0].1) } else { self.place_bounds(&targets) };
@@ -128,7 +131,9 @@ impl App {
             Seg::Div,
             Seg::Opacity,
         ];
-        if single_img {
+        if free_img {
+            segs = vec![Seg::Opacity, Seg::Corner];
+        } else if single_img {
             segs.extend([Seg::Corner, Seg::Div, Seg::Fill(true), Seg::Fill(false)]);
         }
         if targets.len() >= 3 {
@@ -298,7 +303,7 @@ impl App {
             let pb = p.clone();
             let tf = move |q: Pos2| pos2(q.x * sc + tv.x, q.y * sc + tv.y);
             let tr = move |rr: Rect| Rect::from_min_max(tf(rr.min), tf(rr.max));
-            let pl = p.clone().with_layer_id(lid);
+            let pl = p.clone().with_layer_id(lid).with_clip_rect(Rect::from_min_max(pos2(rect.min.x + crate::ui::outline::hud_shift(&ctx), -1e6), pos2(1e6, 1e6)));
             if ca <= 0.0 {
                 continue;
             }

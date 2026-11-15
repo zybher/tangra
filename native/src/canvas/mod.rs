@@ -2,6 +2,7 @@ mod input;
 mod paint;
 mod size_pills;
 mod hit_test;
+mod scope_pick;
 mod textures;
 pub(crate) mod geometry;
 pub(crate) use geometry::*;
