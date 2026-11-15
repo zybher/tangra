@@ -691,6 +691,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ui::scale::update_ui_scale(ctx);
         self.now = ctx.input(|i| i.time);
+        self.tick_glides(ctx);
         self.stamp_parents();
         if matches!(self.drag, Drag::None) {
             let mut auto = Vec::new();

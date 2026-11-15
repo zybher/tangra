@@ -52,15 +52,15 @@ impl App {
         matches!(targets, [(Kind::Image, id)] if self.parent_of(id).is_some_and(|p| self.board.group_cards.iter().any(|g| g.id == p && g.layout > 0)))
     }
 
-    /// Move an object by (dx, dy); a frame brings everything inside it
-    fn nudge_tree(&mut self, k: Kind, id: &str, dx: f32, dy: f32) {
+    /// New boxes for an object moved by (dx, dy); a frame brings everything inside it
+    fn tree_moves(&self, k: Kind, id: &str, dx: f32, dy: f32, out: &mut Vec<(Sel, [f32; 4])>) {
         let mut all = vec![(k, id.to_string())];
         if k == Kind::Group {
             all.extend(self.descendants(id));
         }
-        for (kd, i) in all {
-            if let Some([x, y, w, h]) = self.rect_of(kd, &i) {
-                self.set_rect(kd, &i, [x + dx, y + dy, w, h]);
+        for s in all {
+            if let Some([x, y, w, h]) = self.rect_of(s.0, &s.1) {
+                out.push((s, [x + dx, y + dy, w, h]));
             }
         }
     }
@@ -71,32 +71,31 @@ impl App {
             return;
         }
         let Some(f) = self.place_bounds(&targets) else { return };
-        let moves: Vec<(Sel, f32, f32)> = targets
-            .iter()
-            .filter_map(|s| {
-                let r = self.rect_of(s.0, &s.1)?;
-                let (dx, dy) = match how {
-                    Align::Left => (f[0] - r[0], 0.0),
-                    Align::HCenter => (f[0] + (f[2] - r[2]) / 2.0 - r[0], 0.0),
-                    Align::Right => (f[0] + f[2] - r[2] - r[0], 0.0),
-                    Align::Top => (0.0, f[1] - r[1]),
-                    Align::VCenter => (0.0, f[1] + (f[3] - r[3]) / 2.0 - r[1]),
-                    Align::Bottom => (0.0, f[1] + f[3] - r[3] - r[1]),
-                };
-                (dx.abs() + dy.abs() > 0.01).then(|| (s.clone(), dx, dy))
-            })
-            .collect();
+        let mut moves = Vec::new();
+        for s in &targets {
+            let Some(r) = self.rect_of(s.0, &s.1) else { continue };
+            let (dx, dy) = match how {
+                Align::Left => (f[0] - r[0], 0.0),
+                Align::HCenter => (f[0] + (f[2] - r[2]) / 2.0 - r[0], 0.0),
+                Align::Right => (f[0] + f[2] - r[2] - r[0], 0.0),
+                Align::Top => (0.0, f[1] - r[1]),
+                Align::VCenter => (0.0, f[1] + (f[3] - r[3]) / 2.0 - r[1]),
+                Align::Bottom => (0.0, f[1] + f[3] - r[3] - r[1]),
+            };
+            if dx.abs() + dy.abs() > 0.01 {
+                self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
+            }
+        }
         if moves.is_empty() {
             return;
         }
         self.snapshot();
-        for ((k, id), dx, dy) in moves {
-            self.nudge_tree(k, &id, dx, dy);
-        }
-        self.mark_dirty();
+        self.glide_to(moves);
     }
 
-    /// Even gaps between 3+ objects, keeping the first and last where they are
+    /// Even gaps between 3+ objects, keeping the outer ones where they are. Objects are split
+    /// into lanes first (rows for spacing across, columns for spacing down), so a grid gets
+    /// even gaps in every row instead of piling up.
     pub(crate) fn distribute_selection(&mut self, horizontal: bool) {
         let targets = self.place_targets();
         let mut rs: Vec<(Sel, [f32; 4])> = targets.into_iter().filter_map(|s| self.rect_of(s.0, &s.1).map(|r| (s, r))).collect();
@@ -104,23 +103,50 @@ impl App {
             return;
         }
         let a = if horizontal { 0 } else { 1 };
-        rs.sort_by(|x, y| x.1[a].total_cmp(&y.1[a]));
-        let start = rs[0].1[a];
+        let c = 1 - a;
+        // Outer edges along the spacing axis (shared by every lane, so columns line up)
+        let start = rs.iter().map(|(_, r)| r[a]).fold(f32::MAX, f32::min);
         let end = rs.iter().map(|(_, r)| r[a] + r[a + 2]).fold(f32::MIN, f32::max);
-        let total: f32 = rs.iter().map(|(_, r)| r[a + 2]).sum();
-        let gap = (end - start - total) / (rs.len() - 1) as f32;
-        self.snapshot();
-        let mut at = start;
-        for ((k, id), r) in rs {
-            let d = at - r[a];
-            if horizontal {
-                self.nudge_tree(k, &id, d, 0.0);
-            } else {
-                self.nudge_tree(k, &id, 0.0, d);
+        // Lanes: objects whose cross-axis centre falls inside the lane's span so far
+        rs.sort_by(|x, y| x.1[c].total_cmp(&y.1[c]));
+        let mut lanes: Vec<(f32, Vec<(Sel, [f32; 4])>)> = Vec::new();
+        for it in rs {
+            let mid = it.1[c] + it.1[c + 2] / 2.0;
+            match lanes.last_mut() {
+                Some((lane_hi, l)) if mid < *lane_hi => {
+                    *lane_hi = lane_hi.max(it.1[c] + it.1[c + 2]);
+                    l.push(it);
+                }
+                _ => lanes.push((it.1[c] + it.1[c + 2], vec![it])),
             }
-            at += r[a + 2] + gap;
         }
-        self.mark_dirty();
+        let single_lane = lanes.len() == 1;
+        let mut moves = Vec::new();
+        for (_, mut lane) in lanes {
+            if lane.len() < 2 || (single_lane && lane.len() < 3) {
+                continue;
+            }
+            lane.sort_by(|x, y| x.1[a].total_cmp(&y.1[a]));
+            let total: f32 = lane.iter().map(|(_, r)| r[a + 2]).sum();
+            let gap = (end - start - total) / (lane.len() - 1) as f32;
+            let mut at = start;
+            for ((k, id), r) in lane {
+                let d = at - r[a];
+                if d.abs() > 0.01 {
+                    if horizontal {
+                        self.tree_moves(k, &id, d, 0.0, &mut moves);
+                    } else {
+                        self.tree_moves(k, &id, 0.0, d, &mut moves);
+                    }
+                }
+                at += r[a + 2] + gap;
+            }
+        }
+        if moves.is_empty() {
+            return;
+        }
+        self.snapshot();
+        self.glide_to(moves);
     }
 
     /// One image: scale it to cover its frame (keeping its shape), centred; the frame crops the rest
@@ -139,9 +165,7 @@ impl App {
             return;
         }
         self.snapshot();
-        let id = id.clone();
-        self.set_rect(Kind::Image, &id, nr);
-        self.mark_dirty();
+        self.glide_to(vec![((Kind::Image, id.clone()), nr)]);
     }
 
     /// Set the opacity of every selected object (no undo step: the caller snapshots once per drag)
@@ -178,10 +202,7 @@ impl App {
             return;
         }
         self.snapshot();
-        for (f, b) in fits {
-            self.set_rect(Kind::Group, &f, b);
-        }
-        self.mark_dirty();
+        self.glide_to(fits.into_iter().map(|(f, b)| ((Kind::Group, f), b)).collect());
     }
 
     /// Wrap the selection in a new frame (Figma's Ctrl+Alt+G). The new frame takes the place
