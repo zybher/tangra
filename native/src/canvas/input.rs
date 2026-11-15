@@ -734,7 +734,7 @@ impl App {
             let title_hit = wp.and_then(|p| {
                 let z = v.cam.zoom.max(0.01);
                 self.board.group_cards.iter().rev().find(|g| {
-                    let th = (FRAME_TITLE_PX + 14.0 + g.border.unwrap_or(1.0) / 2.0) / z;
+                    let th = (FRAME_TITLE_PX + 14.0 + g.border.unwrap_or(1.0) * z / 2.0) / z;
                     let pad = 4.0 / z;
                     p.x >= g.x - pad && p.x <= g.x + g.width + pad && p.y >= g.y - th && p.y <= g.y + pad
                 })

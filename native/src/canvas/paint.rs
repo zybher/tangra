@@ -120,7 +120,8 @@ impl App {
                     p.rect_filled(r, fr, fill_color);
                 }
             }
-            let bw = c.border.unwrap_or(1.0);
+            // Stroke is in world units: it scales with the zoom like the frame itself
+            let bw = c.border.unwrap_or(1.0) * z;
             // Stroke position: inside keeps the frame's size, outside grows past it
             let (sr, sfr) = match c.stroke_pos {
                 1 => (r.shrink(bw / 2.0), (fr - bw / 2.0).max(0.0)),

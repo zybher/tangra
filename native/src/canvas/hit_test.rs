@@ -218,7 +218,7 @@ impl App {
                 if self.board.hidden.contains(&g.id) || self.board.locked.contains(&g.id) {
                     return false;
                 }
-                let th = (FRAME_TITLE_PX + 14.0 + g.border.unwrap_or(1.0) / 2.0) / z;
+                let th = (FRAME_TITLE_PX + 14.0 + g.border.unwrap_or(1.0) * z / 2.0) / z;
                 p.x >= g.x && p.x <= g.x + g.width && p.y >= g.y - th && p.y <= g.y
             })
             .map(|g| (Kind::Group, g.id.clone()))

@@ -27,7 +27,7 @@ impl App {
                 let size = FRAME_TITLE_PX;
                 let col = TEXT;
                 let row = ctx.fonts(|f| f.row_height(&semibold(size)));
-                let bw = g.border.unwrap_or(1.0);
+                let bw = g.border.unwrap_or(1.0) * z;
                 (v.s(g.x, g.y) + vec2(5.0, -5.0 - row - bw / 2.0), size, col, 0)
             }),
             EditTarget::WorldText(id) => self.board.world_texts.iter().find(|t| &t.id == id).map(|t| {

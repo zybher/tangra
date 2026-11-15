@@ -205,7 +205,6 @@ impl App {
         out
     }
 
-    /// World-space clip box per object: the overlap of every clipping frame around it
     /// How far in (world units) a frame crops its contents: to the inner edge of its stroke,
     /// tucked half a pixel under it so no seam shows
     pub(crate) fn clip_inset(&self, g: &Group) -> f32 {
@@ -215,7 +214,8 @@ impl App {
             2 => 0.0,
             _ => bw / 2.0,
         };
-        (px - 0.5).max(0.0) / self.board.camera.zoom.max(0.0001)
+        // stroke is in world units; the half-pixel tuck is on screen
+        (px - 0.5 / self.board.camera.zoom.max(0.0001)).max(0.0)
     }
 
     /// A clipping frame's crop box (world): its rect pulled in to the stroke's inner edge
@@ -224,6 +224,7 @@ impl App {
         [g.x + i, g.y + i, (g.width - 2.0 * i).max(0.0), (g.height - 2.0 * i).max(0.0)]
     }
 
+    /// World-space clip box per object: the overlap of every clipping frame around it
     pub(crate) fn clip_boxes(&self) -> HashMap<String, [f32; 4]> {
         let frames: HashMap<&str, &Group> = self.board.group_cards.iter().map(|g| (g.id.as_str(), g)).collect();
         let mut out = HashMap::new();

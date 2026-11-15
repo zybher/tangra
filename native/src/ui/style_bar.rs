@@ -402,6 +402,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                             liquid_fill(&pb, tr(r), 8.0 * sc, lvl, ctx.input(|i| i.time) as f32 + 2.0);
                         }
                         hh = hh.max(lq);
+                        // keep the surface moving while the pointer rests on it
+                        if lq > 0.001 {
+                            ctx.request_repaint();
+                        }
                     }
                     let ic = pos2(r.min.x + 14.0, cyy);
                     let st = EStroke::new(1.3_f32, if icon == 3 { mix(TEXT_DIM, Color32::WHITE, hh) } else { mix(TEXT_DIM, TEXT, hh) }.gamma_multiply(ca));

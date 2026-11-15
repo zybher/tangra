@@ -272,6 +272,9 @@ impl App {
             (g.x, g.y, g.width, g.height) = (b[0], b[1], b[2], b[3]);
             g.title = "Frame".into();
             g.clip = true;
+            // Plain wrapper: no fill, square corners
+            g.color = "none".into();
+            g.corner = Some(0.0);
         }
         self.board.parents.insert(id.clone(), home);
         for (_, t) in &targets {
