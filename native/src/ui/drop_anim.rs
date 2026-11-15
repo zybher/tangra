@@ -76,7 +76,7 @@ impl DropAnim {
         let target = [pr.min.x, pr.width(), far];
         let gid = self.id.with("glide");
         let pass = ctx.cumulative_pass_nr();
-        let (mut cur, last): ([f32; 3], u64) = ctx.data(|d| d.get_temp(gid)).unwrap_or((target, pass));
+        let (mut cur, last): ([f32; 3], u64) = ctx.data(|d| d.get_temp(gid)).unwrap_or((target, pass.wrapping_sub(1)));
         if last != pass {
             let dt = ctx.input(|i| i.stable_dt).min(0.05);
             // A fresh open starts in place; only a switch glides (as the toolbar menu)
