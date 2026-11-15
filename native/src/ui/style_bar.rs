@@ -332,8 +332,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     let lq = ctx.animate_bool_with_time(bid.with(("liquid", 1)), on, 0.5 * anim_k());
                     pb.rect_filled(tr(r), 8.0 * sc, Color32::from_white_alpha((22.0 * lq * ca) as u8));
                     let _ = hh;
-                    let col = if color.is_empty() { TEXT_DIM } else { hex(&color) };
-                    p.circle_filled(r.center(), 7.0, col.gamma_multiply(ca));
+                    let col = if color.is_empty() || color.eq_ignore_ascii_case("none") { TEXT_DIM } else { hex(&color) };
+                    if color.eq_ignore_ascii_case("none") {
+                        // No fill: an empty swatch with a red slash
+                        p.line_segment([r.center() + vec2(-4.9, 4.9), r.center() + vec2(4.9, -4.9)], EStroke::new(1.5_f32, hex("#ef4444").gamma_multiply(ca)));
+                    } else {
+                        p.circle_filled(r.center(), 7.0, col.gamma_multiply(ca));
+                    }
                     p.circle_stroke(r.center(), 7.0, EStroke::new(1.0_f32, Color32::from_white_alpha((60.0 * ca) as u8)));
                     if resp.hovered() {
                         tip = Some((r.center().x, "Colour"));
@@ -496,7 +501,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let pk = p.clone();
             let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
             let slide = (1.0 - ez(k1)) * -8.0;
-            let n = PEN_COLORS.len() + 1;
+            // Frames get a last row, "No fill" (just the outline and title)
+            let n = PEN_COLORS.len() + 1 + is_group as usize;
             let ph = n as f32 * 26.0 + 8.0;
             let up = bar.max.y + 6.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
@@ -530,6 +536,12 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     let c = PEN_COLORS[i];
                     p.circle_filled(dot, 6.0 * k, hex(c));
                     (c.trim_start_matches('#').to_uppercase(), color.eq_ignore_ascii_case(c))
+                } else if i == PEN_COLORS.len() + 1 {
+                    // an empty ring with a slash
+                    let r = 6.0 * k;
+                    p.circle_stroke(dot, r, EStroke::new(1.5_f32, TEXT_DIM));
+                    p.line_segment([dot + vec2(-r, r) * 0.7, dot + vec2(r, -r) * 0.7], EStroke::new(1.5_f32, hex("#ef4444")));
+                    ("No fill".to_string(), color.eq_ignore_ascii_case("none"))
                 } else {
                     // a four-colour ring for "custom"
                     for (j, c) in ["#ef4444", "#eab308", "#22c55e", "#3b82f6"].iter().enumerate() {
@@ -537,7 +549,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         let pts: Vec<Pos2> = (0..=6).map(|t| dot + 6.0 * k * vec2((a0 + t as f32 * 0.26).cos(), (a0 + t as f32 * 0.26).sin())).collect();
                         p.add(egui::Shape::line(pts, EStroke::new(2.0_f32, hex(c))));
                     }
-                    ("Custom".to_string(), custom_on || (!in_list && !color.is_empty()))
+                    ("Custom".to_string(), custom_on || (!in_list && !color.is_empty() && !color.eq_ignore_ascii_case("none")))
                 };
                 if on {
                     p.circle_stroke(dot, 9.0 * k, EStroke::new(1.2_f32, Color32::WHITE));
@@ -547,6 +559,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     if i < PEN_COLORS.len() {
                         let c = PEN_COLORS[i];
                         acts.push(if is_group { Act::GroupColor(c.to_string()) } else { Act::Color(c.to_string()) });
+                    } else if i == PEN_COLORS.len() + 1 {
+                        acts.push(Act::GroupColor("none".to_string()));
                     } else {
                         ctx.data_mut(|d| d.insert_temp(cid, !custom_on));
                     }
@@ -557,7 +571,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let kc = ctx.animate_bool_with_time(cid.with("k"), pop == 1 && custom_on, 0.3 * anim_k().max(1e-3));
             if kc > 0.001 {
                 let live = pop == 1 && custom_on;
-                let mut c = if color.is_empty() { Color32::GRAY } else { hex(&color) };
+                let mut c = if color.is_empty() || color.eq_ignore_ascii_case("none") { Color32::GRAY } else { hex(&color) };
                 let at = pos2(pr.max.x + 8.0, if up { pr.max.y - 290.0 } else { pr.min.y });
                 let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
                 let ir = egui::Area::new(bid.with("cpick")).order(egui::Order::Foreground).fixed_pos(at).interactable(live).show(&ctx, |ui| {

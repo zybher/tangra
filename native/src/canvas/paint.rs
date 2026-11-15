@@ -79,7 +79,10 @@ impl App {
             // A solid panel with its title above it; the old default slate counts as "no colour"
             let panel = Color32::from_rgb(36, 36, 36);
             let custom = !c.color.is_empty() && !c.color.eq_ignore_ascii_case("#1e293b");
-            let (fill_color, stroke_color, title_color) = if custom {
+            let (fill_color, stroke_color, title_color) = if c.color.eq_ignore_ascii_case("none") {
+                // No fill: only the outline (and title) show
+                (Color32::TRANSPARENT, Color32::from_white_alpha(48), FRAME_TITLE_COL)
+            } else if custom {
                 let [cr, cg, cb] = hex_rgb(&c.color);
                 // The frame is the colour picked; the title keeps the neutral grey
                 let c = rgba(cr, cg, cb, 255);
