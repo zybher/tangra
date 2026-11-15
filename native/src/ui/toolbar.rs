@@ -99,13 +99,13 @@ impl App {
             let resp = ui.allocate_rect(r, Sense::click());
             let (hv, pr) = hover_fx(ui.ctx(), &resp, true);
             let on = ease(ui.ctx(), resp.id.with("on"), tool.is_some() && tool == Some(self.tool));
-            if m > 0.01 && on < 0.99 {
-                // a soft lifted tile behind the swelling button
+            if m > 0.01 {
+                // a soft lifted tile behind the swelling button; stays as the base the
+                // liquid fills when it's picked
                 p.rect_filled(r.translate(vec2(0.0, 3.0 * m)), 10.0, Color32::from_black_alpha((60.0 * m) as u8));
                 p.rect_filled(r, 10.0, mix(frame_bg(), Color32::from_gray(90), 0.22).gamma_multiply(m));
-                p.rect_stroke(r, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(m)));
             }
-            p.rect_filled(r, 8.0 + 2.0 * m, hover_fill(hv * (1.0 - on), pr));
+            p.rect_filled(r, 8.0 + 2.0 * m, hover_fill(hv, pr));
             let lq = ui.ctx().animate_bool_with_time(resp.id.with("liquid"), tool.is_some() && tool == Some(self.tool), 0.5 * anim_k());
             let lq = lq * lq * (3.0 - 2.0 * lq);
             if lq >= 0.999 {

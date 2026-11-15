@@ -162,8 +162,7 @@ pub(crate) fn hand_cursor(ctx: &egui::Context, at: Pos2, closed: bool) {
     }
 }
 
-/// Blue rising like liquid in a rounded tile: a wavy surface (calm when full or empty),
-/// a light crest along the top and a darker body below
+/// Blue rising like liquid in a rounded tile: a wavy surface (calm when full or empty)
 pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time: f32) {
     let n = 28;
     let rad = rad.min(r.width() / 2.0).min(r.height() / 2.0);
@@ -174,10 +173,7 @@ pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time
         let d = (x - r.min.x).min(r.max.x - x);
         if d >= rad { 0.0 } else { rad - (rad * rad - (rad - d) * (rad - d)).max(0.0).sqrt() }
     };
-    let deep = Color32::from_rgb(38, 98, 214);
-    let light = mix(blue(), Color32::WHITE, 0.25);
     let mut mesh = egui::epaint::Mesh::default();
-    let mut crest = Vec::with_capacity(n + 1);
     for i in 0..=n {
         let x = r.min.x + r.width() * i as f32 / n as f32;
         let u = i as f32 / n as f32;
@@ -185,8 +181,6 @@ pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time
         let inset = edge(x);
         let bot = r.max.y - inset;
         let top = (base + wave).max(r.min.y + inset).min(bot);
-        let t = ((bot - top) / r.height()).clamp(0.0, 1.0);
-        let _ = (t, deep);
         mesh.colored_vertex(pos2(x, top), blue());
         mesh.colored_vertex(pos2(x, bot), blue());
         if i > 0 {
@@ -194,14 +188,8 @@ pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time
             mesh.add_triangle(j - 2, j - 1, j);
             mesh.add_triangle(j - 1, j + 1, j);
         }
-        if top < bot - 0.5 {
-            crest.push(pos2(x, top));
-        }
     }
     p.add(egui::Shape::mesh(mesh));
-    if crest.len() > 1 {
-        p.add(egui::Shape::line(crest, EStroke::new(1.2_f32, light.gamma_multiply((1.0 - level).min(1.0) * 0.9 + 0.1))));
-    }
 }
 
 /// A frame's corner radius in world units (old frames: rounded unless set to square)
