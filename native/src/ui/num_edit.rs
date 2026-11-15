@@ -122,9 +122,11 @@ impl NumEdit {
         }
         match &st {
             Some(s) => {
+                // (read outside data_mut: the context lock isn't re-entrant)
+                let pass = ctx.cumulative_pass_nr();
                 ctx.data_mut(|d| {
                     d.insert_temp(sid, s.clone());
-                    d.insert_temp(act_id(), ctx.cumulative_pass_nr());
+                    d.insert_temp(act_id(), pass);
                 });
                 ctx.request_repaint();
             }
