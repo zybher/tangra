@@ -696,11 +696,14 @@ impl App {
                             if let Some(q) = ptr {
                                 let vr = ui.clip_rect();
                                 let edge = 36.0;
-                                let up = (vr.min.y + edge - q.y).clamp(0.0, edge * 2.0);
-                                let down = (q.y - (vr.max.y - edge)).clamp(0.0, edge * 2.0);
+                                // Depth past the edge zone (keeps growing when the cursor leaves the
+                                // list): just inside is a crawl, far out races
+                                let up = (vr.min.y + edge - q.y).clamp(0.0, 300.0);
+                                let down = (q.y - (vr.max.y - edge)).clamp(0.0, 300.0);
                                 if up > 0.0 || down > 0.0 {
                                     let dt = ctx.input(|i| i.stable_dt).min(0.05);
-                                    ui.scroll_with_delta(vec2(0.0, (up - down) * 14.0 * dt));
+                                    let speed = |d: f32| if d > 0.0 { 40.0 + 6.0 * d + 0.1 * d * d } else { 0.0 };
+                                    ui.scroll_with_delta(vec2(0.0, (speed(up) - speed(down)) * dt));
                                 }
                             }
                             if ctx.input(|i| i.pointer.any_released() || !i.pointer.any_down()) {
