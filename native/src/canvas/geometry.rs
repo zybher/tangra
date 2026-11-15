@@ -28,6 +28,42 @@ pub(crate) fn stroke_hit(s: &Stroke, p: Pt, r: f32) -> bool {
 pub(crate) static CTX: std::sync::OnceLock<egui::Context> = std::sync::OnceLock::new();
 
 /// Real size of a piece of text at `fs`, measured with the font (falls back to an estimate).
+/// Marquee test on the line itself: some segment of the stroke enters the box (widened by
+/// half the line width), not just its bounding box
+pub(crate) fn stroke_in_box(s: &Stroke, b: [f32; 4]) -> bool {
+    let hw = s.width / 2.0;
+    let (x0, y0, x1, y1) = (b[0] - hw, b[1] - hw, b[0] + b[2] + hw, b[1] + b[3] + hw);
+    let ins = |p: &Pt| p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+    // Liang–Barsky clip: does segment a→b cross the box?
+    let crosses = |a: &Pt, c: &Pt| {
+        let (dx, dy) = (c.x - a.x, c.y - a.y);
+        let (mut t0, mut t1) = (0.0_f32, 1.0_f32);
+        for (pp, q) in [(-dx, a.x - x0), (dx, x1 - a.x), (-dy, a.y - y0), (dy, y1 - a.y)] {
+            if pp == 0.0 {
+                if q < 0.0 {
+                    return false;
+                }
+            } else {
+                let r = q / pp;
+                if pp < 0.0 {
+                    t0 = t0.max(r);
+                } else {
+                    t1 = t1.min(r);
+                }
+                if t0 > t1 {
+                    return false;
+                }
+            }
+        }
+        true
+    };
+    match s.points.as_slice() {
+        [] => false,
+        [p] => ins(p),
+        pts => pts.windows(2).any(|w| crosses(&w[0], &w[1])),
+    }
+}
+
 pub(crate) fn text_wh(text: &str, fs: f32) -> (f32, f32) {
     let fs = fs.max(8.0);
     match CTX.get() {

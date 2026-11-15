@@ -293,7 +293,13 @@ impl App {
             }
         }
         for s in &b.world_strokes {
-            if pts_bbox(&s.points).is_some_and(|r| rects_intersect(box_r, r)) {
+            // Filled shapes count by area; lines only when the box actually touches the line
+            let hit = if s.fill && s.closed_len().is_some() {
+                pts_bbox(&s.points).is_some_and(|r| rects_intersect(box_r, r))
+            } else {
+                stroke_in_box(s, box_r)
+            };
+            if hit {
                 hits.push((Kind::Stroke, s.id.clone()));
             }
         }
