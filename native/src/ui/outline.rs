@@ -703,7 +703,9 @@ impl App {
                                 if up > 0.0 || down > 0.0 {
                                     let dt = ctx.input(|i| i.stable_dt).min(0.05);
                                     let speed = |d: f32| if d > 0.0 { 40.0 + 6.0 * d + 0.1 * d * d } else { 0.0 };
-                                    ui.scroll_with_delta(vec2(0.0, (speed(up) - speed(down)) * dt));
+                                    // Unanimated: egui's default eases every nudge, and a new ease each frame
+                                    // ate most of the motion (slow and jittery)
+                                    ui.scroll_with_delta_animation(vec2(0.0, (speed(up) - speed(down)) * dt), egui::style::ScrollAnimation::none());
                                 }
                             }
                             if ctx.input(|i| i.pointer.any_released() || !i.pointer.any_down()) {
