@@ -375,3 +375,17 @@ pub(crate) fn font(size: f32) -> Option<FontId> {
     let s = (size * 2.0).round() / 2.0;
     (s >= 5.0).then(|| FontId::proportional(s.min(200.0)))
 }
+
+/// Text on a magnified bar segment, kept sharp: drawn at the swollen size on its own layer and
+/// scaled down to the segment's current size (scaling small glyphs up is what blurred them).
+/// `pl` is the segment's scaled painter (layer transform `tv`, `sc`); `pos` in its coordinates.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn zoom_text(pl: &egui::Painter, tv: egui::Vec2, sc: f32, pos: Pos2, align: Align2, text: impl ToString, size: f32, col: Color32) {
+    const S: f32 = 1.25;
+    let lid = pl.layer_id();
+    let tid = egui::LayerId::new(lid.order, lid.id.with("ztxt"));
+    pl.ctx().set_transform_layer(tid, egui::emath::TSTransform::new(tv, sc / S));
+    let c = pl.clip_rect();
+    let p = pl.clone().with_layer_id(tid).with_clip_rect(Rect::from_min_max(pos2(c.min.x * S, c.min.y * S), pos2(c.max.x * S, c.max.y * S)));
+    p.text(pos2(pos.x * S, pos.y * S), align, text.to_string(), FontId::proportional(size * S), col);
+}

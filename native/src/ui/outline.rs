@@ -247,38 +247,55 @@ impl App {
         if let Some(r) = &root {
             ctx.data_mut(|d| d.insert_temp(rid, r.clone()));
         }
-        // Collapsed: a small tab (logo placeholder) stays at the top-left; click or L to expand
         let tk = ease(ctx, egui::Id::new("qd_outline_tab"), closed && self.edit.is_none());
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_tabk"), tk));
-        if tk > 0.01 {
+        let k = ease(ctx, egui::Id::new("qd_outline_k_ease"), show);
+        ctx.data_mut(|d| d.insert_temp(kid(), k));
+        // One shape morphs between the collapsed tab and the open panel (same top-left corner):
+        // `m` 0 = tab, 1 = panel. The panel's rows fade out before it shrinks, the tab's
+        // logo fades in once it has nearly closed (and the reverse on the way out).
+        let m = if k + tk > 1e-4 { (k / (k + tk)).clamp(0.0, 1.0) } else { 0.0 };
+        let pa = ((m - 0.45) / 0.55).clamp(0.0, 1.0) * k.min(1.0);
+        if k > 0.01 || tk > 0.01 {
+            let tab = Rect::from_min_size(pos2(canvas.min.x, canvas.min.y + 10.0), vec2(TAB_W, 40.0));
+            let full = vec2(width(), (canvas.height() - 20.0).max(120.0));
+            let lerp = |a: f32, b: f32| a + (b - a) * m;
+            let shape = Rect::from_min_size(tab.min, vec2(lerp(tab.width(), full.x), lerp(tab.height(), full.y)));
+            let rr = lerp(12.0, 10.0);
+            let rnd = Rounding { nw: 0.0, sw: 0.0, ne: rr, se: rr };
+            let al = (k + tk).min(1.0);
+            let ta = ((0.55 - m) / 0.55).clamp(0.0, 1.0) * tk.min(1.0);
             egui::Area::new(egui::Id::new("qd_outline_tab_area"))
                 .order(egui::Order::Middle)
-                .fixed_pos(pos2(canvas.min.x - (1.0 - tk) * 14.0, canvas.min.y + 10.0))
+                .fixed_pos(tab.min)
                 .interactable(tk > 0.5)
                 .show(ctx, |ui| {
-                    ui.set_opacity(tk.clamp(0.0, 1.0));
+                    let p = ui.painter().clone().with_clip_rect(ctx.screen_rect());
+                    p.rect_filled(shape.translate(vec2(0.0, 3.0)), rnd, Color32::from_black_alpha((70.0 * al) as u8));
+                    p.rect_filled(shape, rnd, frame_bg().gamma_multiply(al));
+                    p.rect_stroke(shape, rnd, EStroke::new(1.0_f32, border().gamma_multiply(al)));
                     let (r, _) = ui.allocate_exact_size(vec2(TAB_W, 40.0), Sense::hover());
-                    let p = ui.painter();
-                    p.rect_filled(r.translate(vec2(0.0, 3.0)), Rounding { nw: 0.0, sw: 0.0, ne: 12.0, se: 12.0 }, Color32::from_black_alpha(70));
-                    p.rect_filled(r, Rounding { nw: 0.0, sw: 0.0, ne: 12.0, se: 12.0 }, frame_bg());
-                    p.rect_stroke(r, Rounding { nw: 0.0, sw: 0.0, ne: 12.0, se: 12.0 }, EStroke::new(1.0_f32, border()));
-                    paint_logo(p, pos2(r.min.x + 22.0, r.center().y), 18.0, 1.0);
-                    p.text(pos2(r.min.x + 40.0, r.center().y), Align2::LEFT_CENTER, "Tangra", FontId::proportional(13.0), Color32::from_gray(235));
+                    if ta > 0.01 {
+                        paint_logo(&p, pos2(r.min.x + 22.0, r.center().y), 18.0, ta);
+                        p.text(pos2(r.min.x + 40.0, r.center().y), Align2::LEFT_CENTER, "Tangra", FontId::proportional(13.0), Color32::from_gray(235).gamma_multiply(ta));
+                    }
                     let br = Rect::from_center_size(pos2(r.max.x - 22.0, r.center().y), vec2(26.0, 26.0));
-                    let resp = ui.interact(br, egui::Id::new("qd_outline_open"), Sense::click()).on_hover_text("Show outline  ·  L");
-                    let (h, pr) = hover_fx(ui.ctx(), &resp, true);
-                    p.rect_filled(br.expand(1.0 * h - pr), 7.0, hover_fill(h, pr));
-                    sidebar_glyph(p, br.center(), mix(TEXT_DIM, Color32::from_gray(235), h));
-                    if resp.clicked() {
-                        toggle_outline(ui.ctx());
+                    if tk > 0.5 {
+                        let resp = ui.interact(br, egui::Id::new("qd_outline_open"), Sense::click()).on_hover_text("Show outline  ·  L");
+                        let (h, pr) = hover_fx(ui.ctx(), &resp, true);
+                        p.rect_filled(br.expand(1.0 * h - pr), 7.0, hover_fill(h, pr).gamma_multiply(ta));
+                        sidebar_glyph(&p, br.center(), mix(TEXT_DIM, Color32::from_gray(235), h).gamma_multiply(ta));
+                        if resp.clicked() {
+                            toggle_outline(ui.ctx());
+                        }
+                    } else if ta > 0.01 {
+                        sidebar_glyph(&p, br.center(), TEXT_DIM.gamma_multiply(ta));
                     }
                 });
-            if tk < 0.999 {
+            if (k > 0.001 && k < 0.999) || (tk > 0.001 && tk < 0.999) {
                 ctx.request_repaint();
             }
         }
-        let k = ease(ctx, egui::Id::new("qd_outline_k_ease"), show);
-        ctx.data_mut(|d| d.insert_temp(kid(), k));
         if k <= 0.01 {
             return;
         }
@@ -354,7 +371,9 @@ impl App {
         }
 
         // Same reveal as the canvas popup: a short slide + fade, rows cascading in after the shell
-        let pos = pos2(canvas.min.x - (1.0 - k) * 16.0, canvas.min.y + 10.0);
+        let pos = pos2(canvas.min.x, canvas.min.y + 10.0);
+        // The panel's contents stay above the morphing shape (clicking the tab raises its layer)
+        ctx.memory_mut(|mm| mm.areas_mut().move_to_top(egui::LayerId::new(egui::Order::Middle, egui::Id::new("qd_outline"))));
         let h = (canvas.height() - 20.0).max(120.0);
         let mut pick: Option<Sel> = None;
         let mut toggle: Option<String> = None;
@@ -385,15 +404,14 @@ impl App {
             .fixed_pos(pos)
             .interactable(show)
             .show(ctx, |ui| {
-                ui.set_opacity(k.clamp(0.0, 1.0));
+                ui.set_opacity(pa);
                 #[allow(non_snake_case)]
                 let W = width();
                 let shell = Rect::from_min_size(pos, vec2(W, h));
                 // The properties section (props.rs) sits in this panel's lower part
                 let pass = ctx.cumulative_pass_nr();
-                ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_shell"), (shell, k, pass)));
-                ui.painter().rect_filled(shell.translate(vec2(0.0, 3.0)), Rounding { nw: 0.0, sw: 0.0, ne: 10.0, se: 10.0 }, Color32::from_black_alpha(70));
-                egui::Frame::none().fill(frame_bg()).stroke(EStroke::new(1.0_f32, border())).rounding(Rounding { nw: 0.0, sw: 0.0, ne: 10.0, se: 10.0 }).inner_margin(6.0).show(ui, |ui| {
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_shell"), (shell, pa, pass)));
+                egui::Frame::none().rounding(Rounding { nw: 0.0, sw: 0.0, ne: 10.0, se: 10.0 }).inner_margin(6.0).show(ui, |ui| {
                     ui.set_width(W - 12.0);
                     ui.set_height(h - 12.0);
                     // Header: title, scope switch, close

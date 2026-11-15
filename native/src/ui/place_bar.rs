@@ -376,7 +376,7 @@ impl App {
                     let hh = hh.max(lq);
                     super::icons::opacity(&pl, pos2(r.min.x + 14.0, cyy), 14.0, mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca));
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
-                    pl.text(pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}%", opacity as i32), FontId::proportional(12.0), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}%", opacity as i32), 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("v0"), opacity));
                     }
@@ -398,7 +398,7 @@ impl App {
                     let ic = pos2(r.min.x + 14.0, cyy);
                     let pts = vec![ic + vec2(-5.0, 6.0), ic + vec2(-5.0, -1.0), ic + vec2(-4.0, -4.0), ic + vec2(-1.0, -5.0), ic + vec2(6.0, -5.0)];
                     pl.add(egui::Shape::line(pts, EStroke::new(1.3_f32, col)));
-                    pl.text(pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}", corner as i32), FontId::proportional(12.0), mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
+                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, format!("{}", corner as i32), 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));
                     }
