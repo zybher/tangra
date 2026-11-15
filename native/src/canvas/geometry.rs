@@ -53,7 +53,9 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     let col = rgba(r, g, b, (o * 255.0) as u8);
     let pts: Vec<Pos2> = s.points.iter().map(|q| map(*q)).collect();
     let zk = width / s.width.max(0.01);
-    let width = width.max(0.6);
+    // No floor: a line keeps its size relative to the board at any zoom (too thin to draw
+    // just fades out instead of staying 1px wide)
+    let width = width.max(0.0);
     // Rectangle with rounded corners
     if let (Some(rad), Some(4)) = (s.radius.filter(|r| *r > 0.0), s.closed_len()) {
         let rr = Rect::from_points(&pts[..4]);
@@ -72,6 +74,12 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
         if s.no_stroke {
             return;
         }
+    }
+    // Rectangle / ellipse outline: one closed line with sharp joins (never smoothed: rounding
+    // it like a pen line melted the corners and left the overlap points sticking out)
+    if let Some(n) = s.closed_len() {
+        p.add(Shape::closed_line(pts[..n].to_vec(), EStroke::new(width, col)));
+        return;
     }
     // Arrow (shaft, then both wings out of the tip): separate round-capped segments,
     // a single polyline doubling back on itself tears apart at high zoom

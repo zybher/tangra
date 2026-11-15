@@ -57,7 +57,7 @@ All source is in `native/src/`. Most features live in one file; start from the t
 | **Bulk spacing handles** | `canvas/gap_handles.rs` | When a selection is an evenly spaced row/column, a handle sits in each gap; dragging one changes every gap at once, Shift-drag changes just that gap (frames bring their contents) |
 | **Multi-select editing** | `canvas/multi_edit.rs` | Resize a multi-selection from its box (everything scales, frames bring contents), arrow-key nudge (Shift: 10 px) |
 | **Hit-testing** | `canvas/hit_test.rs` | Item rects, what's under the pointer, items in a marquee; a selected drawing grabs anywhere inside its box |
-| **Geometry** | `canvas/geometry.rs` | Pure math helpers: rect/segment tests, stroke hits, shape constraints |
+| **Geometry** | `canvas/geometry.rs` | Pure math helpers: rect/segment tests, stroke hits, shape constraints; rectangles / ellipses draw as one closed line (never pen-smoothed); line widths have no screen-pixel floor, so everything keeps its size relative to the board at any zoom (only frame titles stay one screen size) |
 | **Pen stroke mesh** | `canvas/stroke_mesh.rs` | Pen / highlighter lines as one smooth mesh: thinned + Chaikin-rounded points, round caps, 1px soft edge (no square cuts at zoom, no dark end dots when see-through); hovering a drawing traces its line instead of a box |
 | **Textures** | `canvas/textures.rs` | Uploading images to the GPU, pixelate/mosaic, lazy loading |
 | **Title bar & tabs** | `ui/titlebar.rs` | Tabs, board switching, window buttons |

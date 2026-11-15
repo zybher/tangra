@@ -95,7 +95,7 @@ impl App {
                         if st.closed_len() == Some(4) {
                             segs.push(Seg::Num("corner", 0, st.radius.unwrap_or(0.0), 0.0, 60.0, 0.25, "Corner radius  ·  drag"));
                         }
-                        segs.push(Seg::Num("width", 1, st.width, 1.0, 30.0, 0.08, "Thickness  ·  drag"));
+                        segs.push(Seg::Num("width", 1, st.width, 0.5, 500.0, 0.2, "Thickness  ·  drag"));
                     }
                 }
                 Kind::Text => {
