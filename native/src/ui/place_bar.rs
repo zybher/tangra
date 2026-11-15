@@ -97,7 +97,9 @@ impl App {
             let left = rect.min.x + crate::ui::outline::hud_shift(&ctx);
             // Same rule as the style bar: hidden once the bar, kept on screen, can no longer
             // sit over its object
-            let bw = ctx.data(|d| d.get_temp::<Rect>(bid)).map_or(0.0, |r| r.width());
+            // Resting width, kept after the bar hides (the shown Rect is cleared then, which read
+            // as width 0 and let the bar pop back up: a never-ending flash at the screen edge)
+            let bw = ctx.data(|d| d.get_temp::<f32>(bid.with("rest_w"))).unwrap_or(0.0);
             let cx = fr.center().x.clamp(left + bw / 2.0 + 8.0, (rect.max.x - bw / 2.0 - 8.0).max(left + bw / 2.0 + 8.0));
             cx >= fr.min.x && cx <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y
         });
@@ -234,6 +236,8 @@ impl App {
         };
         let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * mags[i];
         let w = pad * 2.0 + segs.iter().enumerate().map(|(i, sg)| seg_ws(i, sg)).sum::<f32>();
+        let w_rest = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>();
+        ctx.data_mut(|d| d.insert_temp(bid.with("rest_w"), w_rest));
 
         // Stacked on the style bar when it's up (one column of bars), else above the object
         let sbid = egui::Id::new("qd_style_bar");
