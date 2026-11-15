@@ -390,7 +390,8 @@ impl App {
                 let W = width();
                 let shell = Rect::from_min_size(pos, vec2(W, h));
                 // The properties section (props.rs) sits in this panel's lower part
-                ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_shell"), (shell, k, ctx.cumulative_pass_nr())));
+                let pass = ctx.cumulative_pass_nr();
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_shell"), (shell, k, pass)));
                 ui.painter().rect_filled(shell.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
                 egui::Frame::none().fill(frame_bg()).stroke(EStroke::new(1.0_f32, border())).rounding(10.0).inner_margin(6.0).show(ui, |ui| {
                     ui.set_width(W - 12.0);
