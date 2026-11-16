@@ -752,19 +752,27 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let mut c = if color.is_empty() || color.eq_ignore_ascii_case("none") { Color32::GRAY } else { hex(&color) };
                 let at = pos2(pr.max.x + 8.0, if up { pr.max.y - 290.0 } else { pr.min.y });
                 let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
+                // Same panel as the dropdowns (glass, 10 rounding, border, shadow) fading and
+                // sliding 8 px out from the list; its parts still come in one after another
+                let at = at + vec2((1.0 - ez(kc)) * -8.0, 0.0);
+                let szid = bid.with("cpick_sz");
+                let last_sz: Option<egui::Vec2> = ctx.data(|d| d.get_temp(szid));
                 let ir = egui::Area::new(bid.with("cpick")).order(egui::Order::Foreground).fixed_pos(at).interactable(live).show(&ctx, |ui| {
-                    let full = 262.0;
-                    let wv = 40.0 + (full - 40.0) * ez(kc);
-                    let hv = 0.35 + 0.65 * ez(kc);
-                    ui.set_clip_rect(Rect::from_min_size(at, vec2(wv, 400.0 * hv)));
-                    ui.set_opacity(ez(kc * 1.4));
-                    egui::Frame::popup(ui.style())
-                        .fill(popup())
-                        .rounding(12.0)
+                    ui.set_opacity(ez(kc));
+                    // The panel's size is known after its contents: last frame's (it never changes)
+                    if let Some(sz) = last_sz {
+                        let bg = Rect::from_min_size(at, sz);
+                        let bp = ui.painter().clone().with_clip_rect(ctx.screen_rect());
+                        bp.rect_filled(bg.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
+                        glass(&bp, bg, 10.0, 1.0);
+                        bp.rect_stroke(bg, 10.0, EStroke::new(1.0_f32, border()));
+                    }
+                    egui::Frame::none()
                         .inner_margin(egui::Margin::same(14.0))
                         .show(ui, |ui| super::color_picker::color_panel(ui, bid.with("cp_hsv"), &mut c, kc))
                         .inner
                 });
+                ctx.data_mut(|d| d.insert_temp(szid, ir.response.rect.size()));
                 if live {
                     pop_rect = pop_rect.union(ir.response.rect.expand(14.0));
                 }

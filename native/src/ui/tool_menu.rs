@@ -158,7 +158,8 @@ impl App {
                 ctx.request_repaint();
             }
             let cascade = |from_bottom: f32| {
-                let e = (sk * 1.5 - from_bottom * 0.1).clamp(0.0, 1.0);
+                // Same step between rows as the bars' dropdowns (drop_anim.rs)
+                let e = (sk * 1.5 - from_bottom * 0.15).clamp(0.0, 1.0);
                 1.0 - (1.0 - e).powi(3)
             };
             let items: Vec<String> = match c {
@@ -211,7 +212,7 @@ impl App {
                     let _ = ui.allocate_rect(r0, Sense::hover());
                     let p = &ui.painter().clone().with_clip_rect(ctx.screen_rect());
                     p.rect_filled(br.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * bk) as u8));
-                    p.rect_filled(br, 10.0, popup().gamma_multiply(bk));
+                    glass(&p, br, 10.0, bk);
                     p.rect_stroke(br, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(bk)));
                     if c == 'c' {
                         let cur = hex(&self.pen_color);
