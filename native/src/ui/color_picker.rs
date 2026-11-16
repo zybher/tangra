@@ -120,21 +120,40 @@ pub(crate) fn color_panel(ui: &mut egui::Ui, id: egui::Id, c: &mut Color32, k: f
     let mut txt: String = ui.data(|d| d.get_temp(hid)).unwrap_or_else(|| cur.clone());
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Hex").color(TEXT_DIM));
-        // Square corners, like the colour square and hue strip
-        let ws = &mut ui.visuals_mut().widgets;
-        for w in [&mut ws.inactive, &mut ws.hovered, &mut ws.active, &mut ws.noninteractive, &mut ws.open] {
-            w.rounding = egui::Rounding::ZERO;
+        // Square corners, like the colour square and hue strip; typed in place like a rename
+        // (gliding caret and selection, inline_text.rs)
+        let (fr, fresp) = ui.allocate_exact_size(vec2(W - 40.0, 22.0), Sense::click());
+        let fp = ui.painter().clone();
+        fp.rect_filled(fr, 0.0, ui.visuals().extreme_bg_color);
+        fp.rect_stroke(fr, 0.0, ui.visuals().widgets.inactive.bg_stroke);
+        let tr = fr.shrink2(vec2(5.0, 0.0));
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let tcol = ui.visuals().text_color();
+        let son = hid.with("on");
+        let on: bool = ui.data(|d| d.get_temp(son)).unwrap_or(false);
+        if fresp.hovered() && !on {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
         }
-        let te = ui.add(egui::TextEdit::singleline(&mut txt).desired_width(W - 40.0).char_limit(7));
+        let before = txt.clone();
+        let mut focused = false;
+        if on || fresp.clicked() {
+            let ring = super::inline_text::Ring::Fixed(fr, 0.0);
+            let res = super::inline_text::edit(ui, hid.with("field"), tr, &mut txt, font, tcol, !on, ring);
+            focused = res.is_none();
+            ui.data_mut(|d| d.insert_temp(son, focused));
+        } else {
+            fp.with_clip_rect(fr).text(tr.left_center(), egui::Align2::LEFT_CENTER, txt.as_str(), font, tcol);
+        }
+        txt = txt.chars().take(7).collect();
         let clean = txt.trim().trim_start_matches('#').to_string();
-        if te.changed() && clean.len() == 6 {
+        if txt != before && clean.len() == 6 {
             if let Ok(v) = u32::from_str_radix(&clean, 16) {
                 let nc = Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8);
                 hsv = Hsva::from(nc);
                 changed = true;
             }
         }
-        if !te.has_focus() {
+        if !focused {
             txt = cur.clone();
         }
     });
