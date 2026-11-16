@@ -18,6 +18,24 @@ pub(crate) fn fit_w(ctx: &egui::Context, text_x: f32, labels: &[&str]) -> f32 {
 }
 
 /// Left edge of a `w`-wide panel centred over a button at `cx`, kept inside `rect`
+/// Which way a bar's dropdown of height `ph` opens: away from the object being edited (its
+/// screen box, published by the place / style bars as "qd_edit_obj") so it never covers
+/// it when there's room; with room neither or both ways, the side that covers less of it
+pub(crate) fn opens_up(ctx: &egui::Context, bar: Rect, ph: f32, rect: Rect) -> bool {
+    let down_room = bar.max.y + 14.0 + ph <= rect.max.y - 70.0;
+    let up_room = bar.min.y - 14.0 - ph >= rect.min.y + 8.0;
+    let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) else { return !down_room };
+    let cover = |y0: f32, y1: f32| (y1.min(obj.max.y) - y0.max(obj.min.y)).max(0.0);
+    let down = cover(bar.max.y + 14.0, bar.max.y + 14.0 + ph);
+    let up = cover(bar.min.y - 14.0 - ph, bar.min.y - 14.0);
+    match (up_room, down_room) {
+        (true, true) => up < down,
+        (true, false) => true,
+        (false, true) => false,
+        (false, false) => up < down,
+    }
+}
+
 pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
     (cx - w / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - w).max(rect.min.x + 8.0))
 }

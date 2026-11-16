@@ -48,7 +48,7 @@ impl App {
             let xid = bid.with(("ix", kind));
             let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, PANEL_W) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
             ctx.data_mut(|d| d.insert_temp(xid, left));
-            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + (1.0 - kk) * -8.0 * sg;
 

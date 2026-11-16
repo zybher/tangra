@@ -195,6 +195,8 @@ impl App {
         };
         let view = self.view(rect);
         let fr = Rect::from_min_max(view.s(ix, iy), view.s(ix + iw, iy + ih));
+        // dropdowns open away from it (drop_anim::opens_up)
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_edit_obj"), fr));
 
         // Layout: 4px padding, a divider between every control
         let (pad, dv, h) = (4.0_f32, 9.0_f32, 34.0_f32);
@@ -666,7 +668,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             // Frames and closed shapes get a last row, "No fill" (just the outline)
             let n = PEN_COLORS.len() + 1 + (is_group || shape_fill.is_some()) as usize;
             let ph = n as f32 * 30.0 + 8.0;
-            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let mut names: Vec<String> = PEN_COLORS.iter().map(|c| c.trim_start_matches('#').to_uppercase()).collect();
@@ -796,7 +798,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k2) * -8.0;
             // Open upward when the list wouldn't fit between the bar and the bottom toolbar
             let ph = 5.0 * 30.0 + 8.0;
-            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(10.0, &["Row", "Column", "Grid", "Gallery", "None"]);
@@ -839,7 +841,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let cur = target.as_ref().and_then(|(_, id)| self.board.group_cards.iter().find(|g| &g.id == id)).map_or(0.0, |g| g.width / g.height.max(1.0));
             let n = RATIOS.len();
             let ph = n as f32 * 30.0 + 8.0;
-            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &RATIOS.iter().map(|r| r.0).collect::<Vec<_>>());
@@ -898,7 +900,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let n = rows_def.len();
             let ph = n as f32 * 30.0 + 8.0;
-            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
@@ -955,7 +957,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let rows_def: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
             let n = rows_def.len();
             let ph = n as f32 * 30.0 + 8.0;
-            let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());

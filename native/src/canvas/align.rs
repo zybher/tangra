@@ -1,5 +1,6 @@
 //! Align, distribute, fill and fade the selection. One object is placed inside the frame it
-//! belongs to; several objects are placed against their combined box (like Figma).
+//! belongs to; several in one frame move as one block inside it; several loose on the board
+//! line up against their combined box (like Figma).
 use crate::*;
 
 /// Left, centre, right (x) and top, middle, bottom (y)
@@ -83,38 +84,31 @@ impl App {
             return;
         }
         let Some(f) = self.place_bounds(&targets) else { return };
+        let off = |r: [f32; 4], f: [f32; 4]| match how {
+            Align::Left => (f[0] - r[0], 0.0),
+            Align::HCenter => (f[0] + (f[2] - r[2]) / 2.0 - r[0], 0.0),
+            Align::Right => (f[0] + f[2] - r[2] - r[0], 0.0),
+            Align::Top => (0.0, f[1] - r[1]),
+            Align::VCenter => (0.0, f[1] + (f[3] - r[3]) / 2.0 - r[1]),
+            Align::Bottom => (0.0, f[1] + f[3] - r[3] - r[1]),
+        };
         let mut moves = Vec::new();
-        for s in &targets {
-            let Some(r) = self.rect_of(s.0, &s.1) else { continue };
-            let (dx, dy) = match how {
-                Align::Left => (f[0] - r[0], 0.0),
-                Align::HCenter => (f[0] + (f[2] - r[2]) / 2.0 - r[0], 0.0),
-                Align::Right => (f[0] + f[2] - r[2] - r[0], 0.0),
-                Align::Top => (0.0, f[1] - r[1]),
-                Align::VCenter => (0.0, f[1] + (f[3] - r[3]) / 2.0 - r[1]),
-                Align::Bottom => (0.0, f[1] + f[3] - r[3] - r[1]),
-            };
+        // Several objects in one frame move as one block to that edge (or centre) of the
+        // frame, keeping their layout; anywhere else they line up against their combined box
+        let frame = (targets.len() > 1 && self.share_frame(&targets)).then(|| self.parent_of(&targets[0].1).and_then(|p| self.rect_of(Kind::Group, p))).flatten();
+        if let Some(fb) = frame {
+            let (dx, dy) = off(f, fb);
             if dx.abs() + dy.abs() > 0.01 {
-                self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
+                for s in &targets {
+                    self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
+                }
             }
-        }
-        // Several objects already lined up on that edge: press again and they move as one
-        // block to the same edge (or centre) of their frame
-        if moves.is_empty() && targets.len() > 1 {
-            let frame = self.parent_of(&targets[0].1).filter(|_| self.share_frame(&targets)).and_then(|p| self.rect_of(Kind::Group, p));
-            if let Some(fb) = frame {
-                let (dx, dy) = match how {
-                    Align::Left => (fb[0] - f[0], 0.0),
-                    Align::HCenter => (fb[0] + (fb[2] - f[2]) / 2.0 - f[0], 0.0),
-                    Align::Right => (fb[0] + fb[2] - f[2] - f[0], 0.0),
-                    Align::Top => (0.0, fb[1] - f[1]),
-                    Align::VCenter => (0.0, fb[1] + (fb[3] - f[3]) / 2.0 - f[1]),
-                    Align::Bottom => (0.0, fb[1] + fb[3] - f[3] - f[1]),
-                };
+        } else {
+            for s in &targets {
+                let Some(r) = self.rect_of(s.0, &s.1) else { continue };
+                let (dx, dy) = off(r, f);
                 if dx.abs() + dy.abs() > 0.01 {
-                    for s in &targets {
-                        self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
-                    }
+                    self.tree_moves(s.0, &s.1, dx, dy, &mut moves);
                 }
             }
         }

@@ -33,7 +33,7 @@ impl App {
         let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, w) } else { ctx.data(|d| d.get_temp(bid.with("x"))).unwrap_or(bar.min.x) };
         ctx.data_mut(|d| d.insert_temp(bid.with("x"), left));
         let ph = n as f32 * 30.0 + 8.0;
-        let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
+        let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
         let sg = if up { -1.0 } else { 1.0 };
         let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
         let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave"), left, top + ph, w, super::drop_anim::PITCH, n, &[]);

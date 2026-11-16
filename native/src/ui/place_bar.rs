@@ -178,6 +178,8 @@ impl App {
 
         let view = self.view(rect);
         let fr = Rect::from_min_max(view.s(ix, iy), view.s(ix + iw, iy + ih));
+        // dropdowns open away from it (drop_anim::opens_up)
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_edit_obj"), fr));
         let (pad, h) = (4.0_f32, 34.0_f32);
         let seg_w = |s: &Seg| match s {
             Seg::Opacity => 62.0,
