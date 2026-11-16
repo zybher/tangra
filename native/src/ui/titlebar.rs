@@ -1,4 +1,4 @@
-//! Title bar: tabs, board switching, window buttons.
+//! Title bar: the Tangra mark, tabs, board switching, window buttons.
 
 use crate::*;
 
@@ -62,8 +62,11 @@ impl App {
             self.begin_hide(ctx);
         }
 
+        // 2. Far left: the Tangra mark, ahead of the tabs (ui/title_logo.rs)
+        super::title_logo::title_logo(ui, pos2(rect.min.x + 26.0, cy), 20.0);
+
         // 3. Chrome Tabs
-        let mut cur_x = rect.min.x + 16.0;
+        let mut cur_x = rect.min.x + 8.0 + super::title_logo::LOGO_W;
         let avail_for_tabs = (min_x - cur_x - 36.0).max(60.0);
         let num_boards = self.boards.len().max(1);
         let max_per_tab = (avail_for_tabs / num_boards as f32).max(50.0);

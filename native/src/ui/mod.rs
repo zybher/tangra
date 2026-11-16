@@ -20,6 +20,8 @@ mod bar_morph;
 pub(crate) mod outline_drag;
 mod style_bar;
 mod titlebar;
+mod logo_anim;
+mod title_logo;
 mod tool_menu;
 mod toolbar;
 pub(crate) mod menu_kit;

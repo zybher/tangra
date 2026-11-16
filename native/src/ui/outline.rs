@@ -568,7 +568,7 @@ impl App {
                         sc.interact_handle_opacity = 1.0;
                     }
                     ui.visuals_mut().extreme_bg_color = Color32::TRANSPARENT;
-                    egui::ScrollArea::vertical().auto_shrink([false, false]).drag_to_scroll(false).max_height(ui.available_height() - 36.0 - super::props::reserved(ctx)).show(ui, |ui| {
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).drag_to_scroll(false).max_height(ui.available_height() - 8.0 - super::props::reserved(ctx)).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         // Toolbar-style wave: rows near the pointer lift into a tile that slides right
                         let pitch = ROW_H + 2.0;
@@ -826,12 +826,6 @@ impl App {
                 if ek > 0.01 {
                     ui.painter().line_segment([pos2(shell.max.x - 0.5, shell.min.y + 14.0), pos2(shell.max.x - 0.5, shell.max.y - 14.0)], EStroke::new(2.0_f32, blue().gamma_multiply(ek)));
                 }
-                // Footer: the Tangra mark, bottom-left
-                let p = ui.painter();
-                let fy = shell.max.y - 22.0;
-                p.line_segment([pos2(shell.min.x + 10.0, fy - 16.0), pos2(shell.max.x - 10.0, fy - 16.0)], EStroke::new(1.0_f32, border()));
-                paint_logo(p, pos2(shell.min.x + 22.0, fy), 18.0, 1.0);
-                p.text(pos2(shell.min.x + 38.0, fy), Align2::LEFT_CENTER, "Tangra", FontId::proportional(12.0), TEXT_DIM);
             });
 
         if let Some(id) = toggle {
