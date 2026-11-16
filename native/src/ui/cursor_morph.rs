@@ -20,7 +20,7 @@ pub(crate) struct Pose {
 
 struct Stroke {
     pts: Vec<Pos2>,
-    closed: bool,
+    filled: bool,
 }
 
 fn resample(v: &[Pos2]) -> Vec<Pos2> {
@@ -51,8 +51,8 @@ fn strokes(pose: &Pose, at: Pos2, rot: f32) -> Vec<Stroke> {
     let (sn, cs) = rot.sin_cos();
     crate::ui::svg_icons::subpaths(pose.name)
         .into_iter()
-        .filter(|(v, _)| v.len() > 1)
-        .map(|(v, closed)| {
+        .filter(|(v, _, _)| v.len() > 1)
+        .map(|(v, closed, filled)| {
             let mut q: Vec<Pos2> = v
                 .iter()
                 .map(|p| {
@@ -63,7 +63,7 @@ fn strokes(pose: &Pose, at: Pos2, rot: f32) -> Vec<Stroke> {
             if closed {
                 q.push(q[0]);
             }
-            Stroke { pts: resample(&q), closed }
+            Stroke { pts: resample(&q), filled }
         })
         .collect()
 }
@@ -141,7 +141,7 @@ pub(crate) fn draw(p: &egui::Painter, from: &Pose, to: &Pose, at: Pos2, rot: f32
             let rev: f32 = sa.pts.iter().zip(sb.pts.iter().rev()).map(|(x, y)| (*x - *y).length()).sum();
             let tb: Vec<Pos2> = if rev < fwd { sb.pts.iter().rev().copied().collect() } else { sb.pts.clone() };
             let pts = sa.pts.iter().zip(&tb).map(|(x, y)| *x + (*y - *x) * t).collect();
-            let filled = if sa.closed { 1.0 - t } else { 0.0 } + if sb.closed { t } else { 0.0 };
+            let filled = if sa.filled { 1.0 - t } else { 0.0 } + if sb.filled { t } else { 0.0 };
             (pts, filled)
         })
         .collect();

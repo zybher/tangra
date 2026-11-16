@@ -571,17 +571,6 @@ impl App {
 
         self.paint_lasso(p, v);
 
-        // Eraser cursor
-        if let (Tool::Eraser, Some(h)) = (self.tool, hover) {
-            let panning = p.ctx().input(|i| i.key_down(Key::Space) || i.pointer.middle_down()) && self.edit.is_none();
-            if rect.contains(h) && !panning {
-                // Drawn on the top layer so it stays above the toolbar, like a real cursor
-                p.ctx()
-                    .layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("qd_eraser_cursor")))
-                    .circle_stroke(h, 9.0, EStroke::new(1.2_f32, rgba(255, 255, 255, 190)));
-            }
-        }
-
         // Empty-board hint
         if b.is_empty() && self.edit.is_none() {
             p.text(

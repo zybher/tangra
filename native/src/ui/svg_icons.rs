@@ -13,6 +13,8 @@ struct Item {
     fill: Option<f32>,
     stroke: Option<f32>,
     dash: Option<(f32, f32)>,
+    /// fill="none": a closed shape a pointer keeps hollow (pointers fill closed shapes otherwise)
+    hollow: bool,
 }
 
 fn attr<'a>(el: &'a str, name: &str) -> Option<&'a str> {
@@ -305,7 +307,8 @@ fn parse(svg: &str) -> Vec<Item> {
         };
         let stroke = if attr(el, "stroke") == Some("none") { None } else { Some(attr(el, "stroke-width").and_then(|v| v.parse().ok()).unwrap_or(1.75)) };
         let dash = attr(el, "stroke-dasharray").map(nums).and_then(|v| (v.len() >= 2).then(|| (v[0], v[1])));
-        items.push(Item { subs, fill, stroke, dash });
+        let hollow = attr(el, "fill") == Some("none");
+        items.push(Item { subs, fill, stroke, dash, hollow });
     }
     items
 }
@@ -326,9 +329,9 @@ fn items(name: &'static str) -> Option<Rc<Vec<Item>>> {
     })
 }
 
-/// The icon's subpaths in its 24-unit box: (points, closed)
-pub(crate) fn subpaths(name: &'static str) -> Vec<(Vec<[f32; 2]>, bool)> {
-    items(name).map(|it| it.iter().flat_map(|i| i.subs.clone()).collect()).unwrap_or_default()
+/// The icon's subpaths in its 24-unit box, as a pointer draws them: (points, closed, filled)
+pub(crate) fn subpaths(name: &'static str) -> Vec<(Vec<[f32; 2]>, bool, bool)> {
+    items(name).map(|it| it.iter().flat_map(|i| i.subs.iter().map(move |(v, c)| (v.clone(), *c, *c && !i.hollow))).collect()).unwrap_or_default()
 }
 
 /// Paints icon `name` as a pointer: a dark edge `ink` around it, closed shapes filled with
@@ -361,11 +364,11 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
                 // A tiny closed shape (a dot): a stroke wider than the shape folds into junk, so
                 // its edge is just a bigger disc behind it
                 let bb = egui::Rect::from_points(&v);
-                if *closed && bb.width().max(bb.height()) < 5.0 * k {
+                if *closed && !it.hollow && bb.width().max(bb.height()) < 5.0 * k {
                     p.circle_filled(bb.center(), bb.width().max(bb.height()) / 2.0 + (w(it) + extra) / 2.0, col);
                     continue;
                 }
-                if *closed {
+                if *closed && !it.hollow {
                     fan(p, &v, col);
                 }
                 let st = Stroke::new(w(it) + extra, col);
@@ -381,11 +384,11 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
         for (v, closed) in &it.subs {
             let v = pts(v, *closed);
             let bb = egui::Rect::from_points(&v);
-            if *closed && bb.width().max(bb.height()) < 5.0 * k {
+            if *closed && !it.hollow && bb.width().max(bb.height()) < 5.0 * k {
                 p.circle_filled(bb.center(), bb.width().max(bb.height()) / 2.0, fill);
                 continue;
             }
-            if *closed {
+            if *closed && !it.hollow {
                 fan(p, &v, fill);
             } else {
                 let st = Stroke::new(w(it), fill);
@@ -467,6 +470,7 @@ const PACK: &[(&str, &str)] = &[
     ("resize-v", r##"<path d="M12 4v16M8.5 7.5L12 4l3.5 3.5M8.5 16.5L12 20l3.5-3.5"/>"##),
     ("resize-nwse", r##"<path d="M6 6l12 12M6 11V6h5M18 13v5h-5"/>"##),
     ("resize-nesw", r##"<path d="M18 6L6 18M13 6h5v5M11 18H6v-5"/>"##),
+    ("eraser-ring", r##"<circle cx="12" cy="12" r="7" fill="none"/>"##),
     ("crosshair", r##"<path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21"/><circle cx="12" cy="12" r="1" fill="currentColor"/>"##),
     ("text-cursor", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
     ("grabbing", r##"<path d="M7 10.5V8a1.5 1.5 0 0 1 3 0v1.5M10 9V7a1.5 1.5 0 0 1 3 0v2M13 9V7.5a1.5 1.5 0 0 1 3 0V10M16 10V9a1.5 1.5 0 0 1 3 0v3.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),

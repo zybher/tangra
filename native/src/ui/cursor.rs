@@ -4,7 +4,8 @@
 //! pack's too, centred on the pointer, with the same glide, trail and press squeeze; the resize
 //! arrows don't lean (they keep pointing the way they resize) and the I-beam leans half as much.
 //! Switching between shapes morphs one into the other (cursor_morph.rs).
-//! The pan hand is its own (widgets.rs).
+//! The pan hand (Grab) closes into the fist (Grabbing) while dragging, and the eraser's ring is
+//! asked for by name (`set_pose`); both morph to and from every other pointer.
 //!
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
 //! where it points) and leans into sideways movement, tipping right when moving right and left
@@ -41,7 +42,10 @@ struct St {
 pub(crate) fn paint(ctx: &egui::Context) {
     let sid = egui::Id::new("qd_cursor_st");
     let icon = ctx.output(|o| o.cursor_icon);
-    let Some(sh) = shape(icon) else {
+    let pass = ctx.cumulative_pass_nr();
+    let named = ctx.data(|d| d.get_temp::<(&'static str, f32, u64)>(pose_id())).filter(|(_, _, f)| *f == pass);
+    let sh = shape(icon).or_else(|| named.filter(|_| icon == egui::CursorIcon::None).map(|(name, px, _)| Shape { name, hot: [12.0, 12.0], px, lean: 0.0 }));
+    let Some(sh) = sh else {
         ctx.data_mut(|d| d.remove::<St>(sid));
         ctx.data_mut(|d| d.remove::<Pose>(last_id()));
         return;
@@ -154,6 +158,17 @@ pub(crate) fn set_badge(ctx: &egui::Context, name: &'static str) {
     ctx.data_mut(|d| d.insert_temp(badge_id(), (name, pass)));
 }
 
+fn pose_id() -> egui::Id {
+    egui::Id::new("qd_cursor_pose")
+}
+
+/// A pointer with no native cursor (the eraser ring), by pack name and size, every frame;
+/// the caller sets CursorIcon::None
+pub(crate) fn set_pose(ctx: &egui::Context, name: &'static str, px: f32) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(pose_id(), (name, px, pass)));
+}
+
 struct Shape {
     name: &'static str,
     /// The point of the icon's 24-unit box that sits on the pointer
@@ -175,6 +190,7 @@ fn shape(icon: egui::CursorIcon) -> Option<Shape> {
         C::ResizeNeSw | C::ResizeNorthEast | C::ResizeSouthWest => ("resize-nesw", 30.0, 0.0),
         C::Crosshair => ("crosshair", 32.0, 1.0),
         C::Text => ("text-cursor", 30.0, 0.5),
+        C::Grab => ("hand", 28.0, 1.0),
         C::Grabbing => ("grabbing", 30.0, 1.0),
         _ => return None,
     };

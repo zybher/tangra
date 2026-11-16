@@ -124,13 +124,6 @@ pub(crate) fn hover_fx(ctx: &egui::Context, resp: &egui::Response, enabled: bool
     )
 }
 
-/// Hand cursor drawn on top, from the icon pack; it squeezes a little while dragging
-pub(crate) fn hand_cursor(ctx: &egui::Context, at: Pos2, closed: bool) {
-    let c = ctx.animate_bool_with_time(egui::Id::new("qd_hand_close"), closed, 0.12 * anim_k());
-    let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("qd_hand")));
-    crate::ui::svg_icons::draw_cursor(&p, "hand", at, [12.0, 12.0], 24.0 * (1.0 - 0.1 * c), 0.0, Color32::WHITE, Color32::from_rgb(18, 18, 20));
-}
-
 /// Blue rising like liquid in a rounded tile: a wavy surface (calm when full or empty)
 pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time: f32) {
     let n = 28;

@@ -646,15 +646,10 @@ impl App {
             cam.x -= d.x / cam.zoom;
             cam.y -= d.y / cam.zoom;
             self.mark_dirty();
-            ctx.set_cursor_icon(egui::CursorIcon::None);
-            if let Some(hp) = hover {
-                hand_cursor(ctx, hp, true);
-            }
+            // The pack hand closes into the fist (ui/cursor.rs morphs between them)
+            ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
         } else if resp.hovered() && (space || hand) {
-            ctx.set_cursor_icon(egui::CursorIcon::None);
-            if let Some(hp) = hover {
-                hand_cursor(ctx, hp, false);
-            }
+            ctx.set_cursor_icon(egui::CursorIcon::Grab);
         } else if resp.hovered() {
             // The crosshair carries the tool's toolbar icon (ui/cursor.rs)
             let badge = match self.tool {
@@ -670,6 +665,10 @@ impl App {
             };
             if let Some(b) = badge {
                 crate::ui::cursor::set_badge(ctx, b);
+            }
+            if self.tool == Tool::Eraser {
+                // The ring (r 7 of 24) is about 9 px across the radius
+                crate::ui::cursor::set_pose(ctx, "eraser-ring", 31.0);
             }
             ctx.set_cursor_icon(match self.tool {
                 Tool::Pen | Tool::Highlighter | Tool::Pixelate | Tool::Rect | Tool::Ellipse | Tool::Arrow | Tool::Frame | Tool::Lasso => egui::CursorIcon::Crosshair,
