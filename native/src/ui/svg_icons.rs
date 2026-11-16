@@ -445,6 +445,14 @@ pub(crate) fn draw(p: &egui::Painter, name: &'static str, c: Pos2, px: f32, col:
 const PACK: &[(&str, &str)] = &[
     ("cursor", r##"<path d="M5.5 3.5L18.5 10l-5.9 2.1L10 18z"/>"##),
     ("hand", r##"<path d="M8 15V6.5a1.5 1.5 0 0 1 3 0V11M11 11V5a1.5 1.5 0 0 1 3 0v6M14 11V6.5a1.5 1.5 0 0 1 3 0V12M17 12V9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.7-2.3L3.9 15.9a1.5 1.5 0 0 1 2.3-1.9L8 15.5"/>"##),
+    // Pointer shapes drawn in place of the native ones (ui/cursor.rs); (12, 12) sits on the pointer
+    ("resize-h", r##"<path d="M4 12h16M7.5 8.5L4 12l3.5 3.5M16.5 8.5L20 12l-3.5 3.5"/>"##),
+    ("resize-v", r##"<path d="M12 4v16M8.5 7.5L12 4l3.5 3.5M8.5 16.5L12 20l3.5-3.5"/>"##),
+    ("resize-nwse", r##"<path d="M6 6l12 12M6 11V6h5M18 13v5h-5"/>"##),
+    ("resize-nesw", r##"<path d="M18 6L6 18M13 6h5v5M11 18H6v-5"/>"##),
+    ("crosshair", r##"<path d="M12 4v5M12 15v5M4 12h5M15 12h5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>"##),
+    ("text", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
+    ("grabbing", r##"<path d="M7 10.5V8a1.5 1.5 0 0 1 3 0v1.5M10 9V7a1.5 1.5 0 0 1 3 0v2M13 9V7.5a1.5 1.5 0 0 1 3 0V10M16 10V9a1.5 1.5 0 0 1 3 0v3.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),
     ("frame", r##"<path d="M7.5 3v18M16.5 3v18M3 7.5h18M3 16.5h18"/>"##),
     ("rectangle", r##"<rect x="4" y="5" width="16" height="14" rx="2"/>"##),
     ("ellipse", r##"<circle cx="12" cy="12" r="8.5"/>"##),

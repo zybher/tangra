@@ -1,6 +1,7 @@
 //! The app's own arrow pointer, from the icon pack (svg_icons.rs). Wherever the native cursor
 //! would be the plain arrow, it is hidden and this one is painted on top at the pointer.
-//! Other cursors (text, resize, crosshair, ...) stay native; the pan hand is its own (widgets.rs).
+//! The resize arrows, the frame / shape crosshair, the text I-beam and the grabbing fist are the
+//! pack's too (drawn still, centred on the pointer); the pan hand is its own (widgets.rs).
 //!
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
 //! where it points) and leans into sideways movement, tipping right when moving right and left
@@ -36,8 +37,16 @@ struct St {
 /// Call last in the frame, after every widget has picked its cursor
 pub(crate) fn paint(ctx: &egui::Context) {
     let sid = egui::Id::new("qd_cursor_st");
-    if ctx.output(|o| o.cursor_icon) != egui::CursorIcon::Default {
+    let icon = ctx.output(|o| o.cursor_icon);
+    if icon != egui::CursorIcon::Default {
         ctx.data_mut(|d| d.remove::<St>(sid));
+        if let (Some(name), Some(at)) = (shape(icon), ctx.pointer_hover_pos()) {
+            if ctx.input(|i| i.pointer.has_pointer()) {
+                ctx.set_cursor_icon(egui::CursorIcon::None);
+                let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("qd_cursor")));
+                crate::ui::svg_icons::draw_cursor(&p, name, at, [12.0, 12.0], 24.0, 0.0, Color32::WHITE, Color32::from_rgb(18, 18, 20));
+            }
+        }
         return;
     }
     let at = match ctx.pointer_hover_pos() {
@@ -90,4 +99,19 @@ pub(crate) fn paint(ctx: &egui::Context) {
     // The arrow's tip (5.5, 3.5 in the icon's box) sits on the pointer
     let press = ease(ctx, egui::Id::new("qd_cursor_press"), ctx.input(|i| i.pointer.primary_down()));
     crate::ui::svg_icons::draw_cursor(&p, "cursor", pos, [5.5, 3.5], 26.0 * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, Color32::from_rgb(18, 18, 20));
+}
+
+/// The pack icon drawn for a native cursor (None = leave it native)
+fn shape(icon: egui::CursorIcon) -> Option<&'static str> {
+    use egui::CursorIcon as C;
+    Some(match icon {
+        C::ResizeHorizontal | C::ResizeEast | C::ResizeWest | C::ResizeColumn => "resize-h",
+        C::ResizeVertical | C::ResizeNorth | C::ResizeSouth | C::ResizeRow => "resize-v",
+        C::ResizeNwSe | C::ResizeNorthWest | C::ResizeSouthEast => "resize-nwse",
+        C::ResizeNeSw | C::ResizeNorthEast | C::ResizeSouthWest => "resize-nesw",
+        C::Crosshair => "crosshair",
+        C::Text => "text",
+        C::Grabbing => "grabbing",
+        _ => return None,
+    })
 }
