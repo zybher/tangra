@@ -16,19 +16,19 @@ pub(crate) struct Drop {
 }
 
 /// `rows`: visible rows as (rect, tree index, depth); `parent`: tree parents; `is_frame`;
-/// `src`: tree index being dragged; `next_sib`: the sibling after a tree index in its list
+/// `src`: tree indices being dragged (one row, or every selected one); `next_sib`: the sibling after a tree index in its list
 pub(crate) fn drop_target(
     y: f32,
     rows: &[(Rect, usize, usize)],
     parent: &[Option<usize>],
     is_frame: impl Fn(usize) -> bool,
-    src: usize,
+    src: &[usize],
     next_sib: impl Fn(usize) -> Option<usize>,
 ) -> Option<Drop> {
     let (ri, &(r, j, _)) = rows.iter().enumerate().find(|(_, (r, _, _))| y >= r.min.y - 1.0 && y < r.max.y + 1.0)?;
     // Can't drop an object into itself or anything inside it
     let inside_src = |mut i: usize| loop {
-        if i == src {
+        if src.contains(&i) {
             return true;
         }
         match parent[i] {
@@ -44,7 +44,7 @@ pub(crate) fn drop_target(
     } else {
         Drop { parent: parent[j], before: next_sib(j), into: false, row: ri, after: true }
     };
-    if d.parent.is_some_and(inside_src) || (d.into && j == src) {
+    if d.parent.is_some_and(inside_src) || (d.into && src.contains(&j)) {
         return None;
     }
     Some(d)
@@ -74,7 +74,32 @@ pub(crate) fn paint_marker(p: &egui::Painter, d: &Drop, rows: &[(Rect, usize, us
     p.circle_stroke(pos2(x0 - 3.0, y), 3.0, EStroke::new(1.5_f32, lc));
 }
 
-/// The dragged row's name following the pointer
+/// What a drag of several rows is called on its ghost: "3 Texts selected", "2 Rectangles
+/// selected", mixed kinds "5 layers selected"
+pub(crate) fn many_label(kinds: &[(Kind, Option<&'static str>)]) -> String {
+    let n = kinds.len();
+    let same_kind = kinds.iter().all(|k| k.0 == kinds[0].0);
+    let same_tool = same_kind && kinds.iter().all(|k| k.1 == kinds[0].1);
+    let noun = match kinds[0] {
+        _ if !same_kind => "layers",
+        (Kind::Stroke, t) if same_tool => match t.unwrap_or("") {
+            "rectangle" => "Rectangles",
+            "ellipse" => "Ellipses",
+            "arrow" => "Arrows",
+            "highlighter" => "Highlights",
+            _ => "Drawings",
+        },
+        (Kind::Stroke, _) => "Shapes",
+        (Kind::Group, _) => "Frames",
+        (Kind::Image, _) => "Images",
+        (Kind::Note, _) => "Notes",
+        (Kind::Link, _) => "Links",
+        (Kind::Text, _) => "Texts",
+    };
+    format!("{n} {noun} selected")
+}
+
+/// The dragged row's name (or how many are going) following the pointer
 pub(crate) fn paint_ghost(ctx: &egui::Context, at: egui::Pos2, name: &str, k: Kind, tool: Option<&'static str>) {
     let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("qd_outline_ghost")));
     let font = FontId::proportional(12.0);
@@ -98,51 +123,72 @@ impl App {
         }
     }
 
-    /// Apply a drop. `items`/`rects`: the tree's objects; `subtree`: src plus everything under it;
-    /// `siblings`: the new parent's children in list order; `top_of_src`: src's outermost frame
-    pub(crate) fn apply_outline_drop(
-        &mut self,
-        src: (Kind, String),
-        src_rect: [f32; 4],
-        old_parent: Option<usize>,
-        d: Drop,
-        new_parent_rect: Option<[f32; 4]>,
-        top_rect: [f32; 4],
-        subtree: Vec<(Kind, String)>,
-        siblings: Vec<String>,
-        before_id: Option<String>,
-        new_parent_id: Option<String>,
-    ) {
-        // List order among the new siblings
-        let mut list: Vec<String> = siblings.iter().filter(|s| **s != src.1).cloned().collect();
-        let at = if d.into { 0 } else { before_id.and_then(|b| list.iter().position(|s| *s == b)).unwrap_or(list.len()) };
-        list.insert(at.min(list.len()), src.1.clone());
+    /// Apply a drop of one or more rows (each with everything under it), kept together in their
+    /// list order. `siblings`: the new parent's children in list order
+    pub(crate) fn apply_outline_drop(&mut self, movers: Vec<Mover>, d: Drop, new_parent_rect: Option<[f32; 4]>, siblings: Vec<String>, before_id: Option<String>, new_parent_id: Option<String>) {
+        if movers.is_empty() {
+            return;
+        }
+        let moving = |s: &String| movers.iter().any(|m| m.sel.1 == *s);
+        // List order among the new siblings: the movers go together before `before_id` (or the
+        // first sibling after it that isn't moving)
+        let mut list: Vec<String> = siblings.iter().filter(|s| !moving(s)).cloned().collect();
+        let at = if d.into {
+            0
+        } else {
+            before_id
+                .and_then(|b| siblings.iter().position(|s| *s == b))
+                .and_then(|i| siblings[i..].iter().find(|s| !moving(s)))
+                .and_then(|b| list.iter().position(|s| s == b))
+                .unwrap_or(list.len())
+        };
+        for (n, m) in movers.iter().enumerate() {
+            list.insert((at + n).min(list.len()), m.sel.1.clone());
+        }
         // Dropped back where it was: nothing to do (and no undo step)
-        if d.parent == old_parent && list == siblings {
+        if movers.iter().all(|m| m.old_parent == d.parent) && list == siblings {
             return;
         }
         self.snapshot();
-        // Reparent: the object moves into (or out of) the frame
-        if d.parent != old_parent {
-            let r = src_rect;
+        // Reparent: the objects move into (or out of) the frame together, as one block
+        let re: Vec<&Mover> = movers.iter().filter(|m| m.old_parent != d.parent).collect();
+        if !re.is_empty() {
+            let u = re.iter().fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |a, m| {
+                let r = m.rect;
+                [a[0].min(r[0]), a[1].min(r[1]), a[2].max(r[0] + r[2]), a[3].max(r[1] + r[3])]
+            });
+            let r = [u[0], u[1], u[2] - u[0], u[3] - u[1]];
             let to = match new_parent_rect {
-                // Keep it where it is if it already sits over that frame, else centre it (a
-                // bigger object is simply clipped by the frame)
+                // Keep them where they are if they already sit over that frame, else centre them
+                // (bigger ones are simply clipped by the frame)
                 Some(f) => {
                     let (cx, cy) = (r[0] + r[2] / 2.0, r[1] + r[3] / 2.0);
                     let over = cx >= f[0] && cx <= f[0] + f[2] && cy >= f[1] && cy <= f[1] + f[3];
                     if over { [r[0], r[1]] } else { [f[0] + (f[2] - r[2]) / 2.0, f[1] + (f[3] - r[3]) / 2.0] }
                 }
-                // Out to the board: just right of the frame it came from
-                None => [top_rect[0] + top_rect[2] + 40.0, top_rect[1]],
+                // Out to the board: just right of the frame they came from
+                None => [re[0].top_rect[0] + re[0].top_rect[2] + 40.0, re[0].top_rect[1]],
             };
-            self.shift_tree(&subtree, [r[0], r[1]], to, 1.0);
-            self.board.parents.insert(src.1.clone(), new_parent_id.unwrap_or_default());
-
+            let (dx, dy) = (to[0] - r[0], to[1] - r[1]);
+            let jobs: Vec<(Vec<(Kind, String)>, [f32; 2], String)> = re.iter().map(|m| (m.subtree.clone(), [m.rect[0], m.rect[1]], m.sel.1.clone())).collect();
+            for (sub, at, id) in jobs {
+                self.shift_tree(&sub, at, [at[0] + dx, at[1] + dy], 1.0);
+                self.board.parents.insert(id, new_parent_id.clone().unwrap_or_default());
+            }
         }
         for (n, id) in list.into_iter().enumerate() {
             self.board.layer_order.insert(id, n as f32);
         }
         self.mark_dirty();
     }
+}
+
+/// One dragged row: the object, its box, its old parent (tree index), its outermost frame's box
+/// and itself plus everything under it
+pub(crate) struct Mover {
+    pub sel: (Kind, String),
+    pub rect: [f32; 4],
+    pub old_parent: Option<usize>,
+    pub top_rect: [f32; 4],
+    pub subtree: Vec<(Kind, String)>,
 }

@@ -412,7 +412,7 @@ impl App {
         let mut ren_done: Option<Option<(Sel, String)>> = None;
         let mut vis: Option<(Sel, bool)> = None;
         let drag_id = egui::Id::new("qd_outline_drag");
-        let mut drop_req: Option<(usize, super::outline_drag::Drop)> = None;
+        let mut drop_req: Option<(Vec<usize>, super::outline_drag::Drop)> = None;
         // A rename whose row is gone (folded away, scope switched, panel hidden) is dropped
         if ren.as_ref().is_some_and(|(rs, _)| !show || !rows.iter().any(|&(i, _)| &tree.items[i].0 == rs)) {
             ren = None;
@@ -785,19 +785,50 @@ impl App {
                         let dragging: Option<Sel> = ctx.data(|dd| dd.get_temp::<Option<Sel>>(drag_id)).flatten();
                         if let Some(src) = dragging.filter(|s| idx(s).is_some()) {
                             let si = idx(&src).unwrap();
+                            // Dragging a selected row takes the whole selection along (rows inside a
+                            // selected frame already go with it), in list order
+                            let srcs: Vec<usize> = if self.selected.contains(&src) && self.selected.len() > 1 {
+                                let mut dfs = Vec::new();
+                                let mut st: Vec<usize> = tree.roots.iter().rev().copied().collect();
+                                while let Some(i) = st.pop() {
+                                    dfs.push(i);
+                                    st.extend(tree.kids[i].iter().rev().copied());
+                                }
+                                let picked = |i: usize| self.selected.contains(&tree.items[i].0);
+                                dfs.into_iter()
+                                    .filter(|&i| picked(i) && {
+                                        let mut p = tree.parent[i];
+                                        loop {
+                                            match p {
+                                                Some(j) if picked(j) => break false,
+                                                Some(j) => p = tree.parent[j],
+                                                None => break true,
+                                            }
+                                        }
+                                    })
+                                    .collect()
+                            } else {
+                                vec![si]
+                            };
                             let ptr = ctx.input(|i| i.pointer.interact_pos());
                             let next_sib = |j: usize| {
                                 let list = match tree.parent[j] { Some(p) => &tree.kids[p], None => &tree.roots };
                                 list.iter().position(|&x| x == j).and_then(|n| list.get(n + 1).copied())
                             };
                             let target = ptr.and_then(|q| {
-                                super::outline_drag::drop_target(q.y, &drag_rows, &tree.parent, |j| tree.items[j].0 .0 == Kind::Group, si, next_sib)
+                                super::outline_drag::drop_target(q.y, &drag_rows, &tree.parent, |j| tree.items[j].0 .0 == Kind::Group, &srcs, next_sib)
                             });
                             if let Some(t) = &target {
                                 super::outline_drag::paint_marker(&ui.painter().with_clip_rect(ui.clip_rect()), t, &drag_rows);
                             }
                             if let Some(q) = ptr {
-                                super::outline_drag::paint_ghost(ctx, q, &self.outline_name(&src), src.0, self.stroke_tool(&src));
+                                let label = if srcs.len() > 1 {
+                                    let kinds: Vec<(Kind, Option<&'static str>)> = srcs.iter().map(|&i| (tree.items[i].0 .0, self.stroke_tool(&tree.items[i].0))).collect();
+                                    super::outline_drag::many_label(&kinds)
+                                } else {
+                                    self.outline_name(&src)
+                                };
+                                super::outline_drag::paint_ghost(ctx, q, &label, src.0, self.stroke_tool(&src));
                             }
                             ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
                             // Near the top / bottom edge the list scrolls (faster the closer you get)
@@ -818,7 +849,7 @@ impl App {
                             }
                             if ctx.input(|i| i.pointer.any_released() || !i.pointer.any_down()) {
                                 ctx.data_mut(|dd| dd.remove::<Option<Sel>>(drag_id));
-                                drop_req = target.map(|t| (si, t));
+                                drop_req = target.map(|t| (srcs.clone(), t));
                             }
                             ctx.request_repaint();
                         }
@@ -887,30 +918,25 @@ impl App {
         if let Some(((k, id), lock)) = vis {
             self.toggle_vis(k, &id, lock);
         }
-        if let Some((si, d)) = drop_req {
-            let mut sub = Vec::new();
-            let mut stack = vec![si];
-            while let Some(i) = stack.pop() {
-                sub.push(tree.items[i].0.clone());
-                stack.extend(tree.kids[i].iter().copied());
-            }
-            let mut top_i = si;
-            while let Some(p) = tree.parent[top_i] {
-                top_i = p;
-            }
+        if let Some((srcs, d)) = drop_req {
+            let movers = srcs
+                .iter()
+                .map(|&si| {
+                    let mut subtree = Vec::new();
+                    let mut stack = vec![si];
+                    while let Some(i) = stack.pop() {
+                        subtree.push(tree.items[i].0.clone());
+                        stack.extend(tree.kids[i].iter().copied());
+                    }
+                    let mut top_i = si;
+                    while let Some(p) = tree.parent[top_i] {
+                        top_i = p;
+                    }
+                    super::outline_drag::Mover { sel: tree.items[si].0.clone(), rect: tree.items[si].1, old_parent: tree.parent[si], top_rect: tree.items[top_i].1, subtree }
+                })
+                .collect();
             let siblings: Vec<String> = match d.parent { Some(p) => &tree.kids[p], None => &tree.roots }.iter().map(|&i| tree.items[i].0 .1.clone()).collect();
-            self.apply_outline_drop(
-                tree.items[si].0.clone(),
-                tree.items[si].1,
-                tree.parent[si],
-                d,
-                d.parent.map(|p| tree.items[p].1),
-                tree.items[top_i].1,
-                sub,
-                siblings,
-                d.before.map(|b| tree.items[b].0 .1.clone()),
-                d.parent.map(|p| tree.items[p].0 .1.clone()),
-            );
+            self.apply_outline_drop(movers, d, d.parent.map(|p| tree.items[p].1), siblings, d.before.map(|b| tree.items[b].0 .1.clone()), d.parent.map(|p| tree.items[p].0 .1.clone()));
             pick = None;
         }
         if let Some((s, (shift, ctrl))) = pick {
