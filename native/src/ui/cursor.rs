@@ -3,6 +3,7 @@
 //! The resize arrows, the frame / shape crosshair, the text I-beam and the grabbing fist are the
 //! pack's too, centred on the pointer, with the same glide, trail and press squeeze; the resize
 //! arrows don't lean (they keep pointing the way they resize) and the I-beam leans half as much.
+//! Switching between shapes morphs one into the other (cursor_morph.rs).
 //! The pan hand is its own (widgets.rs).
 //!
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
@@ -42,6 +43,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let icon = ctx.output(|o| o.cursor_icon);
     let Some(sh) = shape(icon) else {
         ctx.data_mut(|d| d.remove::<St>(sid));
+        ctx.data_mut(|d| d.remove::<Pose>(last_id()));
         return;
     };
     let at = match ctx.pointer_hover_pos() {
@@ -49,6 +51,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
         _ => {
             // Left the window: come back exactly where the pointer re-enters
             ctx.data_mut(|d| d.remove::<St>(sid));
+            ctx.data_mut(|d| d.remove::<Pose>(last_id()));
             return;
         }
     };
@@ -90,7 +93,31 @@ pub(crate) fn paint(ctx: &egui::Context) {
     ctx.data_mut(|d| d.insert_temp(sid, st));
     let press = ease(ctx, egui::Id::new("qd_cursor_press"), ctx.input(|i| i.pointer.primary_down()));
     let ink = Color32::from_rgb(18, 18, 20);
-    crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, ink);
+    let squeeze = 1.0 - (1.0 - PRESS_SCALE) * press;
+    // A new shape morphs out of the last one (cursor_morph.rs)
+    let me = Pose { name: sh.name, hot: sh.hot, px: sh.px };
+    let last: Option<Pose> = ctx.data(|d| d.get_temp(last_id()));
+    let mut morph: Option<(Pose, Pose, f64)> = ctx.data(|d| d.get_temp(last_id().with("m")));
+    if let Some(l) = last.filter(|l| l.name != me.name && ak > 0.0) {
+        morph = Some((l, me, now));
+    }
+    let mt = morph.filter(|m| m.1.name == me.name).map(|(f, _, t0)| (f, (((now - t0) / (super::cursor_morph::DUR * ak as f64)) as f32).clamp(0.0, 1.0)));
+    ctx.data_mut(|d| {
+        d.insert_temp(last_id(), me);
+        match morph {
+            Some(m) if mt.is_some_and(|(_, x)| x < 1.0) => d.insert_temp(last_id().with("m"), m),
+            _ => d.remove::<(Pose, Pose, f64)>(last_id().with("m")),
+        }
+    });
+    let sized = |q: Pose| Pose { px: q.px * squeeze, ..q };
+    match mt {
+        Some((from, x)) if x < 1.0 => {
+            ctx.request_repaint();
+            let e = 1.0 - (1.0 - x).powi(3);
+            super::cursor_morph::draw(&p, &sized(from), &sized(me), pos, tilt, e, Color32::WHITE, ink);
+        }
+        _ => crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * squeeze, tilt, Color32::WHITE, ink),
+    }
     // The drawing tool's own toolbar icon rides beside the crosshair, so each tool reads apart
     let pass = ctx.cumulative_pass_nr();
     let badge = ctx.data(|d| d.get_temp::<(&'static str, u64)>(badge_id())).filter(|(_, f)| *f == pass && sh.name == "crosshair").map(|(n, _)| n);
@@ -109,6 +136,12 @@ pub(crate) fn paint(ctx: &egui::Context) {
         p.circle_stroke(c, r, egui::Stroke::new(1.0, Color32::from_white_alpha((40.0 * bk) as u8)));
         crate::ui::svg_icons::draw(&p, name, c, r * 1.25, Color32::WHITE.gamma_multiply(bk));
     }
+}
+
+use super::cursor_morph::Pose;
+
+fn last_id() -> egui::Id {
+    egui::Id::new("qd_cursor_last")
 }
 
 fn badge_id() -> egui::Id {

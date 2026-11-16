@@ -13,6 +13,7 @@ pub(crate) mod num_edit;
 pub(crate) mod reset_morph;
 pub(crate) mod inline_text;
 pub(crate) mod cursor;
+pub(crate) mod cursor_morph;
 pub(crate) mod props;
 mod bar_morph;
 pub(crate) mod outline_drag;

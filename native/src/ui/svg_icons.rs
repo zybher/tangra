@@ -326,6 +326,11 @@ fn items(name: &'static str) -> Option<Rc<Vec<Item>>> {
     })
 }
 
+/// The icon's subpaths in its 24-unit box: (points, closed)
+pub(crate) fn subpaths(name: &'static str) -> Vec<(Vec<[f32; 2]>, bool)> {
+    items(name).map(|it| it.iter().flat_map(|i| i.subs.clone()).collect()).unwrap_or_default()
+}
+
 /// Paints icon `name` as a pointer: a dark edge `ink` around it, closed shapes filled with
 /// `fill`, open strokes drawn in `fill`. `hot` is the point of the 24-unit box placed at `at`.
 /// `rot`: radians clockwise, around the hot spot (so the point that clicks stays put)
