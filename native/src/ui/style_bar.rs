@@ -153,6 +153,7 @@ impl App {
             let glide = !was.is_empty() && !now_key.is_empty();
             ctx.data_mut(|d| {
                 d.insert_temp(bid.with("on"), now_key.clone());
+                d.remove::<bool>(bid.with("flip"));
                 if !glide {
                     d.insert_temp(bid.with("t0"), self.now);
                     d.remove::<(f32, f32, f32)>(bid.with("glide"));
@@ -253,11 +254,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let w = pad * 2.0 + segs.iter().enumerate().map(|(i, sg)| seg_ws(i, sg)).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
         // The bar keeps its side (above if there's room, else below); the size pills never push
         // it: a pill that would land on the bar's side folds into the other pill instead
-        let mut cy = fr.min.y - 32.0 - h / 2.0;
-        let on_top = cy - h / 2.0 >= rect.min.y + 50.0;
-        if !on_top {
-            cy = fr.max.y + 32.0 + h / 2.0;
-        }
+        let on_top = super::drop_anim::bar_side(&ctx, bid, fr, h, rect);
+        let cy = if on_top { fr.min.y - 32.0 - h / 2.0 } else { fr.max.y + 32.0 + h / 2.0 };
         let nr = ctx.cumulative_pass_nr();
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_bar_side"), (on_top, nr)));
         let cy = cy.clamp(rect.min.y + h / 2.0 + 8.0, rect.max.y - h / 2.0 - 70.0);
@@ -267,6 +265,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let w0 = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
         let cx0 = super::bar_morph::edge_cx(fr.center().x, rect.min.x, rect.max.x, w0);
         let cx = cx0;
+        super::drop_anim::publish_target(&ctx, bid, Rect::from_center_size(pos2(cx, cy), vec2(w, h)), true);
         let inview = cx0 >= fr.min.x && cx0 <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y;
         // A right-click menu puts the bar away too (same exit), since both share the top layer
         // and the bar would draw over the menu
@@ -669,7 +668,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k1) * -8.0;
             // Frames and closed shapes get a last row, "No fill" (just the outline)
             let n = PEN_COLORS.len() + 1 + (is_group || shape_fill.is_some()) as usize;
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let mut names: Vec<String> = PEN_COLORS.iter().map(|c| c.trim_start_matches('#').to_uppercase()).collect();
@@ -798,7 +797,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let pk = p.clone();
             let slide = (1.0 - k2) * -8.0;
             // Open upward when the list wouldn't fit between the bar and the bottom toolbar
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, 5, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, 5, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(10.0, &["Row", "Column", "Grid", "Gallery", "None"]);
@@ -840,7 +839,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             const RATIOS: [(&str, f32); 6] = [("1 : 1", 1.0), ("4 : 3", 4.0 / 3.0), ("3 : 4", 0.75), ("16 : 9", 16.0 / 9.0), ("9 : 16", 9.0 / 16.0), ("3 : 2", 1.5)];
             let cur = target.as_ref().and_then(|(_, id)| self.board.group_cards.iter().find(|g| &g.id == id)).map_or(0.0, |g| g.width / g.height.max(1.0));
             let n = RATIOS.len();
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &RATIOS.iter().map(|r| r.0).collect::<Vec<_>>());
@@ -898,7 +897,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 rows_def.push(("Space down", None, false));
             }
             let n = rows_def.len();
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
@@ -954,7 +953,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k5) * -8.0;
             let rows_def: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
             let n = rows_def.len();
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
@@ -1007,6 +1006,12 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let d = vec2((zone.min.x - q.x).max(q.x - zone.max.x).max(0.0), (zone.min.y - q.y).max(q.y - zone.max.y).max(0.0));
                 d.length() > 140.0
             });
+            // Just moved to the object's other side: wait until the pointer has reached it
+            let grace = super::drop_anim::flip_grace(&ctx, bid);
+            if grace && ctx.input(|i| i.pointer.hover_pos()).is_some_and(|q| zone.expand(4.0).contains(q)) {
+                ctx.data_mut(|d| d.remove::<bool>(bid.with("grace")));
+            }
+            let far = far && !grace;
             let aid = bid.with("away");
             let now = ctx.input(|i| i.time);
             if far {
@@ -1020,7 +1025,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
         }
         if set_pop == 0 {
-            ctx.data_mut(|d| d.remove::<f64>(bid.with("away")));
+            ctx.data_mut(|d| {
+                d.remove::<f64>(bid.with("away"));
+                d.remove::<bool>(bid.with("grace"));
+            });
         }
         ctx.data_mut(|d| d.insert_temp(bid.with("pop"), set_pop));
 

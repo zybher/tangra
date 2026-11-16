@@ -35,13 +35,44 @@ pub(crate) fn opens_up(ctx: &egui::Context, bar: Rect, ph: f32, rect: Rect) -> b
     }
 }
 
-/// How a bar's `n`-row list opens: (columns, panel height, opens up). When a single column
-/// would cover the object being edited it wraps into 2, then 3 columns (shorter, wider) if
-/// that clears it; failing that it stays one column and `opens_up` picks the side
-pub(crate) fn drop_fit(ctx: &egui::Context, bar: Rect, n: usize, rect: Rect) -> (usize, f32, bool) {
+/// A bar's own side of the object: above if there's room, else below, or the other side once
+/// a dropdown needed it (`drop_fit`) while that side still has room for the bar
+pub(crate) fn bar_side(ctx: &egui::Context, bid: egui::Id, fr: Rect, h: f32, rect: Rect) -> bool {
+    let top_ok = fr.min.y - 32.0 - h >= rect.min.y + 50.0;
+    let bottom_ok = fr.max.y + 32.0 + h <= rect.max.y - 70.0;
+    if ctx.data(|d| d.get_temp::<bool>(bid.with("flip"))).unwrap_or(false) {
+        // only ever flips from above to below (above was the natural pick, so it had room)
+        if top_ok && bottom_ok {
+            return false;
+        }
+        ctx.data_mut(|d| d.remove::<bool>(bid.with("flip")));
+    }
+    top_ok
+}
+
+/// Where a bar is heading (before its glide), and whether it may move to the object's other side
+pub(crate) fn publish_target(ctx: &egui::Context, bid: egui::Id, target: Rect, can_flip: bool) {
+    ctx.data_mut(|d| d.insert_temp(bid.with("target"), (target, can_flip)));
+}
+
+/// The far-collapse waits after a flip until the pointer has reached the moved bar / dropdown
+pub(crate) fn flip_grace(ctx: &egui::Context, bid: egui::Id) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(bid.with("grace"))).unwrap_or(false)
+}
+
+/// How bar `bid`'s `n`-row list opens: (columns, panel height, opens up). Off the object being
+/// edited if anyhow possible: one column, else wrapped into 2 then 3 (shorter, wider); else the
+/// whole bar moves to the object's other side and opens away from it there; only when nothing
+/// clears it does it stay one column on the side that covers less (`opens_up`)
+pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, rect: Rect) -> (usize, f32, bool) {
     let ph1 = n as f32 * PITCH + 8.0;
-    if let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) {
-        let cover = |y0: f32, y1: f32| (y1.min(obj.max.y) - y0.max(obj.min.y)).max(0.0);
+    let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) else {
+        return (1, ph1, opens_up(ctx, bar, ph1, rect));
+    };
+    // decided where the bar is heading, so a glide in progress doesn't flip it back
+    let (tgt, can_flip) = ctx.data(|d| d.get_temp::<(Rect, bool)>(bid.with("target"))).unwrap_or((bar, false));
+    let cover = |y0: f32, y1: f32| (y1.min(obj.max.y) - y0.max(obj.min.y)).max(0.0);
+    let fits = |b: Rect| -> Option<(usize, f32, bool)> {
         let mut last = 0;
         for c in 1..=3usize {
             let per = n.div_ceil(c);
@@ -50,11 +81,29 @@ pub(crate) fn drop_fit(ctx: &egui::Context, bar: Rect, n: usize, rect: Rect) -> 
             }
             last = per;
             let ph = per as f32 * PITCH + 8.0;
-            let down = bar.max.y + 14.0 + ph <= rect.max.y - 70.0 && cover(bar.max.y + 14.0, bar.max.y + 14.0 + ph) <= 0.0;
-            let up = bar.min.y - 14.0 - ph >= rect.min.y + 8.0 && cover(bar.min.y - 14.0 - ph, bar.min.y - 14.0) <= 0.0;
+            let down = b.max.y + 14.0 + ph <= rect.max.y - 70.0 && cover(b.max.y + 14.0, b.max.y + 14.0 + ph) <= 0.0;
+            let up = b.min.y - 14.0 - ph >= rect.min.y + 8.0 && cover(b.min.y - 14.0 - ph, b.min.y - 14.0) <= 0.0;
             if down || up {
-                return (c, ph, !down);
+                return Some((c, ph, !down));
             }
+        }
+        None
+    };
+    if let Some(f) = fits(tgt) {
+        return f;
+    }
+    if can_flip {
+        let above = tgt.center().y < obj.center().y;
+        let alt = if above { Rect::from_min_size(pos2(tgt.min.x, obj.max.y + 32.0), tgt.size()) } else { Rect::from_min_size(pos2(tgt.min.x, obj.min.y - 32.0 - tgt.height()), tgt.size()) };
+        let room = if above { alt.max.y <= rect.max.y - 70.0 } else { alt.min.y >= rect.min.y + 50.0 };
+        if let (true, Some(f)) = (room, fits(alt)) {
+            let was = ctx.data(|d| d.get_temp::<bool>(bid.with("flip"))).unwrap_or(false);
+            ctx.data_mut(|d| {
+                d.insert_temp(bid.with("flip"), !was);
+                d.insert_temp(bid.with("grace"), true);
+            });
+            ctx.request_repaint();
+            return f;
         }
     }
     (1, ph1, opens_up(ctx, bar, ph1, rect))

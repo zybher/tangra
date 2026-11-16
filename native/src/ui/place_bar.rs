@@ -159,6 +159,7 @@ impl App {
             let glide = !was.is_empty();
             ctx.data_mut(|d| {
                 d.insert_temp(bid.with("on"), key.clone());
+                d.remove::<bool>(bid.with("flip"));
                 if !glide {
                     d.insert_temp(bid.with("t0"), self.now);
                     d.remove::<(f32, f32, f32)>(bid.with("glide"));
@@ -262,17 +263,15 @@ impl App {
                 (cx, cy)
             }
             None => {
-                let mut cy = fr.min.y - 32.0 - h / 2.0;
-                let on_top = cy - h / 2.0 >= rect.min.y + 50.0;
-                if !on_top {
-                    cy = fr.max.y + 32.0 + h / 2.0;
-                }
+                let on_top = super::drop_anim::bar_side(&ctx, bid, fr, h, rect);
+                let cy = if on_top { fr.min.y - 32.0 - h / 2.0 } else { fr.max.y + 32.0 + h / 2.0 };
                 let nr = ctx.cumulative_pass_nr();
                 ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_bar_side"), (on_top, nr)));
                 let cx = super::bar_morph::edge_cx(fr.center().x, rect.min.x, rect.max.x, w_rest);
                 (cx, cy.clamp(rect.min.y + h / 2.0 + 8.0, rect.max.y - h / 2.0 - 70.0))
             }
         };
+        super::drop_anim::publish_target(&ctx, bid, Rect::from_center_size(pos2(cx, cy), vec2(w, h)), sb.is_none());
 
         // Pill springs open sideways with the same jelly as the style bar
         let mut f = 1.0 - (-4.5 * x).exp() * (8.0 * x).cos();
