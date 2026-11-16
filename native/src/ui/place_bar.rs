@@ -168,7 +168,7 @@ impl App {
             ctx.request_repaint();
         }
         // Restore button: added after the entrance key so appearing doesn't replay the bar
-        let has_cuts = single_img && self.board.images.iter().find(|i| i.id == targets[0].1).and_then(|i| i.edit.as_ref()).is_some_and(|e| !e.cuts.is_empty());
+        let has_cuts = single_img && self.board.images.iter().find(|i| i.id == targets[0].1).is_some_and(|i| !i.erase.is_empty() || i.edit.as_ref().is_some_and(|e| !e.cuts.is_empty()));
         let rest_k = ease(&ctx, bid.with("restore_k"), has_cuts);
         if single_img && rest_k > 0.01 {
             segs.push(Seg::Restore);

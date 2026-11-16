@@ -255,5 +255,12 @@ impl App {
     pub(crate) fn restore_cuts(&mut self) {
         self.snapshot();
         self.edit_each(|e| e.cuts.clear());
+        // and the spots rubbed out with the eraser (canvas/erase.rs)
+        let ids: std::collections::HashSet<String> = self.selected.iter().filter(|s| s.0 == Kind::Image).map(|s| s.1.clone()).collect();
+        for i in self.board.images.iter_mut().filter(|i| ids.contains(&i.id)) {
+            i.erase.clear();
+            i.erase_loops.clear();
+        }
+        self.mark_dirty();
     }
 }

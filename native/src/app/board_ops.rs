@@ -115,6 +115,7 @@ impl App {
                         color,
                         font_size: self.text_size / sx,
                         style: self.text_style,
+                        ..Default::default()
                     });
                 } else {
                     let id = new_id();
@@ -126,6 +127,7 @@ impl App {
                         color,
                         font_size: self.text_size,
                         style: self.text_style,
+                        ..Default::default()
                     });
                     self.select_only((Kind::Text, id));
                 }

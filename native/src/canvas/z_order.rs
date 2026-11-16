@@ -121,21 +121,24 @@ impl App {
         let b = &self.board;
         let r = 6.0 / b.camera.zoom.max(0.01);
         let filled = |s: &Stroke, q: Pt| s.fill && s.closed_len().is_some() && pts_bbox(&s.points).is_some_and(|[x, y, w, h]| inside(q, x, y, w, h));
+        // clicks go through rubbed-out / cut holes (canvas/holes.rs)
+        use super::holes::{in_hole, label_box, stroke_box};
+        let s_hole = |s: &Stroke, q: Pt| stroke_box(s).is_some_and(|bx| in_hole(&s.erase, &s.erase_loops, bx, q));
         let in_rect = |k: Kind, id: &str| self.rect_of(k, id).is_some_and(|[x, y, w, h]| inside(p, x, y, w, h));
         for (k, id) in self.front_to_back() {
             if bl.contains(&id) {
                 continue;
             }
             let hit = match k {
-                Kind::Stroke => b.world_strokes.iter().find(|s| s.id == id).is_some_and(|s| stroke_hit(s, p, r + s.width / 2.0) || filled(s, p)),
-                Kind::Text => b.world_texts.iter().find(|l| l.id == id).is_some_and(|l| label_hit(l, p, 4.0)),
+                Kind::Stroke => b.world_strokes.iter().find(|s| s.id == id).is_some_and(|s| (stroke_hit(s, p, r + s.width / 2.0) || filled(s, p)) && !s_hole(s, p)),
+                Kind::Text => b.world_texts.iter().find(|l| l.id == id).is_some_and(|l| label_hit(l, p, 4.0) && !in_hole(&l.erase, &l.erase_loops, label_box(l), p)),
                 Kind::Note | Kind::Link => in_rect(k, &id),
                 Kind::Image => {
-                    let Some(img) = b.images.iter().find(|i| i.id == id).filter(|i| inside(p, i.x, i.y, i.width, i.height)) else { continue };
+                    let Some(img) = b.images.iter().find(|i| i.id == id).filter(|i| inside(p, i.x, i.y, i.width, i.height) && !in_hole(&i.erase, &i.erase_loops, [i.x, i.y, i.width, i.height], p)) else { continue };
                     // a drawing on the picture is picked before the picture
                     let (sx, sy) = img.scale();
                     let lp = Pt { x: (p.x - img.x) / sx, y: (p.y - img.y) / sy };
-                    if let Some(s) = img.annotations.strokes.iter().rev().find(|s| stroke_hit(s, lp, (r + s.width / 2.0) / sx) || filled(s, lp)) {
+                    if let Some(s) = img.annotations.strokes.iter().rev().find(|s| (stroke_hit(s, lp, (r + s.width / 2.0) / sx) || filled(s, lp)) && !s_hole(s, lp)) {
                         return Some((Kind::Stroke, s.id.clone()));
                     }
                     true

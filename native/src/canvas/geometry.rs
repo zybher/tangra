@@ -81,6 +81,15 @@ pub(crate) fn label_hit(l: &Label, p: Pt, pad: f32) -> bool {
 }
 
 pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, width: f32) {
+    // rubbed-out spots / lasso cuts are cut out of whatever it paints (canvas/holes.rs)
+    let holes = match super::holes::stroke_box(s) {
+        Some(bx) if !s.erase.is_empty() || !s.erase_loops.is_empty() => super::holes::screen(&s.erase, &s.erase_loops, bx, &map),
+        _ => Vec::new(),
+    };
+    super::holes::with_holes(p, &holes, || paint_stroke_plain(p, s, &map, width));
+}
+
+fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, width: f32) {
     if s.points.len() < 2 {
         return;
     }
@@ -105,12 +114,6 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     // stroke position slides between inside / centre / outside
     let spk = gf(ctx, gid.with("sp"), stroke_inset(s.stroke_pos, 2.0));
     let inset = |w: f32| spk * w / 2.0;
-    // A rectangle / ellipse the eraser has been over: drawn with the rubbed spots cut out
-    if let (Some(n), false) = (s.closed_len(), s.erase.is_empty()) {
-        let rad = s.radius.filter(|r| *r > 0.0 && n == 4).map(|rad| gf(ctx, gid.with("r"), rad) * zk);
-        super::erase::paint_erased(p, s, &pts[..n], rad, fill_col, fk, col, sk, width, inset(width));
-        return;
-    }
     // Rectangle with rounded corners
     if let (Some(rad), Some(4)) = (s.radius.filter(|r| *r > 0.0), s.closed_len()) {
         let rr = Rect::from_points(&pts[..4]);

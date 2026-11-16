@@ -39,10 +39,13 @@ pub struct Stroke {
     /// 2 outside); new shapes start inside
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub stroke_pos: u8,
-    /// Rectangles / ellipses: spots rubbed out by the eraser, as (x, y, rx, ry) fractions of
-    /// the shape's box so they move and stretch with it (canvas/erase.rs)
+    /// Spots rubbed out by the eraser, as (x, y, rx, ry) fractions of its box so they move
+    /// and stretch with it (canvas/holes.rs)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub erase: Vec<[f32; 4]>,
+    /// Loops cut out with the lasso, as fractions of its box (canvas/holes.rs)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub erase_loops: Vec<Vec<[f32; 2]>>,
 }
 
 fn is_zero(v: &f32) -> bool {
@@ -97,6 +100,13 @@ pub struct Label {
     pub font_size: f32,
     /// 0 regular, 1 bold, 2 italic, 3 bold italic
     pub style: u8,
+    /// Spots rubbed out by the eraser, as (x, y, rx, ry) fractions of its box so they move
+    /// and stretch with it (canvas/holes.rs)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub erase: Vec<[f32; 4]>,
+    /// Loops cut out with the lasso, as fractions of its box (canvas/holes.rs)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub erase_loops: Vec<Vec<[f32; 2]>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -141,6 +151,13 @@ pub struct ImageNode {
     /// Colour adjustments, cut-out areas and 3D tilt (see image_edit.rs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit: Option<crate::image_edit::ImageEdit>,
+    /// Spots rubbed out by the eraser, as (x, y, rx, ry) fractions of its box so they move
+    /// and stretch with it (canvas/holes.rs)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub erase: Vec<[f32; 4]>,
+    /// Loops cut out with the lasso, as fractions of its box (canvas/holes.rs)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub erase_loops: Vec<Vec<[f32; 2]>>,
 }
 
 impl ImageNode {
@@ -303,6 +320,7 @@ impl Board {
             base_scale: None,
             corner: 0.0,
             edit: None,
+            ..Default::default()
         });
         self.name_image(&id, None);
         id

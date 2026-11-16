@@ -203,7 +203,9 @@ impl App {
             };
             // A new cut / restore / adjustment crossfades from the old look (canvas/tex_fade.rs)
             let ncuts = img.edit.as_ref().map_or(0, |e| e.cuts.len());
-            let draw_pic = |tex: &egui::TextureHandle| match super::tex_fade::fade(&img.id, tex, ncuts, self.now) {
+            // rubbed-out spots / lasso cuts are cut out of the picture as it draws (canvas/holes.rs)
+            let holes = super::holes::screen(&img.erase, &img.erase_loops, [img.x, img.y, img.width, img.height], |q| v.s(q.x, q.y));
+            let draw_pic = |tex: &egui::TextureHandle| super::holes::with_holes(p, &holes, || match super::tex_fade::fade(&img.id, tex, ncuts, self.now) {
                 Some((old, w, old_under)) => {
                     p.ctx().request_repaint();
                     if old_under {
@@ -215,12 +217,12 @@ impl App {
                     }
                 }
                 None => draw_tex(tex, Color32::WHITE),
-            };
+            });
             if let (Some(_), Some(tex)) = (&tilt, tex) {
                 draw_pic(tex);
             } else {
             // Only pictures straight on the board, and not ones with cut-out holes (it shows grey through)
-            if cut.is_none() && self.parent_of(&img.id).is_none() && !img.edit.as_ref().is_some_and(|e| !e.cuts.is_empty()) {
+            if cut.is_none() && self.parent_of(&img.id).is_none() && !img.edit.as_ref().is_some_and(|e| !e.cuts.is_empty()) && img.erase.is_empty() && img.erase_loops.is_empty() {
             p.add(
                 egui::epaint::Shadow {
                     offset: vec2(0.0, 4.0 * z),
@@ -277,13 +279,17 @@ impl App {
                     let galley = label_galley(&ip, &t.text, f, hex(&t.color), t.style);
                     let pad = fs * sx * z * 0.25;
                     let bg = Rect::from_min_size(pos, galley.size()).expand2(vec2(pad, pad * 0.5));
-                    ip.rect_filled(bg, 3.0, Color32::from_black_alpha(180));
+                    // bitten by the eraser / lasso (canvas/holes.rs)
+                    let holes = super::holes::screen(&t.erase, &t.erase_loops, super::holes::label_box(t), |q| v.s(img.x + q.x * sx, img.y + q.y * sy));
+                    super::holes::with_holes(&ip, &holes, || {
+                        ip.rect_filled(bg, 3.0, Color32::from_black_alpha(180));
+                    });
                     // Picked ring fades in / out
                     let pk = ease(ip.ctx(), egui::Id::new(("qd_lbl_pick", t.id.as_str())), picked);
                     if pk > 0.01 {
                         ip.rect_stroke(bg.expand(2.0), 3.0, EStroke::new(1.5_f32, blue().gamma_multiply(pk)));
                     }
-                    draw_label(&ip, pos, galley, hex(&t.color), t.style, fs * sx * z);
+                    super::holes::with_holes(&ip, &holes, || draw_label(&ip, pos, galley, hex(&t.color), t.style, fs * sx * z));
                 }
             }
         };
@@ -397,7 +403,9 @@ impl App {
             }
             if font(fs * z).is_some() {
                 let fam = styled_font(FontId::proportional(fs), t.style).family;
-                smooth_text(p, v.s(t.x, t.y), &t.text, fam, fs, z, None, tcol);
+                // bitten by the eraser / lasso (canvas/holes.rs)
+                let holes = super::holes::screen(&t.erase, &t.erase_loops, super::holes::label_box(t), |q| v.s(q.x, q.y));
+                super::holes::with_holes(p, &holes, || smooth_text(p, v.s(t.x, t.y), &t.text, fam, fs, z, None, tcol));
             } else {
                 // Too small to read: a bar in the text's colour keeps it findable
                 let (w, h) = text_wh(&t.text, fs);

@@ -21,6 +21,7 @@ pub(crate) mod grid_fade;
 pub(crate) mod clip_fade;
 mod tex_fade;
 pub(crate) mod erase;
+pub(crate) mod holes;
 pub(crate) mod z_order;
 pub(crate) mod tilt3d;
 mod lasso;

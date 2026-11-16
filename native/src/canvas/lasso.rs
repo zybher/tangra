@@ -1,5 +1,6 @@
-//! Lasso cut tool (K): drag a loop over pictures, then Delete cuts that part out
-//! (kept as an edit on each picture, so "Restore cut areas" brings it back).
+//! Lasso cut tool (K): drag a loop over pictures, drawings or text, then Delete cuts that
+//! part out (on pictures kept as an edit, so "Restore cut areas" brings it back; on
+//! drawings and text kept as a hole, canvas/holes.rs).
 
 use super::tilt3d::Tilt;
 use crate::*;
@@ -57,10 +58,21 @@ impl App {
             hit.then_some(pts)
         };
         let hits: Vec<(String, Vec<Pt>)> = self.board.images.iter().filter_map(|i| local(i).map(|p| (i.id.clone(), p))).collect();
-        let picked: Vec<&(String, Vec<Pt>)> = hits.iter().filter(|h| self.selected.contains(&(Kind::Image, h.0.clone()))).collect();
-        let hits: Vec<(String, Vec<Pt>)> = if picked.is_empty() { hits.clone() } else { picked.into_iter().cloned().collect() };
-        if hits.is_empty() {
-            self.toast("The loop doesn't touch a picture".to_string());
+        // Drawings and text the loop overlaps get it as a hole, in their box's fractions
+        // (canvas/holes.rs)
+        use super::holes::{label_box, stroke_box};
+        let lb = pts_bbox(&l).unwrap_or([0.0; 4]);
+        let over = |b: &[f32; 4]| b[2] > 0.0 && b[3] > 0.0 && lb[0] < b[0] + b[2] && b[0] < lb[0] + lb[2] && lb[1] < b[1] + b[3] && b[1] < lb[1] + lb[3];
+        let b = &self.board;
+        let mut marks: Vec<Sel> = b.world_strokes.iter().filter(|s| !s.pixelate && stroke_box(s).is_some_and(|bx| over(&bx))).map(|s| (Kind::Stroke, s.id.clone())).collect();
+        marks.extend(b.world_texts.iter().filter(|t| over(&label_box(t))).map(|t| (Kind::Text, t.id.clone())));
+        // only the selected ones, if any of those are under it
+        let sel = |s: &Sel| self.selected.contains(s);
+        let any_sel = hits.iter().any(|h| sel(&(Kind::Image, h.0.clone()))) || marks.iter().any(sel);
+        let hits: Vec<(String, Vec<Pt>)> = hits.into_iter().filter(|h| !any_sel || sel(&(Kind::Image, h.0.clone()))).collect();
+        let marks: Vec<Sel> = marks.into_iter().filter(|m| !any_sel || sel(m)).collect();
+        if hits.is_empty() && marks.is_empty() {
+            self.toast("The loop doesn't touch anything it can cut".to_string());
             return true;
         }
         self.snapshot();
@@ -69,6 +81,26 @@ impl App {
                 img.edit.get_or_insert_with(Default::default).cuts.push(pts.clone());
             }
         }
+        let norm = |bx: [f32; 4]| -> Vec<[f32; 2]> { l.iter().map(|q| [(q.x - bx[0]) / bx[2], (q.y - bx[1]) / bx[3]]).collect() };
+        for (k, id) in &marks {
+            let b = &mut self.board;
+            match k {
+                Kind::Stroke => {
+                    if let Some(s) = b.world_strokes.iter_mut().find(|s| &s.id == id) {
+                        if let Some(bx) = stroke_box(s) {
+                            s.erase_loops.push(norm(bx));
+                        }
+                    }
+                }
+                _ => {
+                    if let Some(t) = b.world_texts.iter_mut().find(|t| &t.id == id) {
+                        let bx = label_box(t);
+                        t.erase_loops.push(norm(bx));
+                    }
+                }
+            }
+        }
+        self.mark_dirty();
         true
     }
 

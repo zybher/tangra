@@ -198,8 +198,8 @@ impl App {
                         no_stroke: shape && (in_frame || self.shape_fill == 2),
                         pixelate: false,
                         radius: None,
-                        erase: Vec::new(),
                         stroke_pos: if shape { 1 } else { 0 },
+                        ..Default::default()
                     },
                 ));
                 self.drag = Drag::Draw;
