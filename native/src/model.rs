@@ -35,6 +35,10 @@ pub struct Stroke {
     /// Rectangles only: corner radius in world units
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radius: Option<f32>,
+    /// Closed shapes only: where the outline sits on the edge, like a frame's (0 centre, 1 inside,
+    /// 2 outside); new shapes start inside
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub stroke_pos: u8,
 }
 
 fn is_zero(v: &f32) -> bool {
@@ -329,7 +333,7 @@ impl Board {
             layout_unit: 0.0,
             corner: None,
             border: None,
-            stroke_pos: 0,
+            stroke_pos: 1,
         });
         id
     }

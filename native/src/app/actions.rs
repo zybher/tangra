@@ -184,6 +184,13 @@ impl App {
                 for g in self.board.group_cards.iter_mut().filter(|g| ids.contains(&g.id)) {
                     g.stroke_pos = v;
                 }
+                // Closed shapes too (frames and shapes share the control)
+                let sids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Stroke).map(|s| s.1.clone()).collect();
+                let b = &mut self.board;
+                let all = b.world_strokes.iter_mut().chain(b.images.iter_mut().flat_map(|i| i.annotations.strokes.iter_mut()));
+                for st in all.filter(|st| sids.contains(&st.id) && st.closed_len().is_some()) {
+                    st.stroke_pos = v;
+                }
             }
             Act::ToggleClip => {
                 self.snapshot();

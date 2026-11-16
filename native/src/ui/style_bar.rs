@@ -96,6 +96,10 @@ impl App {
                             segs.push(Seg::Num("corner", 0, st.radius.unwrap_or(0.0), 0.0, 60.0, 0.25, "Corner radius"));
                         }
                         segs.push(Seg::Num("width", 1, st.width, 0.5, 500.0, 0.2, "Thickness"));
+                        if st.closed_len().is_some() {
+                            stroke_pos = st.stroke_pos;
+                            segs.push(Seg::StrokePos);
+                        }
                     }
                 }
                 Kind::Text => {

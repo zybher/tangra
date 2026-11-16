@@ -612,6 +612,16 @@ pub fn bake(img: &ImageNode, buf: &mut [u8], w: usize, h: usize) {
                 continue;
             }
         }
+        // A closed outline sits inside / on / outside the edge like on the canvas
+        let pts = match closed {
+            Some(n) if s.stroke_pos != 0 => {
+                let v: Vec<egui::Pos2> = pts[..n].iter().map(|p| egui::pos2(p.0, p.1)).collect();
+                let mut o: Vec<(f32, f32)> = crate::canvas::geometry::offset_closed(&v, crate::canvas::geometry::stroke_inset(s.stroke_pos, radius * 2.0)).iter().map(|p| (p.x, p.y)).collect();
+                o.push(o[0]);
+                o
+            }
+            _ => pts,
+        };
         draw_stroke(buf, w, h, &pts, radius.max(0.5), hex_rgb(&s.color), s.opacity.unwrap_or(1.0));
     }
     for t in &img.annotations.texts {

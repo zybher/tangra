@@ -100,7 +100,8 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
             p.rect_filled(rr, rad, rgba(r, g, b, (s.fill_alpha() * 255.0) as u8));
         }
         if !s.no_stroke {
-            p.rect_stroke(rr, rad, EStroke::new(width, col));
+            let d = stroke_inset(s.stroke_pos, width);
+            p.rect_stroke(rr.shrink(d), (rad - d).max(0.0), EStroke::new(width, col));
         }
         return;
     }
@@ -114,7 +115,8 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     // Rectangle / ellipse outline: one closed line with sharp joins (never smoothed: rounding
     // it like a pen line melted the corners and left the overlap points sticking out)
     if let Some(n) = s.closed_len() {
-        p.add(Shape::closed_line(pts[..n].to_vec(), EStroke::new(width, col)));
+        let line = offset_closed(&pts[..n], stroke_inset(s.stroke_pos, width));
+        p.add(Shape::closed_line(line, EStroke::new(width, col)));
         return;
     }
     // Arrow (shaft, then both wings out of the tip): separate round-capped segments,
@@ -133,6 +135,37 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     // Pen / highlighter: one smooth mesh (round caps, no seams, even when see-through)
     let line = super::stroke_mesh::smooth_line(&pts, width);
     p.add(super::stroke_mesh::stroke_mesh(&line, width, col));
+}
+
+/// How far a closed outline of `width` moves inward for its stroke position (inside / centre / outside)
+pub(crate) fn stroke_inset(pos: u8, width: f32) -> f32 {
+    match pos {
+        1 => width / 2.0,
+        2 => -width / 2.0,
+        _ => 0.0,
+    }
+}
+
+/// A closed polygon moved `d` inward (negative: outward), corners mitred
+pub(crate) fn offset_closed(v: &[Pos2], d: f32) -> Vec<Pos2> {
+    let n = v.len();
+    if d == 0.0 || n < 3 {
+        return v.to_vec();
+    }
+    let area: f32 = (0..n).map(|i| v[i].x * v[(i + 1) % n].y - v[(i + 1) % n].x * v[i].y).sum();
+    let sg = area.signum();
+    let norm = |a: Pos2, b: Pos2| {
+        let e = b - a;
+        let l = e.length().max(1e-6);
+        vec2(-e.y, e.x) * (sg / l)
+    };
+    (0..n)
+        .map(|i| {
+            let (a, b, c) = (v[(i + n - 1) % n], v[i], v[(i + 1) % n]);
+            let (n1, n2) = (norm(a, b), norm(b, c));
+            b + (n1 + n2) * (d / (1.0 + n1.dot(n2)).max(0.3))
+        })
+        .collect()
 }
 
 /// Freehand line (pen / highlighter): not a closed shape, rounded rectangle or arrow

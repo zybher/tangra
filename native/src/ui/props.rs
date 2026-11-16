@@ -230,6 +230,9 @@ impl App {
                         corner = Some(st.radius.unwrap_or(0.0));
                     }
                     stroke_w = Some(("width", st.width, 0.5, 500.0, 0.2));
+                    if st.closed_len().is_some() {
+                        spos = Some(st.stroke_pos);
+                    }
                 }
                 "Shape"
             }
@@ -516,11 +519,7 @@ impl App {
                 PAct::Dist(h) => self.distribute_selection(h),
                 PAct::Color(c) => acts.push(if is_group { Act::GroupColor(c) } else { Act::Color(c) }),
                 PAct::StrokePos(v) => {
-                    self.snapshot();
-                    let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Group).map(|s| s.1.clone()).collect();
-                    for g in self.board.group_cards.iter_mut().filter(|g| ids.contains(&g.id)) {
-                        g.stroke_pos = v;
-                    }
+                    acts.push(Act::StrokePos(v));
                     dirty = true;
                 }
                 PAct::Edit(fk, v, first) => self.set_image_edit(fk, v, first),

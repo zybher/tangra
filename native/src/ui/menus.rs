@@ -201,6 +201,11 @@ impl App {
                     if check_item(ui, "Fill", s.fill) {
                         acts.push(Act::ToggleFill);
                     }
+                    if !s.no_stroke {
+                        if let Some(v) = choice_row(ui, &[("Inside", 1.0), ("Center", 0.0), ("Outside", 2.0)], s.stroke_pos as f32, 0.5) {
+                            acts.push(Act::StrokePos(v as u8));
+                        }
+                    }
                     ui.add_space(0.0);
                 }
                 divider(ui);
