@@ -57,7 +57,7 @@ impl App {
             let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
             // Eased like the toolbar menu's pinned rows: letting go plays the rise backwards
             let pinned: Vec<f32> = (0..n).map(|i| ease(&ctx, bid.with(("ipin", kind, i)), dragging == Some(i))).collect();
-            let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT, dragging.is_some());
+            let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), super::drop_anim::aside_x(&ctx, left, PANEL_W, top, ph, rect), top + ph, PANEL_W, PITCH, n, &pinned, SOFT, dragging.is_some());
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);

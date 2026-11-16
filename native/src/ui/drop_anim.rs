@@ -17,7 +17,6 @@ pub(crate) fn fit_w(ctx: &egui::Context, text_x: f32, labels: &[&str]) -> f32 {
     (text_x + tw + 14.0).ceil()
 }
 
-/// Left edge of a `w`-wide panel centred over a button at `cx`, kept inside `rect`
 /// Which way a bar's dropdown of height `ph` opens: away from the object being edited (its
 /// screen box, published by the place / style bars as "qd_edit_obj") so it never covers
 /// it when there's room; with room neither or both ways, the side that covers less of it
@@ -36,8 +35,28 @@ pub(crate) fn opens_up(ctx: &egui::Context, bar: Rect, ph: f32, rect: Rect) -> b
     }
 }
 
+/// Left edge of a `w`-wide panel centred over a button at `cx`, kept inside `rect`
 pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
     (cx - w / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - w).max(rect.min.x + 8.0))
+}
+
+/// Left edge for a dropdown at `left`..+`w`, `top`..+`ph`: when it would still cover the
+/// object being edited, it moves beside the object instead (the nearer side that fits)
+pub(crate) fn aside_x(ctx: &egui::Context, left: f32, w: f32, top: f32, ph: f32, rect: Rect) -> f32 {
+    let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) else { return left };
+    if !Rect::from_min_size(pos2(left, top), vec2(w, ph)).intersects(obj) {
+        return left;
+    }
+    let l = obj.min.x - 12.0 - w;
+    let r = obj.max.x + 12.0;
+    let fl = l >= rect.min.x + 8.0;
+    let fr = r + w <= rect.max.x - 8.0;
+    match (fl, fr) {
+        (true, true) => if (left - l).abs() <= (left - r).abs() { l } else { r },
+        (true, false) => l,
+        (false, true) => r,
+        _ => left,
+    }
 }
 
 pub(crate) struct DropAnim {
