@@ -1,7 +1,8 @@
 //! Picture dropdowns from the placement bar (place_bar.rs): Adjust (colour) and 3D (tilt). Same
 //! wave list as the style bar's dropdowns, a softer wave since every row is dragged; each
 //! value row scrubs sideways like the bars' number fields (double-click resets it), and a
-//! reset row sits at the bottom. Opens under (or over) the bar, from its button.
+//! reset row sits at the bottom. Opens from its button, placed like the bars' other dropdowns
+//! (`drop_fit`: wraps into columns or moves the bar rather than cover the picture).
 
 use crate::image_edit::{ImageEdit, ADJUST_ROWS, TILT_ROWS};
 use crate::*;
@@ -41,14 +42,16 @@ impl App {
                 resets.push(("Reset 3D", ed.has_tilt() || ed.depth != 0.0, 2));
             }
             let n = sliders.len() + resets.len();
-            let ph = n as f32 * PITCH + 8.0;
+            // Same fit as the bars' other dropdowns: off the picture, in 1-3 columns, else the
+            // bar moves to the picture's other side (drop_anim.rs)
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, egui::Id::new("qd_place_bar"), bar, n, rect);
+            let tw = grid_w(PANEL_W, cols);
 
             // Keep the last spot while it fades out (the button may already be gone)
             let btn = btns[kind as usize - 1];
             let xid = bid.with(("ix", kind));
-            let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, PANEL_W) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
+            let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, tw) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
             ctx.data_mut(|d| d.insert_temp(xid, left));
-            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + (1.0 - kk) * -8.0 * sg;
 
@@ -57,7 +60,7 @@ impl App {
             let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
             // Eased like the toolbar menu's pinned rows: letting go plays the rise backwards
             let pinned: Vec<f32> = (0..n).map(|i| ease(&ctx, bid.with(("ipin", kind, i)), dragging == Some(i))).collect();
-            let (rows, mags, pr) = wave_rows_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, &pinned, SOFT, dragging.is_some());
+            let (rows, mags, pr) = wave_grid_k(&ctx, bid.with(("iwave", kind)), left, top + ph, PANEL_W, PITCH, n, cols, &pinned, SOFT, dragging.is_some());
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);

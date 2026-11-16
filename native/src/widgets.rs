@@ -303,8 +303,14 @@ pub(crate) fn grid_w(w: f32, cols: usize) -> f32 {
 /// magnifying on its own; a shorter last column lines up with the others' tops
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn wave_grid(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, cols: usize) -> (Vec<Rect>, Vec<f32>, Rect) {
+    wave_grid_k(ctx, id, left, bottom, w, pitch, n, cols, &[], 1.0, false)
+}
+
+/// `wave_grid` with `wave_rows_k`'s pinned rows, wave spread and lock (per column)
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn wave_grid_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, cols: usize, pinned: &[f32], k: f32, lock: bool) -> (Vec<Rect>, Vec<f32>, Rect) {
     if cols <= 1 || n < 2 {
-        return wave_rows(ctx, id, left, bottom, w, pitch, n, &[]);
+        return wave_rows_k(ctx, id, left, bottom, w, pitch, n, pinned, k, lock);
     }
     let per = n.div_ceil(cols);
     let mut rows = vec![Rect::NOTHING; n];
@@ -316,7 +322,8 @@ pub(crate) fn wave_grid(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f3
             break;
         }
         let cb = bottom - (per - (e - s)) as f32 * pitch;
-        let (r, m, pr) = wave_rows(ctx, id.with(("col", j)), left + j as f32 * (w + COL_GAP), cb, w, pitch, e - s, &[]);
+        let pin: Vec<f32> = (s..e).map(|i| pinned.get(i).copied().unwrap_or(0.0)).collect();
+        let (r, m, pr) = wave_rows_k(ctx, id.with(("col", j)), left + j as f32 * (w + COL_GAP), cb, w, pitch, e - s, &pin, k, lock);
         for (k, (rr, mm)) in r.into_iter().zip(m).enumerate() {
             rows[s + k] = rr;
             mags[s + k] = mm;
