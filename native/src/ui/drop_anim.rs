@@ -35,6 +35,31 @@ pub(crate) fn opens_up(ctx: &egui::Context, bar: Rect, ph: f32, rect: Rect) -> b
     }
 }
 
+/// How a bar's `n`-row list opens: (columns, panel height, opens up). When a single column
+/// would cover the object being edited it wraps into 2, then 3 columns (shorter, wider) if
+/// that clears it; failing that it stays one column and `opens_up` / `aside_x` place it
+pub(crate) fn drop_fit(ctx: &egui::Context, bar: Rect, n: usize, rect: Rect) -> (usize, f32, bool) {
+    let ph1 = n as f32 * PITCH + 8.0;
+    if let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) {
+        let cover = |y0: f32, y1: f32| (y1.min(obj.max.y) - y0.max(obj.min.y)).max(0.0);
+        let mut last = 0;
+        for c in 1..=3usize {
+            let per = n.div_ceil(c);
+            if c > 1 && (per < 2 || per == last) {
+                break;
+            }
+            last = per;
+            let ph = per as f32 * PITCH + 8.0;
+            let down = bar.max.y + 14.0 + ph <= rect.max.y - 70.0 && cover(bar.max.y + 14.0, bar.max.y + 14.0 + ph) <= 0.0;
+            let up = bar.min.y - 14.0 - ph >= rect.min.y + 8.0 && cover(bar.min.y - 14.0 - ph, bar.min.y - 14.0) <= 0.0;
+            if down || up {
+                return (c, ph, !down);
+            }
+        }
+    }
+    (1, ph1, opens_up(ctx, bar, ph1, rect))
+}
+
 /// Left edge of a `w`-wide panel centred over a button at `cx`, kept inside `rect`
 pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
     (cx - w / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - w).max(rect.min.x + 8.0))

@@ -669,15 +669,14 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k1) * -8.0;
             // Frames and closed shapes get a last row, "No fill" (just the outline)
             let n = PEN_COLORS.len() + 1 + (is_group || shape_fill.is_some()) as usize;
-            let ph = n as f32 * 30.0 + 8.0;
-            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let mut names: Vec<String> = PEN_COLORS.iter().map(|c| c.trim_start_matches('#').to_uppercase()).collect();
             names.push("Custom".into());
             names.push("No fill".into());
             let w = fit(32.0, &names.iter().take(n).map(|s| s.as_str()).collect::<Vec<_>>());
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave1"), super::drop_anim::aside_x(&ctx, drop_left(1, w), w, top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, &[]);
+            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave1"), super::drop_anim::aside_x(&ctx, drop_left(1, grid_w(w, cols)), grid_w(w, cols), top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, cols);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -799,12 +798,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let pk = p.clone();
             let slide = (1.0 - k2) * -8.0;
             // Open upward when the list wouldn't fit between the bar and the bottom toolbar
-            let ph = 5.0 * 30.0 + 8.0;
-            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, 5, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(10.0, &["Row", "Column", "Grid", "Gallery", "None"]);
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave2"), super::drop_anim::aside_x(&ctx, drop_left(2, w), w, top, ph, rect), top + ph, w, super::drop_anim::PITCH, 5, &[]);
+            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave2"), super::drop_anim::aside_x(&ctx, drop_left(2, grid_w(w, cols)), grid_w(w, cols), top, ph, rect), top + ph, w, super::drop_anim::PITCH, 5, cols);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -842,12 +840,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             const RATIOS: [(&str, f32); 6] = [("1 : 1", 1.0), ("4 : 3", 4.0 / 3.0), ("3 : 4", 0.75), ("16 : 9", 16.0 / 9.0), ("9 : 16", 9.0 / 16.0), ("3 : 2", 1.5)];
             let cur = target.as_ref().and_then(|(_, id)| self.board.group_cards.iter().find(|g| &g.id == id)).map_or(0.0, |g| g.width / g.height.max(1.0));
             let n = RATIOS.len();
-            let ph = n as f32 * 30.0 + 8.0;
-            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &RATIOS.iter().map(|r| r.0).collect::<Vec<_>>());
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave3"), super::drop_anim::aside_x(&ctx, drop_left(3, w), w, top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, &[]);
+            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave3"), super::drop_anim::aside_x(&ctx, drop_left(3, grid_w(w, cols)), grid_w(w, cols), top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, cols);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -901,12 +898,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 rows_def.push(("Space down", None, false));
             }
             let n = rows_def.len();
-            let ph = n as f32 * 30.0 + 8.0;
-            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave4"), super::drop_anim::aside_x(&ctx, drop_left(4, w), w, top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, &[]);
+            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave4"), super::drop_anim::aside_x(&ctx, drop_left(4, grid_w(w, cols)), grid_w(w, cols), top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, cols);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -958,12 +954,11 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let slide = (1.0 - k5) * -8.0;
             let rows_def: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
             let n = rows_def.len();
-            let ph = n as f32 * 30.0 + 8.0;
-            let up = super::drop_anim::opens_up(&ctx, bar, ph, rect);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar, n, rect);
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave5"), super::drop_anim::aside_x(&ctx, drop_left(5, w), w, top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, &[]);
+            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave5"), super::drop_anim::aside_x(&ctx, drop_left(5, grid_w(w, cols)), grid_w(w, cols), top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, cols);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);

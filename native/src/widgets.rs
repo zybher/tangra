@@ -290,6 +290,44 @@ pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: 
     (rows, m, panel)
 }
 
+/// Space between the columns of a wrapped list (a swollen row pokes out 14 px to the right)
+pub(crate) const COL_GAP: f32 = 14.0;
+
+/// Width of a list of `w`-wide rows wrapped into `cols` columns
+pub(crate) fn grid_w(w: f32, cols: usize) -> f32 {
+    let c = cols.max(1) as f32;
+    c * w + (c - 1.0) * COL_GAP
+}
+
+/// `wave_rows` wrapped into `cols` columns (filled top to bottom, then the next column), each
+/// magnifying on its own; a shorter last column lines up with the others' tops
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn wave_grid(ctx: &egui::Context, id: egui::Id, left: f32, bottom: f32, w: f32, pitch: f32, n: usize, cols: usize) -> (Vec<Rect>, Vec<f32>, Rect) {
+    if cols <= 1 || n < 2 {
+        return wave_rows(ctx, id, left, bottom, w, pitch, n, &[]);
+    }
+    let per = n.div_ceil(cols);
+    let mut rows = vec![Rect::NOTHING; n];
+    let mut mags = vec![0.0; n];
+    let mut panel = Rect::NOTHING;
+    for j in 0..cols {
+        let (s, e) = (j * per, ((j + 1) * per).min(n));
+        if s >= e {
+            break;
+        }
+        let cb = bottom - (per - (e - s)) as f32 * pitch;
+        let (r, m, pr) = wave_rows(ctx, id.with(("col", j)), left + j as f32 * (w + COL_GAP), cb, w, pitch, e - s, &[]);
+        for (k, (rr, mm)) in r.into_iter().zip(m).enumerate() {
+            rows[s + k] = rr;
+            mags[s + k] = mm;
+        }
+        panel = panel.union(pr);
+    }
+    // the full height, so a short column's empty end still sits inside the panel
+    panel.max.y = bottom;
+    (rows, mags, panel)
+}
+
 /// The raised tile behind a magnified row
 pub(crate) fn wave_tile(p: &egui::Painter, r: Rect, m: f32, fill: Color32, a: f32) {
     if m <= 0.01 {
