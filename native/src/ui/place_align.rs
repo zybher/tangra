@@ -36,7 +36,7 @@ impl App {
         ctx.data_mut(|d| d.insert_temp(bid.with("x"), left));
         let sg = if up { -1.0 } else { 1.0 };
         let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-        let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave"), super::drop_anim::aside_x(&ctx, left, tw, top, ph, rect), top + ph, w, super::drop_anim::PITCH, n, cols);
+        let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave"), left, top + ph, w, super::drop_anim::PITCH, n, cols);
         let dy = top - pr.min.y;
         let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);

@@ -37,7 +37,7 @@ pub(crate) fn opens_up(ctx: &egui::Context, bar: Rect, ph: f32, rect: Rect) -> b
 
 /// How a bar's `n`-row list opens: (columns, panel height, opens up). When a single column
 /// would cover the object being edited it wraps into 2, then 3 columns (shorter, wider) if
-/// that clears it; failing that it stays one column and `opens_up` / `aside_x` place it
+/// that clears it; failing that it stays one column and `opens_up` picks the side
 pub(crate) fn drop_fit(ctx: &egui::Context, bar: Rect, n: usize, rect: Rect) -> (usize, f32, bool) {
     let ph1 = n as f32 * PITCH + 8.0;
     if let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) {
@@ -69,25 +69,6 @@ pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
 /// moving the canvas (middle button, or with space held), so they stay open while panning
 pub(crate) fn closing_press(ctx: &egui::Context) -> bool {
     ctx.input(|i| i.pointer.any_pressed() && !i.pointer.button_pressed(egui::PointerButton::Middle) && !(i.key_down(egui::Key::Space) && !ctx.wants_keyboard_input()))
-}
-
-/// Left edge for a dropdown at `left`..+`w`, `top`..+`ph`: when it would still cover the
-/// object being edited, it moves beside the object instead (the nearer side that fits)
-pub(crate) fn aside_x(ctx: &egui::Context, left: f32, w: f32, top: f32, ph: f32, rect: Rect) -> f32 {
-    let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) else { return left };
-    if !Rect::from_min_size(pos2(left, top), vec2(w, ph)).intersects(obj) {
-        return left;
-    }
-    let l = obj.min.x - 12.0 - w;
-    let r = obj.max.x + 12.0;
-    let fl = l >= rect.min.x + 8.0;
-    let fr = r + w <= rect.max.x - 8.0;
-    match (fl, fr) {
-        (true, true) => if (left - l).abs() <= (left - r).abs() { l } else { r },
-        (true, false) => l,
-        (false, true) => r,
-        _ => left,
-    }
 }
 
 /// True while bar `bar`'s dropdown is open or still playing its exit (`bar`: the bar's id).
