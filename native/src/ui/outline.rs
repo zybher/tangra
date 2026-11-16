@@ -540,8 +540,10 @@ impl App {
                             let m = ease(ctx, resp.id.with("lift"), resp.hovered() || renaming);
                             let r = Rect::from_min_max(pos2(r0.min.x + 4.0 + 6.0 * m - (1.0 - e) * 10.0, r0.min.y), pos2(r0.max.x - 2.0 + 2.0 * m, r0.max.y));
                             // Selected rows never get the grey hover tile: selection colour wins
-                            if !self.selected.contains(s) {
-                                wave_tile(&ui.painter().with_clip_rect(ui.clip_rect()), r, m, mix(popup(), Color32::from_gray(90), 0.35), e);
+                            // (the tile fades as the selection eases in, instead of cutting out)
+                            let skl = ease(ctx, egui::Id::new(("qd_outline_selk", &s.1)), self.selected.contains(s));
+                            if skl < 0.99 {
+                                wave_tile(&ui.painter().with_clip_rect(ui.clip_rect()), r, m, mix(popup(), Color32::from_gray(90), 0.35), e * (1.0 - skl));
                             }
                             laid.push((r, m, e, resp));
                         }
@@ -617,24 +619,28 @@ impl App {
                             super::icons::kind_icon(&p, s.0, ic, icol);
                             let name = self.outline_name(s);
                             // Hidden (or inside a hidden frame) rows fade
-                            let dim = if hid_all.contains(&s.1) { 0.4 } else { 1.0 };
+                            let dim = 1.0 - 0.6 * ease(ctx, egui::Id::new(("qd_ol_dim", &s.1)), hid_all.contains(&s.1));
                             let tc = mix(mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m), Color32::WHITE, sk).gamma_multiply(dim);
-                            // Eye + lock on the right: shown on hover, or always while switched on
+                            // Eye + lock on the right: shown on hover, or always while switched on;
+                            // they fade in and the name makes room smoothly
                             let own_h = self.board.hidden.contains(&s.1);
                             let own_l = self.board.locked.contains(&s.1);
                             let show_ic = resp.hovered() || own_h || own_l;
-                            let icon_w = if show_ic { 44.0 } else { 0.0 };
+                            let ick = ease(ctx, resp.id.with("icons"), show_ic);
+                            let icon_w = 44.0 * ick;
                             let lock_c = pos2(r.max.x - 34.0, cy);
                             let eye_c = pos2(r.max.x - 14.0, cy);
                             let ptr = resp.hover_pos().or(resp.interact_pointer_pos());
                             let on_eye = show_ic && ptr.is_some_and(|q| (q.x - eye_c.x).abs() < 9.0);
                             let on_lock = show_ic && ptr.is_some_and(|q| (q.x - lock_c.x).abs() < 9.0);
-                            if show_ic {
-                                let ic = |on: bool, over: bool| Color32::from_gray(if over { 240 } else if on { 205 } else { 150 });
+                            if ick > 0.01 {
+                                let (oe, ol) = (ease(ctx, resp.id.with("over_eye"), on_eye), ease(ctx, resp.id.with("over_lock"), on_lock));
+                                let ic = |on: bool, over: f32| mix(Color32::from_gray(if on { 205 } else { 150 }), Color32::from_gray(240), over).gamma_multiply(ick);
                                 let locked_eff = own_l || (lock_all.contains(&s.1) && !hid_all.contains(&s.1));
-                                super::icons::lock(&p, lock_c, 15.0, ic(locked_eff, on_lock), locked_eff);
-                                super::icons::eye(&p, eye_c, 15.0, ic(own_h, on_eye), own_h);
+                                super::icons::lock(&p, lock_c, 15.0, ic(locked_eff, ol), locked_eff);
+                                super::icons::eye(&p, eye_c, 15.0, ic(own_h, oe), own_h);
                             }
+                            let fold_k = if has { 1.0 - ease(&ctx, egui::Id::new(("qd_ol_fold", s.1.as_str())), !folded) } else { 0.0 };
                             // Double-click: rename in place (Enter / click away saves, Esc cancels)
                             let on_caret = has && resp.interact_pointer_pos().is_some_and(|q| q.x < x0 + 15.0);
                             if resp.double_clicked() && !on_caret && !on_eye && !on_lock {
@@ -654,7 +660,7 @@ impl App {
                                 }
                             } else {
                                 // Long names end in an ellipsis before the folded-count badge
-                                let room = r.max.x - (x0 + 37.0) - icon_w - if has && folded { 26.0 } else { 8.0 };
+                                let room = r.max.x - (x0 + 37.0) - icon_w - (8.0 + 18.0 * fold_k);
                                 let font = FontId::proportional(12.0);
                                 let wid = |t: String| ui.fonts(|f| f.layout_no_wrap(t, font.clone(), tc).size().x);
                                 let mut shown = name.clone();
@@ -667,8 +673,9 @@ impl App {
                                 }
                                 p.text(pos2(x0 + 37.0, cy), Align2::LEFT_CENTER, shown, font.clone(), tc);
                             }
-                            if has && folded {
-                                p.text(pos2(r.max.x - 8.0 - icon_w, cy), Align2::RIGHT_CENTER, tree.kids[i].len().to_string(), FontId::proportional(10.5), Color32::from_gray(110));
+                            // Folded child count fades in as the arrow turns
+                            if fold_k > 0.01 {
+                                p.text(pos2(r.max.x - 8.0 - icon_w, cy), Align2::RIGHT_CENTER, tree.kids[i].len().to_string(), FontId::proportional(10.5), Color32::from_gray(110).gamma_multiply(fold_k));
                             }
                             if resp.hovered() {
                                 hov = Some(s.clone());

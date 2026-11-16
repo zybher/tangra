@@ -351,7 +351,9 @@ impl App {
             let resp = ui.interact(r, bid.with(("b", i)), sense);
             let (hh, pp) = hover_fx(&ctx, &resp, enabled);
             pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
-            let col = mix(TEXT_DIM, TEXT, hh).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
+            // Align greys out (and back) smoothly when an auto-layout frame takes over placement
+            let en_k = ease(&ctx, bid.with(("en", i)), enabled);
+            let col = mix(TEXT_DIM, TEXT, hh).gamma_multiply(ca * (0.35 + 0.65 * en_k));
             match *s {
                 Seg::AlignPop => {
                     align_btn = r;
@@ -399,7 +401,9 @@ impl App {
                         scrub = Some(v);
                     }
                     ne.draw(&pl, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
-                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}%", opacity.round() as i32));
+                    // Hotkeys / typed values count to the new number (follows the pointer while scrubbed)
+                    let shown = super::micro::glide(&ctx, bid.with("op_num"), opacity, resp.dragged());
+                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}%", shown.round() as i32));
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
                     zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
@@ -424,7 +428,8 @@ impl App {
                         cscrub = Some(v);
                     }
                     ne.draw(&pl, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
-                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}", corner.round() as i32));
+                    let shown = super::micro::glide(&ctx, bid.with("cr_num"), corner, resp.dragged());
+                    let txt = ne.text.clone().unwrap_or_else(|| format!("{}", shown.round() as i32));
                     zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));

@@ -194,10 +194,14 @@ impl App {
     /// Handles plus the gap number; hovering lights up the gap and shows a resize cursor
     pub(crate) fn paint_gap_handles(&self, p: &egui::Painter, v: View, hover: Option<Pos2>) {
         let dragging = matches!(self.drag, Drag::Gap { .. });
-        if !(dragging || matches!(self.drag, Drag::None)) || ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed) {
-            return;
-        }
-        let Some(run) = self.gap_run() else { return };
+        let allowed = (dragging || matches!(self.drag, Drag::None)) && !ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed);
+        let run = if allowed { self.gap_run() } else { None };
+        // Handles fade and grow in when an evenly spaced run is selected
+        let show = p.ctx().animate_bool_with_time(egui::Id::new("qd_gap_show"), run.is_some(), 0.12 * anim_k());
+        let Some(run) = run else { return };
+        let mut p = p.clone();
+        p.multiply_opacity(show);
+        let p = &p;
         let col = spacing_col();
         let hot = hover.and_then(|h| self.gap_handle_at(v.w(h))).map(|(_, i)| i);
         if hot.is_some() || dragging {
@@ -230,7 +234,7 @@ impl App {
             }
             // The handle: a pill with a white outline, bigger when live
             let sr = Rect::from_min_max(v.s(r[0], r[1]), v.s(r[0] + r[2], r[1] + r[3]));
-            let grow = if on { 1.0 + 0.3 * t } else { 1.0 };
+            let grow = (if on { 1.0 + 0.3 * t } else { 1.0 }) * (0.6 + 0.4 * show);
             let size = if a == 0 { vec2(sr.width() * grow, sr.height() * grow) } else { vec2(sr.width() * grow, sr.height() * grow) };
             let sr = Rect::from_center_size(sr.center(), size);
             let rad = sr.width().min(sr.height()) / 2.0;
@@ -247,9 +251,10 @@ impl App {
                 } else {
                     pos2(hp.x + 14.0 + gl.size().x / 2.0, sr.max.y + 12.0)
                 };
+                // The number badge fades in with the gap's hover
                 let br = Rect::from_center_size(cpos, gl.size() + vec2(10.0, 4.0));
-                p.rect_filled(br, 4.0, col);
-                p.galley(br.center() - gl.size() / 2.0, gl, Color32::WHITE);
+                p.rect_filled(br, 4.0, col.gamma_multiply(t));
+                p.galley(br.center() - gl.size() / 2.0, gl, Color32::WHITE.gamma_multiply(t));
             }
         }
     }

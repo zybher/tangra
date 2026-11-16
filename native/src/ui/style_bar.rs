@@ -458,10 +458,12 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                             zoom_text(&p, tv, sc, ic, Align2::CENTER_CENTER, "Aa", 12.0, st.color);
                         }
                     }
+                    // Hotkeys / outside changes count to the new number (follows the pointer while scrubbed)
+                    let shown = super::micro::glide(&ctx, id.with("num"), val, resp.dragged());
                     let txt = match &ne.text {
                         Some(t) => t.clone(),
-                        None if icon == 3 => format!("{}%", val.round() as i32),
-                        None => format!("{}", val.round() as i32),
+                        None if icon == 3 => format!("{}%", shown.round() as i32),
+                        None => format!("{}", shown.round() as i32),
                     };
                     ne.draw(&p, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)

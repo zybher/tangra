@@ -67,8 +67,7 @@ impl App {
         let avail_for_tabs = (min_x - cur_x - 36.0).max(60.0);
         let num_boards = self.boards.len().max(1);
         let max_per_tab = (avail_for_tabs / num_boards as f32).max(50.0);
-        let mut prev_hovered = false;
-        let mut prev_is_active = false;
+        let mut prev_here = 1.0_f32;
         // The active tab's shape goes here, under every title, so it can slide across them
         let tab_slot = painter.add(egui::Shape::Noop);
         let mut active_at: Option<(f32, f32, f32)> = None;
@@ -94,16 +93,20 @@ impl App {
                 cm_end(ui);
             });
 
-            // Chrome divider: only between adjacent inactive tabs, neither hovered!
-            if i > 0 && !is_active && !prev_is_active && !is_hovered && !prev_hovered {
+            // Chrome divider: only between adjacent inactive tabs, neither hovered; fades out
+            // and back as a neighbour is hovered or becomes active
+            let act_k = ease(ctx, tab_resp.id.with("act"), is_active);
+            let hov_k = ease(ctx, tab_resp.id.with("hov"), is_hovered);
+            let here = (1.0 - act_k) * (1.0 - hov_k);
+            let div_a = if i > 0 { here * prev_here } else { 0.0 };
+            if div_a > 0.01 {
                 let div_x = cur_x - 3.0;
                 painter.line_segment(
                     [pos2(div_x, cy - 8.0), pos2(div_x, cy + 8.0)],
-                    EStroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 255, 255, 45)),
+                    EStroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 255, 255, 45).gamma_multiply(div_a)),
                 );
             }
-            prev_hovered = is_hovered;
-            prev_is_active = is_active;
+            prev_here = here;
 
             if is_active {
                 active_at = Some((tab_r.min.y, cur_x, tab_w));
@@ -117,7 +120,6 @@ impl App {
 
 
             // Title text (optically centered on cy)
-            let act_k = ease(ctx, tab_resp.id.with("act"), is_active);
             let title_col = mix(mix(TEXT_DIM, TEXT, tab_h_t), Color32::WHITE, act_k);
             let max_title_chars = ((tab_w - 44.0) / 7.2).max(1.0) as usize;
             let display_title = if name.chars().count() > max_title_chars {
@@ -135,17 +137,20 @@ impl App {
                 title_col,
             );
 
-            // Close Tab Button (if more than 1 board)
-            if self.boards.len() > 1 {
+            // Close Tab Button (if more than 1 board): fades and grows in when a second board appears
+            let x_k = ease(ctx, egui::Id::new("qd_tab_x_show"), self.boards.len() > 1);
+            if x_k > 0.01 {
                 let x_center = pos2(tab_r.max.x - 14.0, cy);
                 let x_r = Rect::from_center_size(x_center, vec2(18.0, 18.0));
-                let x_resp = ui.allocate_rect(x_r, Sense::click());
+                let x_resp = ui.allocate_rect(x_r, if self.boards.len() > 1 { Sense::click() } else { Sense::hover() });
                 let (xh, xp) = hover_fx(ctx, &x_resp, true);
-                painter.circle_filled(x_center, 8.0 - xp, Color32::from_white_alpha((xh * 30.0) as u8));
-                let x_col = mix(if is_active { TEXT_DIM } else { mix(TEXT_FAINT, TEXT_DIM, tab_h_t) }, Color32::WHITE, xh);
-                painter.line_segment([pos2(x_center.x - 3.5, x_center.y - 3.5), pos2(x_center.x + 3.5, x_center.y + 3.5)], EStroke::new(1.1_f32, x_col));
-                painter.line_segment([pos2(x_center.x + 3.5, x_center.y - 3.5), pos2(x_center.x - 3.5, x_center.y + 3.5)], EStroke::new(1.1_f32, x_col));
-                if x_resp.clicked() {
+                painter.circle_filled(x_center, (8.0 - xp) * x_k, Color32::from_white_alpha((xh * 30.0 * x_k) as u8));
+                let x_col = mix(mix(TEXT_FAINT, TEXT_DIM, tab_h_t), TEXT_DIM, act_k);
+                let x_col = mix(x_col, Color32::WHITE, xh).gamma_multiply(x_k);
+                let a = 3.5 * (0.6 + 0.4 * x_k);
+                painter.line_segment([pos2(x_center.x - a, x_center.y - a), pos2(x_center.x + a, x_center.y + a)], EStroke::new(1.1_f32, x_col));
+                painter.line_segment([pos2(x_center.x + a, x_center.y - a), pos2(x_center.x - a, x_center.y + a)], EStroke::new(1.1_f32, x_col));
+                if self.boards.len() > 1 && x_resp.clicked() {
                     tab_act = Some(TabAct::Close(id.clone()));
                 }
             }

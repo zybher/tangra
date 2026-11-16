@@ -258,8 +258,10 @@ impl App {
                     let pad = fs * sx * z * 0.25;
                     let bg = Rect::from_min_size(pos, galley.size()).expand2(vec2(pad, pad * 0.5));
                     ip.rect_filled(bg, 3.0, Color32::from_black_alpha(180));
-                    if picked {
-                        ip.rect_stroke(bg.expand(2.0), 3.0, EStroke::new(1.5_f32, blue()));
+                    // Picked ring fades in / out
+                    let pk = ease(ip.ctx(), egui::Id::new(("qd_lbl_pick", t.id.as_str())), picked);
+                    if pk > 0.01 {
+                        ip.rect_stroke(bg.expand(2.0), 3.0, EStroke::new(1.5_f32, blue().gamma_multiply(pk)));
                     }
                     draw_label(&ip, pos, galley, hex(&t.color), t.style, fs * sx * z);
                 }
@@ -601,20 +603,22 @@ impl App {
         self.paint_lasso(p, v);
 
         // Empty-board hint
-        if b.is_empty() && self.edit.is_none() {
+        // Fades out with the first object and back in when the board is cleared
+        let ea = ease(p.ctx(), egui::Id::new("qd_empty_hint"), b.is_empty() && self.edit.is_none());
+        if ea > 0.01 {
             p.text(
                 rect.center() - vec2(0.0, 12.0),
                 Align2::CENTER_CENTER,
                 "Right-click anywhere",
                 FontId::proportional(18.0),
-                rgba(148, 163, 184, 150),
+                rgba(148, 163, 184, 150).gamma_multiply(ea),
             );
             p.text(
                 rect.center() + vec2(0.0, 14.0),
                 Align2::CENTER_CENTER,
                 "Ctrl+V to paste  ·  scroll to pan  ·  Ctrl+scroll to zoom",
                 FontId::proportional(12.5),
-                rgba(100, 116, 139, 150),
+                rgba(100, 116, 139, 150).gamma_multiply(ea),
             );
         }
 

@@ -94,7 +94,9 @@ impl App {
                     if let Some(nv) = ne.apply {
                         self.set_image_edit(f, nv, ne.first);
                     }
-                    let vcol = if v != 0.0 { mix(TEXT_DIM, TEXT, 0.6 + 0.4 * wm) } else { TEXT_FAINT };
+                    // The value brightens/dims as it leaves or returns to 0, instead of switching
+                    let nz = ease(&ctx, bid.with(("inz", f)), v != 0.0);
+                    let vcol = mix(TEXT_FAINT, mix(TEXT_DIM, TEXT, 0.6 + 0.4 * wm), nz);
                     let vcol = mix(vcol, TEXT, ne.e);
                     let vr = pos2(rr.max.x - 12.0, rr.center().y);
                     ne.draw(&p, None, vr, 12.0 * k);
@@ -118,9 +120,11 @@ impl App {
                 } else {
                     let (label, enabled, which) = resets[i - sliders.len()];
                     let resp = ui.interact(rr, bid.with(("ireset", which)), if live { Sense::click() } else { Sense::hover() });
-                    let wm = if enabled { wm } else { 0.0 };
+                    // Reset rows light up/grey out smoothly as they become (un)available
+                    let en = ease(&ctx, bid.with(("ien", which)), enabled);
+                    let wm = wm * en;
                     wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
-                    let col = if enabled { mix(TEXT_DIM, TEXT, wm) } else { TEXT_FAINT };
+                    let col = mix(TEXT_FAINT, mix(TEXT_DIM, TEXT, wm), en);
                     p.text(pos2(rr.min.x + 12.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0 * k), col);
                     if live && enabled && resp.clicked() {
                         match which {

@@ -100,6 +100,7 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
             p.rect_filled(rr, rad, rgba(r, g, b, (s.fill_alpha() * 255.0) as u8));
         }
         if !s.no_stroke {
+            let width = if s.stroke_pos == 1 { width.min(rr.size().min_elem().max(0.5)) } else { width };
             let d = stroke_inset(s.stroke_pos, width);
             p.rect_stroke(rr.shrink(d), (rad - d).max(0.0), EStroke::new(width, col));
         }
@@ -115,6 +116,8 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     // Rectangle / ellipse outline: one closed line with sharp joins (never smoothed: rounding
     // it like a pen line melted the corners and left the overlap points sticking out)
     if let Some(n) = s.closed_len() {
+        // An inside stroke is never thicker than the shape itself
+        let width = if s.stroke_pos == 1 { width.min(Rect::from_points(&pts[..n]).size().min_elem().max(0.5)) } else { width };
         let line = offset_closed(&pts[..n], stroke_inset(s.stroke_pos, width));
         p.add(Shape::closed_line(line, EStroke::new(width, col)));
         return;
@@ -155,11 +158,21 @@ pub(crate) fn stroke_inset(pos: u8, width: f32) -> f32 {
     }
 }
 
-/// A closed polygon moved `d` inward (negative: outward), corners mitred
+/// A closed polygon moved `d` inward (negative: outward, corners mitred). Inward it shrinks
+/// toward its box's centre instead, at most to a line, so a shape thinner than its stroke
+/// never turns inside out (a mitred inset of a thin ellipse shot spikes out of its ends)
 pub(crate) fn offset_closed(v: &[Pos2], d: f32) -> Vec<Pos2> {
     let n = v.len();
     if d == 0.0 || n < 3 {
         return v.to_vec();
+    }
+    if d > 0.0 {
+        let b = Rect::from_points(v);
+        let (rx, ry) = (b.width() / 2.0, b.height() / 2.0);
+        let sx = if rx > 1e-6 { (rx - d).max(0.0) / rx } else { 0.0 };
+        let sy = if ry > 1e-6 { (ry - d).max(0.0) / ry } else { 0.0 };
+        let c = b.center();
+        return v.iter().map(|p| pos2(c.x + (p.x - c.x) * sx, c.y + (p.y - c.y) * sy)).collect();
     }
     let area: f32 = (0..n).map(|i| v[i].x * v[(i + 1) % n].y - v[(i + 1) % n].x * v[i].y).sum();
     let sg = area.signum();

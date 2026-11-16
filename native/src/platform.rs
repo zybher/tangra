@@ -604,8 +604,15 @@ pub fn bake(img: &ImageNode, buf: &mut [u8], w: usize, h: usize) {
     pixelate(img, buf, w, h, k, sx.min(sy));
     for s in img.annotations.strokes.iter().filter(|s| !s.pixelate) {
         let pts: Vec<(f32, f32)> = s.points.iter().map(|p| (p.x * k, p.y * k)).collect();
-        let radius = (s.width / sx.min(sy)) * k / 2.0;
+        let mut radius = (s.width / sx.min(sy)) * k / 2.0;
         let closed = s.closed_len();
+        // An inside stroke is never thicker than the shape (as on the canvas, geometry.rs)
+        if let (Some(n), 1) = (closed, s.stroke_pos) {
+            let (xs, ys) = (pts[..n].iter().map(|p| p.0), pts[..n].iter().map(|p| p.1));
+            let span = |it: &mut dyn Iterator<Item = f32>| it.fold((f32::MAX, f32::MIN), |(a, b), v| (a.min(v), b.max(v)));
+            let ((x0, x1), (y0, y1)) = (span(&mut xs.clone()), span(&mut ys.clone()));
+            radius = radius.min(((x1 - x0).min(y1 - y0) / 2.0).max(0.25));
+        }
         if let (Some(n), true) = (closed, s.fill) {
             fill_poly(buf, w, h, &pts[..n], hex_rgb(&s.color), s.fill_alpha());
             if s.no_stroke {

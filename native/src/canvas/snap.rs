@@ -373,15 +373,32 @@ impl App {
             p.line_segment([c + vec2(-d, -d), c + vec2(d, d)], st);
             p.line_segment([c + vec2(-d, d), c + vec2(d, -d)], st);
         };
-        if matches!(self.drag, Drag::Move { .. } | Drag::Gap { .. }) {
-            for g in &self.snap_guides {
+        // Guides fade in and out (the last ones stay drawn while fading out)
+        let ctx = p.ctx().clone();
+        let gid = egui::Id::new("qd_snap_fade");
+        let live = matches!(self.drag, Drag::Move { .. } | Drag::Gap { .. }) && !(self.snap_guides.is_empty() && self.gap_marks.is_empty());
+        if live {
+            ctx.data_mut(|d| d.insert_temp(gid, (self.snap_guides.clone(), self.gap_marks.clone())));
+        }
+        let ga = ctx.animate_bool_with_time(gid.with("a"), live, 0.12 * anim_k());
+        if ga > 0.01 {
+            let (guides, marks) = ctx.data(|d| d.get_temp::<(Vec<[f32; 4]>, Vec<[f32; 4]>)>(gid)).unwrap_or_default();
+            let mut p = p.clone();
+            p.multiply_opacity(ga);
+            let p = &p;
+            let cross = |c: Pos2| {
+                let d = 3.0;
+                p.line_segment([c + vec2(-d, -d), c + vec2(d, d)], st);
+                p.line_segment([c + vec2(-d, d), c + vec2(d, -d)], st);
+            };
+            for g in &guides {
                 let (a, b) = (v.s(g[0], g[1]), v.s(g[2], g[3]));
                 p.line_segment([a, b], st);
                 cross(a);
                 cross(b);
             }
             // Equal gaps: a bar with end ticks across each gap, labelled with its size
-            for g in &self.gap_marks {
+            for g in &marks {
                 let (a, b) = (v.s(g[0], g[1]), v.s(g[2], g[3]));
                 let n = (b - a).normalized().rot90() * 4.0;
                 p.line_segment([a, b], st);
@@ -394,10 +411,20 @@ impl App {
                 p.galley(r.min + vec2(6.0, 3.0), gl, Color32::WHITE);
             }
         }
+        let _ = cross;
         // Size match while resizing: the matched object gets a thin outline and a red pill with
-        // the same number, mirroring the (now red) size pill on the object being resized
-        if matches!(self.drag, Drag::Resize { .. }) {
-            let (mw, mh) = self.size_match;
+        // the same number, mirroring the (now red) size pill on the object being resized; fades
+        let sid = egui::Id::new("qd_size_match_fade");
+        let s_live = matches!(self.drag, Drag::Resize { .. }) && (self.size_match.0.is_some() || self.size_match.1.is_some());
+        if s_live {
+            ctx.data_mut(|d| d.insert_temp(sid, self.size_match));
+        }
+        let sa = ctx.animate_bool_with_time(sid.with("a"), s_live, 0.12 * anim_k());
+        if sa > 0.01 {
+            let mut p = p.clone();
+            p.multiply_opacity(sa);
+            let p = &p;
+            let (mw, mh) = ctx.data(|d| d.get_temp::<(Option<[f32; 4]>, Option<[f32; 4]>)>(sid)).unwrap_or((None, None));
             for o in [mw, mh].into_iter().flatten() {
                 p.rect_stroke(Rect::from_min_max(v.s(o[0], o[1]), v.s(o[0] + o[2], o[1] + o[3])), 0.0, st);
             }

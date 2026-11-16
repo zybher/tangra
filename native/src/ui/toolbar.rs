@@ -282,7 +282,9 @@ impl App {
         p.line_segment([pos2(cur_x + 3.0, cy - 6.0 * sa), pos2(cur_x + 3.0, cy + 6.0 * sa)], EStroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 255, 255, (25.0 * sa) as u8)));
         cur_x += 6.0;
         let status_pos = pos2(cur_x + 8.0 - (1.0 - sa) * 8.0, cy);
-        p.text(status_pos, Align2::LEFT_CENTER, status_text, font_id, rgba(160, 160, 160, (220.0 * sa) as u8));
+        // The count rolls its digits as objects join or leave the selection (theme.rs)
+        let sh = p.layout_no_wrap(status_text.clone(), font_id.clone(), Color32::WHITE).size().y;
+        roll_text(&p, egui::Id::new("qd_roll_sel"), status_pos - vec2(0.0, sh / 2.0), &status_text, &font_id, rgba(160, 160, 160, (220.0 * sa) as u8), 0.0, 0.25 * anim_k());
 
     }
 

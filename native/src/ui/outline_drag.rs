@@ -54,14 +54,24 @@ pub(crate) fn drop_target(
 pub(crate) fn paint_marker(p: &egui::Painter, d: &Drop, rows: &[(Rect, usize, usize)]) {
     let (r, _, depth) = rows[d.row];
     let col = blue();
-    if d.into {
-        p.rect_stroke(r.shrink(0.75), 8.0, EStroke::new(1.5_f32, col));
+    let ctx = p.ctx();
+    let id = egui::Id::new("qd_ol_drop_marker");
+    // Dropping into a frame: the line fades into an outline around the frame row
+    let ik = ease(ctx, id.with("into"), d.into);
+    if ik > 0.01 {
+        p.rect_stroke(r.shrink(0.75), 8.0, EStroke::new(1.5_f32, col.gamma_multiply(ik)));
+    }
+    if ik > 0.99 {
         return;
     }
+    // The line glides between row seams instead of jumping (ui/micro.rs)
     let y = if d.after { r.max.y + 1.0 } else { r.min.y - 1.0 };
     let x0 = r.min.x + 8.0 + depth as f32 * 18.0;
-    p.line_segment([pos2(x0, y), pos2(r.max.x - 4.0, y)], EStroke::new(2.0_f32, col));
-    p.circle_stroke(pos2(x0 - 3.0, y), 3.0, EStroke::new(1.5_f32, col));
+    let y = super::micro::glide(ctx, id.with("y"), y, false);
+    let x0 = super::micro::glide(ctx, id.with("x"), x0, false);
+    let lc = col.gamma_multiply(1.0 - ik);
+    p.line_segment([pos2(x0, y), pos2(r.max.x - 4.0, y)], EStroke::new(2.0_f32, lc));
+    p.circle_stroke(pos2(x0 - 3.0, y), 3.0, EStroke::new(1.5_f32, lc));
 }
 
 /// The dragged row's name following the pointer
