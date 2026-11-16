@@ -37,13 +37,20 @@ pub(crate) fn cm_wave(ui: &egui::Ui, cy: f32) -> f32 {
 
 /// Menu row of small choice buttons (S / M / L …); the one matching `current` is lit.
 pub(crate) fn choice_row(ui: &mut egui::Ui, choices: &[(&str, f32)], current: f32, tol: f32) -> Option<f32> {
+    choice_row_k(ui, choices, current, tol, 1.0)
+}
+
+/// `choice_row` that is `show` (0..1) of the way in: its height opens and it fades, so the
+/// rows below slide instead of jumping when it appears / goes (e.g. the stroke position row)
+pub(crate) fn choice_row_k(ui: &mut egui::Ui, choices: &[(&str, f32)], current: f32, tol: f32, show: f32) -> Option<f32> {
     // One segmented control, inset like every other menu row
     let mut picked = None;
     let ws: Vec<f32> = choices.iter().map(|c| ui.painter().layout_no_wrap(c.0.to_string(), FontId::proportional(11.5), TEXT).size().x + 16.0).map(|w| w.max(30.0)).collect();
     let total: f32 = ws.iter().sum::<f32>() + 4.0;
-    let (row, _) = ui.allocate_exact_size(vec2(total + MENU_INSET * 2.0, 26.0), Sense::hover());
+    let (row, _) = ui.allocate_exact_size(vec2(total + MENU_INSET * 2.0, 26.0 * show), Sense::hover());
     let (a, dy) = cm_anim(ui, row.min.y);
-    let row_d = row.translate(vec2(0.0, dy));
+    let a = a * show;
+    let row_d = Rect::from_min_size(row.min, vec2(row.width(), 26.0)).translate(vec2(0.0, dy - 13.0 * (1.0 - show)));
     let track = Rect::from_min_size(pos2(row_d.min.x + MENU_INSET, row_d.min.y + 1.0), vec2(total, 24.0));
     let p = ui.painter().clone().with_clip_rect(ui.ctx().screen_rect());
     p.rect_filled(track, 6.0, Color32::from_gray(26).gamma_multiply(a));

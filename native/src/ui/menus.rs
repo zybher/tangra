@@ -201,9 +201,13 @@ impl App {
                     if check_item(ui, "Fill", s.fill) {
                         acts.push(Act::ToggleFill);
                     }
-                    if !s.no_stroke {
-                        if let Some(v) = choice_row(ui, &[("Inside", 1.0), ("Center", 0.0), ("Outside", 2.0)], s.stroke_pos as f32, 0.5) {
-                            acts.push(Act::StrokePos(v as u8));
+                    // Opens / folds away with the Stroke tick instead of popping (menu_kit.rs)
+                    let sk = ease(ui.ctx(), egui::Id::new("qd_cm_stroke_row"), !s.no_stroke);
+                    if sk > 0.01 {
+                        if let Some(v) = super::menu_kit::choice_row_k(ui, &[("Inside", 1.0), ("Center", 0.0), ("Outside", 2.0)], s.stroke_pos as f32, 0.5, sk) {
+                            if !s.no_stroke {
+                                acts.push(Act::StrokePos(v as u8));
+                            }
                         }
                     }
                     ui.add_space(0.0);

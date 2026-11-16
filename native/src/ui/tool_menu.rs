@@ -130,9 +130,30 @@ impl App {
                     }
                 }
             });
+        // The submenu being left fades and slides back out instead of vanishing (#66): its panel
+        // is kept as a ghost for the same 0.16 s the new one takes to come in
+        let ghost_id = egui::Id::new("qd_tm_sub_ghost");
+        let last_id = egui::Id::new("qd_tm_sub_last");
         if hover_row.is_some() && hover_row != self.tool_sub {
+            if let Some(last) = ctx.data(|d| d.get_temp::<Rect>(last_id)).filter(|_| self.tool_sub.is_some()) {
+                ctx.data_mut(|d| d.insert_temp(ghost_id, (last, ctx.input(|i| i.time))));
+            }
             self.tool_sub = hover_row;
             self.tool_sub_since = ctx.input(|i| i.time);
+        }
+        if let Some((gr, since)) = ctx.data(|d| d.get_temp::<(Rect, f64)>(ghost_id)) {
+            let k = ((ctx.input(|i| i.time) - since) / (0.16 * anim_k().max(0.01) as f64)).clamp(0.0, 1.0) as f32;
+            if k >= 1.0 {
+                ctx.data_mut(|d| d.remove::<(Rect, f64)>(ghost_id));
+            } else {
+                ctx.request_repaint();
+                let a = (1.0 - k).powi(3) * t;
+                let gr = gr.translate(vec2(-10.0 * (1.0 - (1.0 - k).powi(3)), 0.0));
+                let gp = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, ghost_id));
+                gp.rect_filled(gr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * a) as u8));
+                gp.rect_filled(gr, 10.0, popup().gamma_multiply(a));
+                gp.rect_stroke(gr, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
+            }
         }
 
         // Submenu, to the right of the list, bottom edges lined up (so it stays clear of the toolbar)
@@ -193,6 +214,7 @@ impl App {
             let (srows, smags, sp) = wave_rows(ctx, egui::Id::new(("qd_tm_wave_sub", c)), sub_left, main.max.y, sw, 28.0, items.len(), &sub_pinned);
             sub_rect = if c == 'c' { Rect::from_min_size(pos2(sub_left, main.max.y - sh), vec2(sw, sh)) } else { sp };
             let r0 = sub_rect;
+            ctx.data_mut(|d| d.insert_temp(last_id, r0.translate(vec2((1.0 - st) * 10.0, 0.0))));
             egui::Area::new(egui::Id::new("qd_tool_sub_area"))
                 .order(egui::Order::Foreground)
                 .fixed_pos(r0.min)

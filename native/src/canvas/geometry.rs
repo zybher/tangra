@@ -101,8 +101,15 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
         }
         if !s.no_stroke {
             let width = if s.stroke_pos == 1 { width.min(rr.size().min_elem().max(0.5)) } else { width };
-            let d = stroke_inset(s.stroke_pos, width);
-            p.rect_stroke(rr.shrink(d), (rad - d).max(0.0), EStroke::new(width, col));
+            // egui 0.29 strokes a rect on its OUTSIDE, so the path sits at the band's inner edge
+            let inner = stroke_inset(s.stroke_pos, width) + width / 2.0;
+            let pr = rr.shrink(inner);
+            if pr.width() > 0.0 && pr.height() > 0.0 {
+                p.rect_stroke(pr, (rad - inner).max(0.0), EStroke::new(width, col));
+            } else {
+                // The stroke fills the whole shape
+                p.rect_filled(rr.expand(width / 2.0 - stroke_inset(s.stroke_pos, width)), rad, col);
+            }
         }
         return;
     }

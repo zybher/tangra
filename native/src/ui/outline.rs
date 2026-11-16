@@ -675,12 +675,20 @@ impl App {
                                 // Typed in place, like a bar number (inline_text.rs)
                                 let ring = super::inline_text::Ring::Fixed(er, 6.0);
                                 let fid = egui::Id::new("qd_outline_rename");
+                                // Kept up while renaming so the ring can fade out after (#45)
+                                ease(&ctx, egui::Id::new(("qd_ol_ren_ring", s.1.as_str())), true);
                                 match super::inline_text::edit(ui, fid, er.shrink2(vec2(4.0, 0.0)), buf, FontId::proportional(12.0), Color32::WHITE, ren_start, ring) {
                                     Some(true) => ren_done = Some(Some((rs.clone(), buf.clone()))),
                                     Some(false) => ren_done = Some(None),
                                     None => {}
                                 }
                             } else {
+                                // Rename just ended: its ring fades out instead of vanishing (#45)
+                                let rk = ease(&ctx, egui::Id::new(("qd_ol_ren_ring", s.1.as_str())), false);
+                                if rk > 0.01 {
+                                    let er = Rect::from_min_max(pos2(x0 + 33.0, r.min.y + 3.0), pos2(r.max.x - 3.0, r.max.y - 2.0));
+                                    p.rect_stroke(er.shrink(0.5), 6.0, EStroke::new(1.0, blue().gamma_multiply(rk)));
+                                }
                                 // Long names end in an ellipsis before the folded-count badge
                                 let room = r.max.x - (x0 + 37.0) - icon_w - (8.0 + 18.0 * fold_k);
                                 let font = FontId::proportional(12.0);

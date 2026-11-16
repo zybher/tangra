@@ -15,6 +15,8 @@ enum Seg {
     /// Picture dropdowns: colour adjust, 3D tilt
     Adjust,
     Tilt,
+    /// Restore lasso-cut areas: only there while the picture has cuts (eases in and out)
+    Restore,
     Div,
 }
 
@@ -165,6 +167,12 @@ impl App {
             }
             ctx.request_repaint();
         }
+        // Restore button: added after the entrance key so appearing doesn't replay the bar
+        let has_cuts = single_img && self.board.images.iter().find(|i| i.id == targets[0].1).and_then(|i| i.edit.as_ref()).is_some_and(|e| !e.cuts.is_empty());
+        let rest_k = ease(&ctx, bid.with("restore_k"), has_cuts);
+        if single_img && rest_k > 0.01 {
+            segs.push(Seg::Restore);
+        }
         let t0: f64 = ctx.data(|d| d.get_temp(bid.with("t0"))).unwrap_or(0.0);
         let x = ((self.now - t0) as f32 / (0.6 * k)).clamp(0.0, 1.0);
 
@@ -176,6 +184,7 @@ impl App {
             Seg::Corner => 50.0,
             Seg::AlignPop => 40.0,
             Seg::Adjust | Seg::Tilt => 32.0,
+            Seg::Restore => 32.0 * rest_k,
             Seg::Div => 9.0,
         };
         let was_scrub: bool = ctx.data(|d| d.get_temp(bid.with("scrub"))).unwrap_or(false);
@@ -314,6 +323,7 @@ impl App {
         let reset_opacity = false;
         let mut xx = bar.center().x - w / 2.0 + pad;
         let mut gi_n = 0usize;
+        let mut restore = false;
         for (i, s) in segs.iter().enumerate() {
             let wd = seg_ws(i, s);
             if *s == Seg::Div {
@@ -464,8 +474,21 @@ impl App {
                         set_pop = if pop == kind { 0 } else { kind };
                     }
                 }
+                Seg::Restore => {
+                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca * rest_k);
+                    super::icons::restore_cuts(&pl, pos2(r.center().x, cyy), 16.0 * rest_k, gc);
+                    if resp.hovered() && pop == 0 {
+                        tip = Some((r.center().x, "Restore cut areas"));
+                    }
+                    if resp.clicked() && has_cuts {
+                        restore = true;
+                    }
+                }
                 Seg::Div => {}
             }
+        }
+        if restore {
+            self.restore_cuts();
         }
 
         // Opacity scrub: one undo step per drag

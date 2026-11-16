@@ -80,28 +80,34 @@ impl App {
                     let rec = self.recording == Some(which);
                     p.rect_filled(row, 8.0, hover_fill(h, pr).gamma_multiply(a));
                     p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), TEXT_DIM.gamma_multiply(a));
-                    let caps: Vec<String> = if rec {
-                        vec!["Press keys…".into()]
-                    } else {
-                        combo
-                            .split('+')
-                            .map(|k| match k.trim() {
-                                "CommandOrControl" | "CmdOrCtrl" | "Control" => "Ctrl".to_string(),
-                                o => o.to_string(),
-                            })
-                            .collect()
+                    // The key badges and "Press keys…" crossfade (and the blue eases in) instead of swapping (#72)
+                    let rk = ease(ctx, egui::Id::new(("qd_keys_rec", which)), rec);
+                    let combo_caps: Vec<String> = combo
+                        .split('+')
+                        .map(|k| match k.trim() {
+                            "CommandOrControl" | "CmdOrCtrl" | "Control" => "Ctrl".to_string(),
+                            o => o.to_string(),
+                        })
+                        .collect();
+                    let pulse = 0.5 + 0.5 * (self.now as f32 * 5.0).sin();
+                    let badges = |caps: &[String], k: f32, recording: bool| {
+                        if k <= 0.01 {
+                            return;
+                        }
+                        let a = a * k;
+                        let mut x = row.max.x - 8.0;
+                        for cap in caps.iter().rev() {
+                            let g = p.layout_no_wrap(cap.clone(), FontId::proportional(11.5), (if recording { blue() } else { TEXT }).gamma_multiply(a));
+                            let cw = g.size().x + 14.0;
+                            let kr = Rect::from_min_size(pos2(x - cw, row.center().y - 11.0), vec2(cw, 22.0));
+                            p.rect_filled(kr, 5.0, frame_bg().gamma_multiply(a));
+                            p.rect_stroke(kr, 5.0, EStroke::new(1.0_f32, (if recording { blue().gamma_multiply(0.4 + 0.6 * pulse) } else { border() }).gamma_multiply(a)));
+                            p.galley(pos2(kr.min.x + 7.0, kr.center().y - g.size().y / 2.0), g, TEXT.gamma_multiply(a));
+                            x = kr.min.x - 4.0;
+                        }
                     };
-                    let mut x = row.max.x - 8.0;
-                    let pulse = if rec { 0.5 + 0.5 * (self.now as f32 * 5.0).sin() } else { 0.0 };
-                    for cap in caps.iter().rev() {
-                        let g = p.layout_no_wrap(cap.clone(), FontId::proportional(11.5), (if rec { blue() } else { TEXT }).gamma_multiply(a));
-                        let cw = g.size().x + 14.0;
-                        let kr = Rect::from_min_size(pos2(x - cw, row.center().y - 11.0), vec2(cw, 22.0));
-                        p.rect_filled(kr, 5.0, frame_bg().gamma_multiply(a));
-                        p.rect_stroke(kr, 5.0, EStroke::new(1.0_f32, (if rec { blue().gamma_multiply(0.4 + 0.6 * pulse) } else { border() }).gamma_multiply(a)));
-                        p.galley(pos2(kr.min.x + 7.0, kr.center().y - g.size().y / 2.0), g, TEXT.gamma_multiply(a));
-                        x = kr.min.x - 4.0;
-                    }
+                    badges(&combo_caps, 1.0 - rk, false);
+                    badges(&["Press keys…".to_string()], rk, true);
                     if resp.clicked() {
                         if rec {
                             self.stop_recording();
@@ -115,14 +121,22 @@ impl App {
                         }
                     }
                 }
-                let (hint, col) = if !self.hk_error.is_empty() {
-                    (self.hk_error.clone(), rgba(248, 113, 113, 255))
-                } else if self.recording.is_some() {
-                    ("Hold Ctrl, Alt or Shift and press a key · Esc cancels".to_string(), TEXT_FAINT)
-                } else {
-                    (String::new(), TEXT_FAINT)
-                };
-                p.text(pos2(r.min.x + 20.0, r.max.y - 22.0), Align2::LEFT_CENTER, hint, FontId::proportional(11.0), col.gamma_multiply(a * hint_k));
+                // The instruction and the red error crossfade instead of flipping (#73); the last
+                // error is kept so it can fade out after it clears
+                let err_id = egui::Id::new("qd_keys_err_last");
+                if !self.hk_error.is_empty() {
+                    ctx.data_mut(|d| d.insert_temp(err_id, self.hk_error.clone()));
+                }
+                let err: String = ctx.data(|d| d.get_temp(err_id)).unwrap_or_default();
+                let ek = ease(ctx, egui::Id::new("qd_keys_err_k"), !self.hk_error.is_empty());
+                let ik = ease(ctx, egui::Id::new("qd_keys_ins_k"), self.hk_error.is_empty() && self.recording.is_some());
+                let hp = pos2(r.min.x + 20.0, r.max.y - 22.0);
+                if ik > 0.01 {
+                    p.text(hp, Align2::LEFT_CENTER, "Hold Ctrl, Alt or Shift and press a key · Esc cancels", FontId::proportional(11.0), TEXT_FAINT.gamma_multiply(a * hint_k * ik));
+                }
+                if ek > 0.01 {
+                    p.text(hp, Align2::LEFT_CENTER, err, FontId::proportional(11.0), rgba(248, 113, 113, 255).gamma_multiply(a * hint_k * ek));
+                }
             });
         if self.shortcuts_open && self.recording.is_none() {
             let (pressed, at, esc) = ctx.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos(), i.key_pressed(Key::Escape)));

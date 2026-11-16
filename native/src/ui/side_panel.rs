@@ -189,7 +189,7 @@ impl App {
                         }
                         // Same as Pattern: name the current choice (the gradients are too subtle for a bar)
                         let gname = if on { GRAD_DIRS[cur_d % GRAD_DIRS.len()] } else { "Off" };
-                        p.text(pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, gname, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, gh).gamma_multiply(tg));
+                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_grad"), pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, gname, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, gh).gamma_multiply(tg));
                         if gr_k > 0.001 {
                             for i in 0..=GRAD_DIRS.len() {
                                 let tp = (gr_k * 2.2 - i as f32 * 0.15).clamp(0.0, 1.0).min((ot * 2.0 - 0.3 - i as f32 * 0.08).clamp(0.0, 1.0));
@@ -238,7 +238,7 @@ impl App {
                         if clk {
                             ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_ap_open"), !ap_open));
                         }
-                        p.text(pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, AURA_PALETTES[cur_p].0, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, gh).gamma_multiply(tg));
+                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_pal"), pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, AURA_PALETTES[cur_p].0, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, gh).gamma_multiply(tg));
                         if ap_k > 0.001 {
                             for (i, (name, cols)) in AURA_PALETTES.iter().enumerate() {
                                 let tp = (ap_k * 2.2 - i as f32 * 0.15).clamp(0.0, 1.0).min((ot * 2.0 - 0.3 - i as f32 * 0.08).clamp(0.0, 1.0));
@@ -271,7 +271,7 @@ impl App {
                         if clk {
                             ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_am_open"), !am_open));
                         }
-                        p.text(pos2(rx - 14.0, my + dg), Align2::RIGHT_CENTER, AURA_MOTIONS[cur_m].0, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, mh).gamma_multiply(tg));
+                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_mot"), pos2(rx - 14.0, my + dg), Align2::RIGHT_CENTER, AURA_MOTIONS[cur_m].0, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, mh).gamma_multiply(tg));
                         if am_k > 0.001 {
                             let now = ctx.input(|i| i.time) as f32;
                             for (i, (name, speed, sway, breathe)) in AURA_MOTIONS.iter().enumerate() {
@@ -344,7 +344,7 @@ impl App {
                     if clk {
                         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_pat_open"), !pat_open));
                     }
-                    p.text(pos2(rx - 14.0, py + d4), Align2::RIGHT_CENTER, PATTERNS[pi], FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, ph).gamma_multiply(t));
+                    super::micro::swap_text(&p, egui::Id::new("qd_sp_name_pat"), pos2(rx - 14.0, py + d4), Align2::RIGHT_CENTER, PATTERNS[pi], FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, ph).gamma_multiply(t));
                     if pat_k > 0.001 {
                         for i in 0..PATTERNS.len() {
                             let tp = (pat_k * 2.2 - i as f32 * 0.15).clamp(0.0, 1.0).min((ot * 2.0 - 0.3 - i as f32 * 0.08).clamp(0.0, 1.0));

@@ -6,6 +6,24 @@ use crate::*;
 /// How fast a glided value catches up (1/s), as inline_text's caret
 const RATE: f32 = 16.0;
 
+/// Draws `text` at `pos`; when it changes, the old words fade up and out while the new ones
+/// fade up into place (a label naming the current choice, instead of a hard swap)
+pub(crate) fn swap_text(p: &egui::Painter, id: egui::Id, pos: egui::Pos2, align: egui::Align2, text: &str, font: egui::FontId, col: egui::Color32) {
+    let ctx = p.ctx();
+    let now = ctx.input(|i| i.time);
+    let (old, cur, since): (String, String, f64) = ctx.data(|d| d.get_temp(id)).unwrap_or((String::new(), text.to_string(), -10.0));
+    let (old, since) = if cur != text { (cur, now) } else { (old, since) };
+    ctx.data_mut(|d| d.insert_temp(id, (old.clone(), text.to_string(), since)));
+    let dur = (0.18 * anim_k()) as f64;
+    let k = if dur <= 0.0 { 1.0 } else { ((now - since) / dur).clamp(0.0, 1.0) as f32 };
+    let k = 1.0 - (1.0 - k).powi(3);
+    if k < 1.0 {
+        ctx.request_repaint();
+        p.text(pos - egui::vec2(0.0, 5.0 * k), align, &old, font.clone(), col.gamma_multiply(1.0 - k));
+    }
+    p.text(pos + egui::vec2(0.0, 5.0 * (1.0 - k)), align, text, font, col.gamma_multiply(k));
+}
+
 /// Glides the value stored at `id` toward `target` and returns it. `snap` jumps straight there
 /// (first show, or when it was hidden so it shouldn't fly in from somewhere old). A value
 /// that wasn't glided last frame (its thing wasn't drawn) also starts where it is.

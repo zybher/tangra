@@ -522,6 +522,7 @@ const PACK: &[(&str, &str)] = &[
     ("flip-horizontal", r##"<path d="M12 3v18" stroke-dasharray="2 2.75"/><path d="M9 6.5L3 17.5h6z"/><path d="M15 6.5l6 11h-6z" fill="currentColor" fill-opacity=".25"/>"##),
     ("flip-vertical", r##"<path d="M3 12h18" stroke-dasharray="2 2.75"/><path d="M6.5 9L17.5 3v6z"/><path d="M6.5 15l11 6v-6z" fill="currentColor" fill-opacity=".25"/>"##),
     ("aspect-ratio", r##"<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12.5V9.5h3M17 11.5v3h-3"/>"##),
+    ("restore-cuts", r##"<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" stroke-dasharray="3 2.6"/><path d="M8.6 12a3.6 3.6 0 1 0 1.05-2.55M9.4 7v2.7h2.7"/>"##),
     ("adjustments", r##"<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>"##),
     ("brightness", r##"<circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>"##),
     ("contrast", r##"<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/>"##),

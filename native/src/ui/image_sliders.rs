@@ -35,10 +35,8 @@ impl App {
             // Reset rows: (label, enabled, which)
             let mut resets: Vec<(&str, bool, u8)> = Vec::new();
             if kind == 1 {
+                // Restoring lasso cuts is its own button on the placement bar (place_bar.rs)
                 resets.push(("Reset adjustments", ed.has_color(), 0));
-                if !ed.cuts.is_empty() {
-                    resets.push(("Restore cut areas", true, 1));
-                }
             } else {
                 resets.push(("Reset 3D", ed.has_tilt() || ed.depth != 0.0, 2));
             }
