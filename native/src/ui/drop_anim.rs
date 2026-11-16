@@ -61,10 +61,15 @@ pub(crate) fn flip_grace(ctx: &egui::Context, bid: egui::Id) -> bool {
 }
 
 /// How bar `bid`'s `n`-row list opens: (columns, panel height, opens up). Off the object being
-/// edited if anyhow possible: one column, else wrapped into 2 then 3 (shorter, wider); else the
+/// edited if anyhow possible: one column, else wrapped into 2 then 3 (shorter, wider, but not
+/// much wider than the bar: `WIDE`, `w` being one column's width); else the
 /// whole bar moves to the object's other side and opens away from it there; only when nothing
 /// clears it does it stay one column on the side that covers less (`opens_up`)
-pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, rect: Rect) -> (usize, f32, bool) {
+/// Columns are only used while the panel stays within `WIDE` x the bar's width (a single
+/// column always may), so a dropdown never sprawls far past the bar it hangs from
+pub(crate) const WIDE: f32 = 1.15;
+
+pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, rect: Rect, w: f32) -> (usize, f32, bool) {
     let ph1 = n as f32 * PITCH + 8.0;
     let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) else {
         return (1, ph1, opens_up(ctx, bar, ph1, rect));
@@ -76,7 +81,7 @@ pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, 
         let mut last = 0;
         for c in 1..=3usize {
             let per = n.div_ceil(c);
-            if c > 1 && (per < 2 || per == last) {
+            if c > 1 && (per < 2 || per == last || grid_w(w, c) > bar.width().max(w) * WIDE) {
                 break;
             }
             last = per;

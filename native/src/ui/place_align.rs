@@ -30,7 +30,7 @@ impl App {
         let n = rows_def.len();
         let w = super::drop_anim::fit_w(&ctx, 32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
         // Keep the last spot while it fades out (the button may already be gone)
-        let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, egui::Id::new("qd_place_bar"), bar, n, rect);
+        let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, egui::Id::new("qd_place_bar"), bar, n, rect, w);
         let tw = grid_w(w, cols);
         let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, tw) } else { ctx.data(|d| d.get_temp(bid.with("x"))).unwrap_or(bar.min.x) };
         ctx.data_mut(|d| d.insert_temp(bid.with("x"), left));

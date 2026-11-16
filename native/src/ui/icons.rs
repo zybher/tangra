@@ -63,6 +63,11 @@ pub(crate) fn restore_cuts(p: &egui::Painter, c: Pos2, size: f32, col: Color32) 
     svg(p, "restore-cuts", c, size, col);
 }
 
+/// Reset: a turn-back arrow
+pub(crate) fn reset(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
+    svg(p, "rotate-ccw", c, size, col);
+}
+
 /// 3D: a cube in outline
 pub(crate) fn cube(p: &egui::Painter, c: Pos2, size: f32, col: Color32) {
     svg(p, "cube-3d", c, size, col);
