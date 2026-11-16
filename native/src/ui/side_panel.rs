@@ -378,13 +378,15 @@ impl App {
                         if resp.drag_stopped() || resp.clicked() {
                             save_settings(&self.settings);
                         }
-                        let f = self.settings.grid_dots / 100.0;
+                        // Knob, fill and number glide on a click; follow the pointer exactly when dragged (ui/micro.rs)
+                        let shown = super::micro::glide(ctx, egui::Id::new("qd_dots_g"), self.settings.grid_dots, resp.dragged());
+                        let f = shown / 100.0;
                         let (h, _) = hover_fx(ctx, &resp, true);
                         let line = Rect::from_min_max(pos2(track.min.x, ty - 2.0), pos2(track.max.x, ty + 2.0));
                         p.rect_filled(line, 2.0, border().gamma_multiply(t));
                         p.rect_filled(Rect::from_min_max(line.min, pos2(line.min.x + line.width() * f, line.max.y)), 2.0, blue().gamma_multiply(t));
                         p.circle_filled(pos2(track.min.x + track.width() * f, ty), 6.0 + h, Color32::WHITE.gamma_multiply(t));
-                        p.text(pos2(rx - 14.0, ty), Align2::RIGHT_CENTER, format!("{:.0}", self.settings.grid_dots), FontId::proportional(11.0), TEXT_FAINT.gamma_multiply(t));
+                        p.text(pos2(rx - 14.0, ty), Align2::RIGHT_CENTER, format!("{:.0}", shown), FontId::proportional(11.0), TEXT_FAINT.gamma_multiply(t));
                     }
                     let ty0 = py + 64.0 * pat_k;
                     let t = t_all;

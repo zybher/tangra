@@ -80,9 +80,11 @@ pub(crate) fn color_panel(ui: &mut egui::Ui, id: egui::Id, c: &mut Color32, k: f
         super::micro::glide(ui.ctx(), id.with("kx"), r.min.x + hsv.s * r.width(), sv_drag),
         super::micro::glide(ui.ctx(), id.with("ky"), r.min.y + (1.0 - hsv.v) * r.height(), sv_drag),
     );
-    p.circle_filled(knob, 7.0, Color32::from(Hsva::new(hsv.h, hsv.s, hsv.v, 1.0)));
-    p.circle_stroke(knob, 7.0, EStroke::new(2.5_f32, Color32::WHITE));
-    p.circle_stroke(knob, 8.5, EStroke::new(1.0_f32, Color32::from_black_alpha(90)));
+    // Knobs grow 1px on hover, like the grid-dots opacity slider's knob (side_panel.rs)
+    let (kh, _) = hover_fx(ui.ctx(), &resp, true);
+    p.circle_filled(knob, 7.0 + kh, Color32::from(Hsva::new(hsv.h, hsv.s, hsv.v, 1.0)));
+    p.circle_stroke(knob, 7.0 + kh, EStroke::new(2.5_f32, Color32::WHITE));
+    p.circle_stroke(knob, 8.5 + kh, EStroke::new(1.0_f32, Color32::from_black_alpha(90)));
     ui.add_space(10.0);
 
     // Hue slider
@@ -109,8 +111,9 @@ pub(crate) fn color_panel(ui: &mut egui::Ui, id: egui::Id, c: &mut Color32, k: f
         changed = true;
     }
     let hk = pos2(super::micro::glide(ui.ctx(), id.with("hx"), hr.min.x + hsv.h * hr.width(), hresp.dragged()), hr.center().y);
-    p.circle_filled(hk, 7.5, hue);
-    p.circle_stroke(hk, 7.5, EStroke::new(2.5_f32, Color32::WHITE));
+    let (hh, _) = hover_fx(ui.ctx(), &hresp, true);
+    p.circle_filled(hk, 7.5 + hh, hue);
+    p.circle_stroke(hk, 7.5 + hh, EStroke::new(2.5_f32, Color32::WHITE));
     ui.add_space(10.0);
 
     // Hex field: keeps what you type while focused, applies when it's a full colour
