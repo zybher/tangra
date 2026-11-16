@@ -328,10 +328,16 @@ fn items(name: &'static str) -> Option<Rc<Vec<Item>>> {
 
 /// Paints icon `name` as a pointer: a dark edge `ink` around it, closed shapes filled with
 /// `fill`, open strokes drawn in `fill`. `hot` is the point of the 24-unit box placed at `at`.
-pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: [f32; 2], px: f32, fill: Color32, ink: Color32) {
+/// `rot`: radians clockwise, around the hot spot (so the point that clicks stays put)
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: [f32; 2], px: f32, rot: f32, fill: Color32, ink: Color32) {
     let Some(items) = items(name) else { return };
     let k = px / 24.0;
-    let tf = |q: &[f32; 2]| pos2(at.x + (q[0] - hot[0]) * k, at.y + (q[1] - hot[1]) * k);
+    let (sn, cs) = rot.sin_cos();
+    let tf = |q: &[f32; 2]| {
+        let (x, y) = ((q[0] - hot[0]) * k, (q[1] - hot[1]) * k);
+        pos2(at.x + x * cs - y * sn, at.y + x * sn + y * cs)
+    };
     let w = |it: &Item| (it.stroke.unwrap_or(1.75) * k).max(1.2);
     let pts = |v: &[[f32; 2]], closed: bool| {
         let mut v: Vec<Pos2> = v.iter().map(tf).collect();
