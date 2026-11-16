@@ -48,7 +48,7 @@ impl App {
             // Keep the last spot while it fades out (the button may already be gone)
             let btn = btns[kind as usize - 1];
             let xid = bid.with(("ix", kind));
-            let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
+            let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, PANEL_W) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
             ctx.data_mut(|d| d.insert_temp(xid, left));
             let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };

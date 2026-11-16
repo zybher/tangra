@@ -90,6 +90,18 @@ pub struct Annotations {
     pub texts: Vec<Label>,
 }
 
+impl Annotations {
+    /// New ids for every drawing and label, so a copied picture's marks are its own
+    pub fn fresh_ids(&mut self) {
+        for s in &mut self.strokes {
+            s.id = new_id();
+        }
+        for t in &mut self.texts {
+            t.id = new_id();
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ImageNode {
@@ -463,6 +475,16 @@ pub fn load_board(id: &str) -> Board {
             Ok(mut b) => {
                 b.id = id.to_string();
                 b.name_unnamed_images();
+                // Pictures copied before annotations got their own ids shared them: split them up
+                let mut seen = std::collections::HashSet::new();
+                for img in &mut b.images {
+                    let a = &mut img.annotations;
+                    for id in a.strokes.iter_mut().map(|s| &mut s.id).chain(a.texts.iter_mut().map(|t| &mut t.id)) {
+                        if !seen.insert(id.clone()) {
+                            *id = new_id();
+                        }
+                    }
+                }
                 if b.camera.zoom <= 0.0 || !b.camera.zoom.is_finite() {
                     b.camera.zoom = 1.0;
                 }

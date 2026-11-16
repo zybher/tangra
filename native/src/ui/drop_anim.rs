@@ -5,13 +5,21 @@
 //! cascade in again. Closing plays the cascade backwards.
 use crate::*;
 
-/// Panel width and row pitch, the toolbar menu's (tool_menu.rs)
+/// Width of panels whose rows need the room (picture sliders), and row pitch (tool_menu.rs)
 pub(crate) const W: f32 = 190.0;
 pub(crate) const PITCH: f32 = 30.0;
 
-/// Left edge of a panel centred over a button at `cx`, kept inside `rect`
-pub(crate) fn left_for(cx: f32, rect: Rect) -> f32 {
-    (cx - W / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - W).max(rect.min.x + 8.0))
+/// Narrowest list panel that holds its rows: labels start at `text_x`, the longest one is
+/// measured at its hovered (wave) size, then the same small margin on the right
+pub(crate) fn fit_w(ctx: &egui::Context, text_x: f32, labels: &[&str]) -> f32 {
+    let font = FontId::proportional(12.0 * 1.14);
+    let tw = labels.iter().map(|l| ctx.fonts(|f| f.layout_no_wrap(l.to_string(), font.clone(), Color32::WHITE).size().x)).fold(0.0_f32, f32::max);
+    (text_x + tw + 14.0).ceil()
+}
+
+/// Left edge of a `w`-wide panel centred over a button at `cx`, kept inside `rect`
+pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
+    (cx - w / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - w).max(rect.min.x + 8.0))
 }
 
 pub(crate) struct DropAnim {

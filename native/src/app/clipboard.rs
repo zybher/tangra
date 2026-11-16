@@ -73,7 +73,10 @@ impl App {
         for k in [Kind::Image, Kind::Note, Kind::Link, Kind::Group, Kind::Text, Kind::Stroke] {
             let mut p = Vec::new();
             match k {
-                Kind::Image => dup(&mut b.images, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
+                Kind::Image => dup(&mut b.images, &ids(k), |x| &x.id, |x, n| {
+                    x.id = n;
+                    x.annotations.fresh_ids();
+                }, &mut p),
                 Kind::Note => dup(&mut b.sticky_notes, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
                 Kind::Link => dup(&mut b.link_cards, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
                 Kind::Group => dup(&mut b.group_cards, &ids(k), |x| &x.id, |x, n| x.id = n, &mut p),
@@ -97,6 +100,7 @@ impl App {
         let mut new_sel = HashSet::new();
         for mut i in c.images {
             (i.id, i.x, i.y) = (new_id(), i.x + dx, i.y + dy);
+            i.annotations.fresh_ids();
             new_sel.insert((Kind::Image, i.id.clone()));
             self.board.images.push(i);
         }

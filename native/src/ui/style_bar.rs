@@ -68,6 +68,8 @@ impl App {
         let mut color = String::new();
         let mut layout = 0u8;
         let mut stroke_pos = 0u8;
+        // Closed shapes (rectangle, ellipse...) can be filled: Some(filled now)
+        let mut shape_fill: Option<bool> = None;
         if let Some((k, id)) = &target {
             match k {
                 Kind::Group => {
@@ -97,6 +99,7 @@ impl App {
                         }
                         segs.push(Seg::Num("width", 1, st.width, 0.5, 500.0, 0.2, "Thickness"));
                         if st.closed_len().is_some() {
+                            shape_fill = Some(st.fill);
                             stroke_pos = st.stroke_pos;
                             segs.push(Seg::StrokePos);
                         }
@@ -634,12 +637,14 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // Colour: a vertical list like the other dropdowns, with "Custom" (a full picker) at the end
         // One panel for all of this bar's dropdowns, moving like the toolbar's menu (drop_anim.rs)
         let da = super::drop_anim::DropAnim::new(&ctx, bid.with("drop"), pop);
-        let drop_left = |k: usize| -> f32 {
+        // Each dropdown is only as wide as its rows (drop_anim::fit_w)
+        let drop_left = |k: usize, w: f32| -> f32 {
             let xid = bid.with(("dcx", k));
             let cx = if btn_cx[k].is_finite() { btn_cx[k] } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.center().x) };
             ctx.data_mut(|d| d.insert_temp(xid, cx));
-            super::drop_anim::left_for(cx, rect)
+            super::drop_anim::left_for(cx, rect, w)
         };
+        let fit = |x: f32, labels: &[&str]| super::drop_anim::fit_w(&ctx, x, labels);
         let k1 = da.k(1);
         let cid = bid.with("custom");
         // Closing the dropdown lets the custom panel fade out with it; only when the colour
@@ -656,13 +661,17 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         if k1 > 0.001 {
             let pk = p.clone();
             let slide = (1.0 - k1) * -8.0;
-            // Frames get a last row, "No fill" (just the outline and title)
-            let n = PEN_COLORS.len() + 1 + is_group as usize;
+            // Frames and closed shapes get a last row, "No fill" (just the outline)
+            let n = PEN_COLORS.len() + 1 + (is_group || shape_fill.is_some()) as usize;
             let ph = n as f32 * 30.0 + 8.0;
             let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave1"), drop_left(1), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
+            let mut names: Vec<String> = PEN_COLORS.iter().map(|c| c.trim_start_matches('#').to_uppercase()).collect();
+            names.push("Custom".into());
+            names.push("No fill".into());
+            let w = fit(32.0, &names.iter().take(n).map(|s| s.as_str()).collect::<Vec<_>>());
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave1"), drop_left(1, w), top + ph, w, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -691,13 +700,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let (name, on) = if i < PEN_COLORS.len() {
                     let c = PEN_COLORS[i];
                     p.circle_filled(dot, 6.0 * k, hex(c));
-                    (c.trim_start_matches('#').to_uppercase(), color.eq_ignore_ascii_case(c))
+                    (c.trim_start_matches('#').to_uppercase(), color.eq_ignore_ascii_case(c) && shape_fill != Some(false))
                 } else if i == PEN_COLORS.len() + 1 {
                     // an empty ring with a slash
                     let r = 6.0 * k;
                     p.circle_stroke(dot, r, EStroke::new(1.5_f32, TEXT_DIM));
                     p.line_segment([dot + vec2(-r, r) * 0.7, dot + vec2(r, -r) * 0.7], EStroke::new(1.5_f32, hex("#ef4444")));
-                    ("No fill".to_string(), color.eq_ignore_ascii_case("none"))
+                    ("No fill".to_string(), if is_group { color.eq_ignore_ascii_case("none") } else { shape_fill == Some(false) })
                 } else {
                     // a four-colour ring for "custom"
                     for (j, c) in ["#ef4444", "#eab308", "#22c55e", "#3b82f6"].iter().enumerate() {
@@ -717,8 +726,17 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     if i < PEN_COLORS.len() {
                         let c = PEN_COLORS[i];
                         acts.push(if is_group { Act::GroupColor(c.to_string()) } else { Act::Color(c.to_string()) });
+                        // An unfilled shape picking a colour gets its fill back
+                        if shape_fill == Some(false) {
+                            acts.push(Act::ToggleFill);
+                        }
                     } else if i == PEN_COLORS.len() + 1 {
-                        acts.push(Act::GroupColor("none".to_string()));
+                        if is_group {
+                            acts.push(Act::GroupColor("none".to_string()));
+                        } else if shape_fill == Some(true) {
+                            // Unfilled keeps (or brings back) the outline
+                            acts.push(Act::ToggleFill);
+                        }
                     } else {
                         ctx.data_mut(|d| d.insert_temp(cid, !custom_on));
                     }
@@ -771,7 +789,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave2"), drop_left(2), top + ph, super::drop_anim::W, super::drop_anim::PITCH, 5, &[]);
+            let w = fit(10.0, &["Row", "Column", "Grid", "Gallery", "None"]);
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave2"), drop_left(2, w), top + ph, w, super::drop_anim::PITCH, 5, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -813,7 +832,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave3"), drop_left(3), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
+            let w = fit(32.0, &RATIOS.iter().map(|r| r.0).collect::<Vec<_>>());
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave3"), drop_left(3, w), top + ph, w, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -871,7 +891,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave4"), drop_left(4), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
+            let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave4"), drop_left(4, w), top + ph, w, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
@@ -927,7 +948,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let up = bar.max.y + 14.0 + ph > rect.max.y - 70.0;
             let sg = if up { -1.0 } else { 1.0 };
             let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave5"), drop_left(5), top + ph, super::drop_anim::W, super::drop_anim::PITCH, n, &[]);
+            let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
+            let (rows, mags, pr) = wave_rows(&ctx, bid.with("wave5"), drop_left(5, w), top + ph, w, super::drop_anim::PITCH, n, &[]);
             let dy = top - pr.min.y;
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);

@@ -112,11 +112,11 @@ impl App {
     }
 
     /// The stroke under the cursor (drawn on top of everything, so checked first).
-    /// A selected drawing grabs anywhere inside its box, not just on the line
+    /// A selected drawing or shape (on the board, in a frame or on a picture) grabs anywhere
+    /// inside its box, not just on the line
     pub(crate) fn selected_drawing_at(&self, p: Pt) -> Option<Sel> {
         self.selected.iter().find(|(k, id)| {
             *k == Kind::Stroke
-                && self.board.world_strokes.iter().any(|s| &s.id == id && super::geometry::is_freehand(s))
                 && self.rect_of(Kind::Stroke, id).is_some_and(|[x, y, w, h]| p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h)
         }).cloned()
     }
