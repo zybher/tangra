@@ -97,6 +97,8 @@ impl App {
             let cx = fr.center().x.clamp(left + bw / 2.0 + 8.0, (rect.max.x - bw / 2.0 - 8.0).max(left + bw / 2.0 + 8.0));
             cx >= fr.min.x && cx <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y
         });
+        // Going off screen with a dropdown open: the dropdown closes first, then the bar
+        let on_screen = on_screen || (in_frame && !cm_open && super::drop_anim::hold_bar(&ctx, bid));
         let show = in_frame && on_screen && self.edit.is_none() && self.sel_label.is_none() && !alt && !cm_open;
 
         let k = anim_k().max(1e-3);

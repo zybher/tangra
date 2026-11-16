@@ -271,7 +271,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // A right-click menu puts the bar away too (same exit), since both share the top layer
         // and the bar would draw over the menu
         let cm_open = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("qd_cm_open"))).unwrap_or(false);
-        let up = inview && !cm_open;
+        // Going off screen with a dropdown open: the dropdown closes first (same exit as when the
+        // cursor wanders off), then the bar
+        let up = !cm_open && (inview || super::drop_anim::hold_bar(&ctx, bid));
         let vis = ctx.animate_bool_with_time(bid.with("inview"), up, 0.25 * anim_k());
         // Back on screen (or the menu closed): play the normal entrance, not the exit backwards
         // (which showed an empty pill for a moment)

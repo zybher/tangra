@@ -65,6 +65,17 @@ pub(crate) fn aside_x(ctx: &egui::Context, left: f32, w: f32, top: f32, ph: f32,
     }
 }
 
+/// True while bar `bar`'s dropdown is open or still playing its exit (`bar`: the bar's id).
+/// A bar going away first closes its dropdown, waits on this, then plays its own exit
+pub(crate) fn hold_bar(ctx: &egui::Context, bar: egui::Id) -> bool {
+    let pop: u8 = ctx.data(|d| d.get_temp(bar.with("pop"))).unwrap_or(0);
+    if pop != 0 {
+        ctx.data_mut(|d| d.insert_temp(bar.with("pop"), 0u8));
+        ctx.request_repaint();
+    }
+    pop != 0 || ctx.data(|d| d.get_temp::<f32>(bar.with("drop").with("t_now"))).unwrap_or(0.0) > 0.0
+}
+
 pub(crate) struct DropAnim {
     /// The dropdown shown (stays the last one while it closes); 0 = none yet
     pub kind: u8,
@@ -91,6 +102,7 @@ impl DropAnim {
             kind = pop;
         }
         ctx.data_mut(|d| {
+            d.insert_temp(id.with("t_now"), t);
             d.insert_temp(id.with("kind"), kind);
             d.insert_temp(id.with("since"), since);
         });
