@@ -68,10 +68,12 @@ impl App {
             // Reset: floats just right of the panel's top corner, fading in while there's
             // something to reset
             let rk = ease(&ctx, bid.with(("ien", rs_which)), rs_on) * kk;
-            let mut rb = Rect::from_center_size(pos2(bgr.max.x + 8.0 + RESET_D / 2.0, bgr.min.y + RESET_D / 2.0 + 2.0), vec2(RESET_D, RESET_D));
+            // It rides the rows' wave: a hovered row popping out past the panel pushes it aside
+            let (rl, rr_) = rows.iter().fold((bgr.min.x, bgr.max.x), |a, r| (a.0.min(r.min.x + gx), a.1.max(r.max.x + gx)));
+            let mut rb = Rect::from_center_size(pos2(rr_ + 8.0 + RESET_D / 2.0, bgr.min.y + RESET_D / 2.0 + 2.0), vec2(RESET_D, RESET_D));
             // no room right of it at the screen edge: the top-left corner instead
-            if rb.max.x > rect.max.x - 4.0 {
-                rb = rb.translate(vec2(bgr.min.x - 8.0 - RESET_D / 2.0 - rb.center().x, 0.0));
+            if bgr.max.x + 8.0 + RESET_D > rect.max.x - 4.0 {
+                rb = rb.translate(vec2(rl - 8.0 - RESET_D / 2.0 - rb.center().x, 0.0));
             }
             if live {
                 open_rect = if rs_on { pr.union(rb) } else { pr };
