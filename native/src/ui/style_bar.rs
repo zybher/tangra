@@ -340,7 +340,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
 
         let pop: u8 = ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0);
         let mut set_pop = pop;
-        let started = ui.input(|i| i.pointer.any_pressed());
+        let started = super::drop_anim::closing_press(&ctx);
         let font = FontId::proportional(12.0);
         let mut tip: Option<(f32, &str)> = None;
         let mut scrubbed: Vec<(&'static str, f32)> = Vec::new();

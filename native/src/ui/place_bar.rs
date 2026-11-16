@@ -527,7 +527,7 @@ impl App {
             let nr = ctx.cumulative_pass_nr();
             ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_img_side_zone"), (ir, nr)));
         }
-        if pop != 0 && set_pop == pop && ctx.input(|i| i.pointer.any_pressed()) {
+        if pop != 0 && set_pop == pop && super::drop_anim::closing_press(&ctx) {
             let q = ctx.input(|i| i.pointer.interact_pos());
             if !q.is_some_and(|q| bar.contains(q) || pop_rect.contains(q)) {
                 set_pop = 0;

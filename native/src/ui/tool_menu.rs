@@ -404,8 +404,9 @@ impl App {
             None => {}
         }
         // Click anywhere else or Esc closes it
+        let press = super::drop_anim::closing_press(ctx);
         let clicked_out = ctx.input(|i| {
-            i.pointer.any_pressed() && i.pointer.interact_pos().map_or(false, |q| !main.contains(q) && !sub_rect.contains(q) && !btn.contains(q))
+            press && i.pointer.interact_pos().map_or(false, |q| !main.contains(q) && !sub_rect.contains(q) && !btn.contains(q))
         });
         // Auto-collapse: the pointer has clearly left (well clear of the menu and its button)
         // for a short moment. Leaving the window counts too. A brief overshoot doesn't close it.

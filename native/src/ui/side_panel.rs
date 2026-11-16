@@ -56,7 +56,8 @@ impl App {
         if toggle {
             self.panel_open = !self.panel_open;
         } else if self.panel_open {
-            let (pressed, at, esc) = ctx.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos(), i.key_pressed(Key::Escape)));
+            let pressed = super::drop_anim::closing_press(ctx);
+            let (at, esc) = ctx.input(|i| (i.pointer.interact_pos(), i.key_pressed(Key::Escape)));
             if esc || (pressed && at.map_or(false, |p| !pop.contains(p) && !btn.contains(p))) {
                 self.panel_open = false;
             }

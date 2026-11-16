@@ -40,6 +40,12 @@ pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
     (cx - w / 2.0).clamp(rect.min.x + 8.0, (rect.max.x - 8.0 - w).max(rect.min.x + 8.0))
 }
 
+/// A press that should close open dropdowns and popovers: any press except one that starts
+/// moving the canvas (middle button, or with space held), so they stay open while panning
+pub(crate) fn closing_press(ctx: &egui::Context) -> bool {
+    ctx.input(|i| i.pointer.any_pressed() && !i.pointer.button_pressed(egui::PointerButton::Middle) && !(i.key_down(egui::Key::Space) && !ctx.wants_keyboard_input()))
+}
+
 /// Left edge for a dropdown at `left`..+`w`, `top`..+`ph`: when it would still cover the
 /// object being edited, it moves beside the object instead (the nearer side that fits)
 pub(crate) fn aside_x(ctx: &egui::Context, left: f32, w: f32, top: f32, ph: f32, rect: Rect) -> f32 {
