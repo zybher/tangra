@@ -1,4 +1,4 @@
-//! Board-level operations: delete, z-order, editing, erase, switch board, zoom-fit, hide/quit.
+//! Board-level operations: delete, z-order, editing, switch board, zoom-fit, hide/quit.
 
 use crate::*;
 
@@ -165,28 +165,6 @@ impl App {
                 }
             }
         }
-    }
-
-    /// Removes strokes and text labels under the eraser. Returns true if anything changed.
-    pub(crate) fn erase_at(&mut self, p: Pt) -> bool {
-        let zoom = self.board.camera.zoom;
-        let r = 9.0 / zoom;
-        // Erased marks fade out (canvas/presence.rs); ones already fading are skipped
-        use crate::canvas::presence::is_dying;
-        let b = &self.board;
-        let mut hit: Vec<String> = Vec::new();
-        hit.extend(b.world_strokes.iter().filter(|s| !is_dying(&s.id) && stroke_hit(s, p, r + s.width / zoom / 2.0)).map(|s| s.id.clone()));
-        hit.extend(b.world_texts.iter().filter(|l| !is_dying(&l.id) && label_hit(l, p, r * 0.3)).map(|l| l.id.clone()));
-        if let Some(img) = b.images.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
-            let (sx, sy) = img.scale();
-            let lp = Pt { x: (p.x - img.x) / sx, y: (p.y - img.y) / sy };
-            let a = &img.annotations;
-            hit.extend(a.strokes.iter().filter(|s| !is_dying(&s.id) && stroke_hit(s, lp, (r + s.width / 2.0) / sx)).map(|s| s.id.clone()));
-            hit.extend(a.texts.iter().filter(|l| !is_dying(&l.id) && label_hit(l, lp, r * 0.3 / sx)).map(|l| l.id.clone()));
-        }
-        let changed = !hit.is_empty();
-        self.kill_or_remove(hit);
-        changed
     }
 
     /// Deletes the files of images that were removed from this board during this

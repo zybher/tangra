@@ -198,6 +198,7 @@ impl App {
                         no_stroke: shape && (in_frame || self.shape_fill == 2),
                         pixelate: false,
                         radius: None,
+                        erase: Vec::new(),
                         stroke_pos: if shape { 1 } else { 0 },
                     },
                 ));
@@ -244,6 +245,7 @@ impl App {
                 // marks still fading from the last stroke of the eraser are gone first, so
                 // undo only brings back this one
                 self.finish_dying();
+                super::erase::reset();
                 self.drag_board = Some(self.board.clone());
                 self.drag_changed = self.erase_at(w);
                 self.drag = Drag::Erase;
@@ -743,6 +745,7 @@ impl App {
                     Tool::Text => self.begin_label(w),
                     Tool::Eraser => {
                         self.finish_dying();
+                        super::erase::reset();
                         let before = self.board.clone();
                         if self.erase_at(w) {
                             self.push_undo(before);

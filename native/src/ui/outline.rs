@@ -36,7 +36,7 @@ fn search_hit(q: &str, name: &str, k: Kind) -> bool {
         Kind::Link => &["link", "url", "web", "bookmark", "site"],
         Kind::Group => &["frame", "board", "artboard", "group", "container"],
         Kind::Text => &["text", "label", "title", "words", "type"],
-        Kind::Stroke => &["drawing", "stroke", "pen", "line", "arrow", "sketch", "ellipse", "circle"],
+        Kind::Stroke => &["drawing", "stroke", "pen", "line", "arrow", "sketch", "ellipse", "circle", "oval", "rectangle", "square", "box", "highlight", "highlighter"],
     };
     q.to_lowercase().split_whitespace().all(|t| {
         if name.contains(t) || syn.iter().any(|w| w.starts_with(t)) {
@@ -124,6 +124,11 @@ impl App {
         Tree { items, parent, kids, roots }
     }
 
+    /// The tool a drawing row was made with, for its icon
+    fn stroke_tool(&self, (k, id): &Sel) -> Option<&'static str> {
+        (*k == Kind::Stroke).then(|| self.find_stroke(id).map(|s| s.tool_kind())).flatten()
+    }
+
     fn outline_name(&self, (k, id): &Sel) -> String {
         let b = &self.board;
         if *k != Kind::Group {
@@ -138,7 +143,19 @@ impl App {
             Kind::Note => b.sticky_notes.iter().find(|n| &n.id == id).map(|n| first(&n.text)),
             Kind::Link => b.link_cards.iter().find(|l| &l.id == id).map(|l| if l.title.is_empty() { l.url.clone() } else { l.title.clone() }),
             Kind::Text => b.world_texts.iter().find(|t| &t.id == id).map(|t| first(&t.text)),
-            Kind::Stroke => self.find_stroke(id).map(|s| if s.closed_len().is_some() { "Shape".to_string() } else { "Drawing".to_string() }),
+            // "Ellipse 2": the tool that made it, numbered by age among its own kind
+            Kind::Stroke => self.find_stroke(id).map(|s| {
+                let t = s.tool_kind();
+                let n = b.world_strokes.iter().filter(|o| o.tool_kind() == t && (o.created_at, &o.id) <= (s.created_at, &s.id)).count();
+                let name = match t {
+                    "rectangle" => "Rectangle",
+                    "ellipse" => "Ellipse",
+                    "arrow" => "Arrow",
+                    "highlighter" => "Highlight",
+                    _ => "Drawing",
+                };
+                format!("{name} {}", n.max(1))
+            }),
         };
         let n = n.unwrap_or_default();
         if n.is_empty() {
@@ -665,7 +682,7 @@ impl App {
                             // Kind icon
                             let ic = pos2(x0 + 24.0, cy);
                             let icol = mix(Color32::from_gray(140), blue(), sk);
-                            super::icons::kind_icon(&p, s.0, ic, icol);
+                            super::icons::kind_icon_named(&p, s.0, self.stroke_tool(s), ic, icol);
                             let name = self.outline_name(s);
                             // Hidden (or inside a hidden frame) rows fade
                             let dim = 1.0 - 0.6 * ease(ctx, egui::Id::new(("qd_ol_dim", &s.1)), hid_all.contains(&s.1));
@@ -763,7 +780,7 @@ impl App {
                                 super::outline_drag::paint_marker(&ui.painter().with_clip_rect(ui.clip_rect()), t, &drag_rows);
                             }
                             if let Some(q) = ptr {
-                                super::outline_drag::paint_ghost(ctx, q, &self.outline_name(&src), src.0);
+                                super::outline_drag::paint_ghost(ctx, q, &self.outline_name(&src), src.0, self.stroke_tool(&src));
                             }
                             ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
                             // Near the top / bottom edge the list scrolls (faster the closer you get)

@@ -75,7 +75,7 @@ pub(crate) fn paint_marker(p: &egui::Painter, d: &Drop, rows: &[(Rect, usize, us
 }
 
 /// The dragged row's name following the pointer
-pub(crate) fn paint_ghost(ctx: &egui::Context, at: egui::Pos2, name: &str, k: Kind) {
+pub(crate) fn paint_ghost(ctx: &egui::Context, at: egui::Pos2, name: &str, k: Kind, tool: Option<&'static str>) {
     let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("qd_outline_ghost")));
     let font = FontId::proportional(12.0);
     let w = ctx.fonts(|f| f.layout_no_wrap(name.to_string(), font.clone(), Color32::WHITE).size().x) + 40.0;
@@ -83,7 +83,7 @@ pub(crate) fn paint_ghost(ctx: &egui::Context, at: egui::Pos2, name: &str, k: Ki
     p.rect_filled(r.translate(vec2(0.0, 2.0)), 7.0, Color32::from_black_alpha(80));
     p.rect_filled(r, 7.0, mix(frame_bg(), blue(), 0.35));
     // What's being moved: the same kind glyph as its row
-    super::icons::kind_icon(&p, k, r.left_center() + vec2(15.0, 0.0), Color32::WHITE);
+    super::icons::kind_icon_named(&p, k, tool, r.left_center() + vec2(15.0, 0.0), Color32::WHITE);
     p.text(r.left_center() + vec2(28.0, 0.0), Align2::LEFT_CENTER, name, font, Color32::WHITE);
 }
 

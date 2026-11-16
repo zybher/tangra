@@ -39,6 +39,10 @@ pub struct Stroke {
     /// 2 outside); new shapes start inside
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub stroke_pos: u8,
+    /// Rectangles / ellipses: spots rubbed out by the eraser, as (x, y, rx, ry) fractions of
+    /// the shape's box so they move and stretch with it (canvas/erase.rs)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub erase: Vec<[f32; 4]>,
 }
 
 fn is_zero(v: &f32) -> bool {
@@ -63,6 +67,18 @@ impl Stroke {
             Some(n - 2)
         } else {
             None
+        }
+    }
+    /// Which tool made it: "rectangle", "ellipse", "arrow", "highlighter" or "pen" (also the
+    /// toolbar icon's name)
+    pub fn tool_kind(&self) -> &'static str {
+        let n = self.points.len();
+        match self.closed_len() {
+            Some(4) => "rectangle",
+            Some(_) => "ellipse",
+            None if n == 5 && self.points[1].x == self.points[3].x && self.points[1].y == self.points[3].y => "arrow",
+            None if self.opacity.unwrap_or(1.0) < 0.5 => "highlighter",
+            None => "pen",
         }
     }
     pub fn fill_alpha(&self) -> f32 {

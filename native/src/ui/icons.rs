@@ -19,7 +19,13 @@ pub(crate) fn lock(p: &egui::Painter, c: Pos2, size: f32, col: Color32, locked: 
 
 /// The small per-kind glyph used in outline rows (and the drag ghost)
 pub(crate) fn kind_icon(p: &egui::Painter, k: Kind, ic: Pos2, icol: Color32) {
+    kind_icon_named(p, k, None, ic, icol)
+}
+
+/// Same, with drawings shown by the tool that made them (`Stroke::tool_kind`)
+pub(crate) fn kind_icon_named(p: &egui::Painter, k: Kind, tool: Option<&'static str>, ic: Pos2, icol: Color32) {
     let name = match k {
+        Kind::Stroke if tool.is_some() => tool.unwrap_or("pencil"),
         Kind::Group => "frame",
         Kind::Image => "image",
         Kind::Text => "text",
