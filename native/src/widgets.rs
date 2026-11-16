@@ -260,12 +260,27 @@ pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: 
     let (fy, wa) = list_wave(ctx, id, base.expand2(vec2(14.0, 6.0)), first, first + (n as f32 - 1.0) * pitch);
     // The other rows settle / come back with the same easing both ways (no snap on let-go)
     let lk = ease(ctx, id.with("lock"), lock);
+    // While locked the held row (the most pinned one) stays fully up and the rest stay flat; the
+    // lock blends between that and the wave, so pressing / letting go with the pointer still on
+    // the held row doesn't dip it.
+    let hid = id.with("lock_row");
+    let mut held: Option<usize> = ctx.data(|d| d.get_temp(hid));
+    if lock {
+        if let Some((i, _)) = pinned.iter().enumerate().filter(|(_, v)| **v > 0.0).max_by(|a, b| a.1.total_cmp(b.1)) {
+            held = Some(i);
+        }
+    } else if lk < 0.001 {
+        held = None;
+    }
+    ctx.data_mut(|d| d.insert_temp(hid, held));
     // `k` narrows the wave: the row under the pointer still rises fully, its neighbours less
     let m: Vec<f32> = (0..n)
         .map(|i| {
             let c = first + i as f32 * pitch;
-            let wv = (1.0 - lk) * wa * (-((c - fy) / (pitch * k)).powi(2)).exp();
-            wv.max(pinned.get(i).copied().unwrap_or(0.0))
+            let wv = wa * (-((c - fy) / (pitch * k)).powi(2)).exp();
+            let hold = if held == Some(i) { 1.0 } else { 0.0 };
+            let wv = wv + (hold - wv) * lk;
+            if lk > 0.0 { wv } else { wv.max(pinned.get(i).copied().unwrap_or(0.0)) }
         })
         .collect();
     let hs: Vec<f32> = m.iter().map(|k| pitch * (1.0 + 0.22 * k)).collect();
