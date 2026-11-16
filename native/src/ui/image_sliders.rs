@@ -19,9 +19,12 @@ impl App {
         let bid = egui::Id::new("qd_img_pop");
         let da = super::drop_anim::DropAnim::new(&ctx, egui::Id::new("qd_place_bar").with("drop"), pop);
         let pop = pop.saturating_sub(1);
-        let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
         let mut open_rect = Rect::NOTHING;
         let mut any_drag = false;
+        // A reset in progress eases the values back (reset_morph.rs); grabbing a row stops it
+        let was_drag: bool = ctx.data(|d| d.get_temp(bid.with("dragging"))).unwrap_or(false);
+        self.reset_morph_step(&ctx, img, was_drag);
+        let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
         for kind in [1u8, 2] {
             let kk = da.k(kind + 1);
             if kk <= 0.001 {
@@ -121,9 +124,9 @@ impl App {
                     p.text(pos2(rr.min.x + 12.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0 * k), col);
                     if live && enabled && resp.clicked() {
                         match which {
-                            0 => self.reset_adjust(),
+                            0 => self.reset_morph_start(&ctx, img, &[0, 1, 2, 3, 4], &ed),
                             1 => self.restore_cuts(),
-                            _ => self.reset_tilt(),
+                            _ => self.reset_morph_start(&ctx, img, &[5, 6, 7, 8], &ed),
                         }
                     }
                 }

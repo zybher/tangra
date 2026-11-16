@@ -224,7 +224,7 @@ impl App {
         self.selected.iter().filter(|s| s.0 == Kind::Image).map(|s| s.1.clone()).collect()
     }
 
-    fn edit_each(&mut self, f: impl Fn(&mut ImageEdit)) {
+    pub(crate) fn edit_each(&mut self, f: impl Fn(&mut ImageEdit)) {
         let ids = self.edit_targets();
         for img in self.board.images.iter_mut().filter(|i| ids.contains(&i.id)) {
             let mut e = img.edit.take().unwrap_or_default();

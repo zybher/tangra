@@ -14,7 +14,7 @@ struct St {
 }
 
 /// Morph time from the old value to the typed one
-const TWEEN: f64 = 0.32;
+pub(crate) const TWEEN: f64 = 0.32;
 
 pub(crate) struct NumEdit {
     id: egui::Id,
