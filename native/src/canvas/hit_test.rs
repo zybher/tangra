@@ -104,8 +104,11 @@ impl App {
         let Some(img) = b.images.iter_mut().find(|i| i.id == img_id) else { return };
         img.x = right.map_or(g.x + pad, |r| r + pad);
         img.y = g.y + pad;
-        g.width = g.width.max(img.x + img.width + pad - g.x);
-        g.height = g.height.max(img.y + img.height + pad - g.y);
+        // The frame grows to fit with a glide (glide.rs) instead of jumping
+        let to = [g.x, g.y, g.width.max(img.x + img.width + pad - g.x), g.height.max(img.y + img.height + pad - g.y)];
+        if to[2] > g.width || to[3] > g.height {
+            self.glide_to(vec![((Kind::Group, gid.to_string()), to)]);
+        }
     }
 
     /// The stroke under the cursor (drawn on top of everything, so checked first).

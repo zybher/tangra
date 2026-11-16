@@ -114,10 +114,13 @@ pub(crate) const MOSAIC: u8 = 255;
 pub(crate) fn radio_item(ui: &mut egui::Ui, label: &str, shortcut: &str, on: bool) -> bool {
     let (clicked, mk, a) = item_ex(ui, &format!("       {label}"), shortcut, true);
     let c = mk + vec2(MENU_INSET + 6.0, 13.0);
-    if on {
-        ui.painter().circle_filled(c, 3.5, blue().gamma_multiply(a));
-    } else {
-        ui.painter().circle_stroke(c, 3.0, EStroke::new(1.0_f32, Color32::from_gray(110).gamma_multiply(a)));
+    // The ring fills in (and empties) instead of swapping
+    let k = ease(ui.ctx(), ui.id().with(("radio_on", label)), on);
+    if k < 1.0 {
+        ui.painter().circle_stroke(c, 3.0, EStroke::new(1.0_f32, Color32::from_gray(110).gamma_multiply(a * (1.0 - k))));
+    }
+    if k > 0.0 {
+        ui.painter().circle_filled(c, 3.5 * (0.4 + 0.6 * k), blue().gamma_multiply(a * k));
     }
     clicked
 }
@@ -127,12 +130,20 @@ pub(crate) fn check_item(ui: &mut egui::Ui, label: &str, on: bool) -> bool {
     let (clicked, mk, a) = item_ex(ui, &format!("       {label}"), "", true);
     let r = Rect::from_min_size(mk + vec2(10.0, 7.0), vec2(12.0, 12.0));
     let p = ui.painter().clone().with_clip_rect(ui.ctx().screen_rect());
-    if on {
-        p.rect_filled(r, 3.0, blue().gamma_multiply(a));
-        let tick = vec![r.min + vec2(2.5, 6.2), r.min + vec2(5.0, 8.7), r.min + vec2(9.5, 3.5)];
+    // The box fills and the tick draws itself in (and back out) instead of swapping
+    let k = ease(ui.ctx(), ui.id().with(("check_on", label)), on);
+    if k < 1.0 {
+        p.rect_stroke(r, 3.0, EStroke::new(1.2_f32, TEXT_DIM.gamma_multiply(a * (1.0 - k))));
+    }
+    if k > 0.0 {
+        p.rect_filled(r, 3.0, blue().gamma_multiply(a * k));
+        let (t0, t1, t2) = (r.min + vec2(2.5, 6.2), r.min + vec2(5.0, 8.7), r.min + vec2(9.5, 3.5));
+        // First leg takes the first ~40% of the ease, the long leg the rest
+        let mut tick = vec![t0, t0 + (t1 - t0) * (k / 0.4).min(1.0)];
+        if k > 0.4 {
+            tick.push(t1 + (t2 - t1) * ((k - 0.4) / 0.6));
+        }
         p.add(Shape::line(tick, EStroke::new(1.5_f32, Color32::WHITE.gamma_multiply(a))));
-    } else {
-        p.rect_stroke(r, 3.0, EStroke::new(1.2_f32, TEXT_DIM.gamma_multiply(a)));
     }
     clicked
 }

@@ -603,13 +603,13 @@ impl App {
                             if has {
                                 let c = pos2(x0 + 5.0, cy);
                                 let st = EStroke::new(1.3_f32, TEXT_DIM);
-                                if folded {
-                                    p.line_segment([c + vec2(-1.5, -3.5), c + vec2(2.0, 0.0)], st);
-                                    p.line_segment([c + vec2(2.0, 0.0), c + vec2(-1.5, 3.5)], st);
-                                } else {
-                                    p.line_segment([c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0)], st);
-                                    p.line_segment([c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)], st);
-                                }
+                                // The arrow turns between right (folded) and down instead of flipping
+                                let open = ease(&ctx, egui::Id::new(("qd_ol_fold", s.1.as_str())), !folded);
+                                let (sn, cs) = (open * std::f32::consts::FRAC_PI_2).sin_cos();
+                                let rot = |q: egui::Vec2| c + vec2(q.x * cs - q.y * sn, q.x * sn + q.y * cs);
+                                let (a, b, e) = (rot(vec2(-1.5, -3.5)), rot(vec2(2.0, 0.0)), rot(vec2(-1.5, 3.5)));
+                                p.line_segment([a, b], st);
+                                p.line_segment([b, e], st);
                             }
                             // Kind icon
                             let ic = pos2(x0 + 24.0, cy);

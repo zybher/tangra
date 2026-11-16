@@ -69,6 +69,9 @@ impl App {
         let max_per_tab = (avail_for_tabs / num_boards as f32).max(50.0);
         let mut prev_hovered = false;
         let mut prev_is_active = false;
+        // The active tab's shape goes here, under every title, so it can slide across them
+        let tab_slot = painter.add(egui::Shape::Noop);
+        let mut active_at: Option<(f32, f32, f32)> = None;
 
         for (i, (id, name)) in self.boards.iter().enumerate() {
             let is_active = *id == self.board.id;
@@ -103,7 +106,7 @@ impl App {
             prev_is_active = is_active;
 
             if is_active {
-                paint_active_tab(&painter, tab_r.min.y, cur_x, tab_w, rect.max.y, self.last_canvas, self.now);
+                active_at = Some((tab_r.min.y, cur_x, tab_w));
             }
             let (tab_h_t, tab_p_t) = hover_fx(ctx, &tab_resp, !is_active);
             if !is_active {
@@ -114,7 +117,8 @@ impl App {
 
 
             // Title text (optically centered on cy)
-            let title_col = if is_active { Color32::WHITE } else { mix(TEXT_DIM, TEXT, tab_h_t) };
+            let act_k = ease(ctx, tab_resp.id.with("act"), is_active);
+            let title_col = mix(mix(TEXT_DIM, TEXT, tab_h_t), Color32::WHITE, act_k);
             let max_title_chars = ((tab_w - 44.0) / 7.2).max(1.0) as usize;
             let display_title = if name.chars().count() > max_title_chars {
                 let mut s: String = name.chars().take(max_title_chars.saturating_sub(1)).collect();
@@ -158,6 +162,13 @@ impl App {
             }
 
             cur_x += tab_w + 6.0;
+        }
+        // Slide the active tab to its board instead of jumping (ui/micro.rs)
+        if let Some((top, x, w)) = active_at {
+            let gid = egui::Id::new("qd_active_tab");
+            let gx = super::micro::glide(ctx, gid.with("x"), x, false);
+            let gw = super::micro::glide(ctx, gid.with("w"), w, false);
+            painter.set(tab_slot, egui::Shape::Vec(active_tab_shapes(top, gx, gw, rect.max.y, self.last_canvas, self.now)));
         }
 
         // 4. New Tab (+) Button

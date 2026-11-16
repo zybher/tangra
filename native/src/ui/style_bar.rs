@@ -707,10 +707,12 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     }
                     ("Custom".to_string(), custom_on || (!in_list && !color.is_empty() && !color.eq_ignore_ascii_case("none")))
                 };
-                if on {
-                    p.circle_stroke(dot, 9.0 * k, EStroke::new(1.2_f32, Color32::WHITE));
+                // The picked ring grows in on the new colour and fades off the old one
+                let ok = ease(&ctx, bid.with(("sw_on", i)), on);
+                if ok > 0.01 {
+                    p.circle_stroke(dot, (6.0 + 3.0 * ok) * k, EStroke::new(1.2_f32, Color32::WHITE.gamma_multiply(ok)));
                 }
-                p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, name, FontId::proportional(12.0 * k), if on { TEXT } else { mix(TEXT_DIM, TEXT, wm) });
+                p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, name, FontId::proportional(12.0 * k), mix(mix(TEXT_DIM, TEXT, wm), TEXT, ok));
                 if pop == 1 && resp.clicked() {
                     if i < PEN_COLORS.len() {
                         let c = PEN_COLORS[i];
@@ -793,7 +795,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let resp = ui.interact(rr, bid.with(("ar", i)), Sense::click());
                 wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
                 let on = if i == 4 { layout == 0 } else { layout as i32 - 1 == i as i32 };
-                p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * (1.0 + 0.14 * wm)), if on { blue() } else { mix(TEXT_DIM, TEXT, wm) });
+                let ok = ease(&ctx, bid.with(("ar_on", i)), on);
+                p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * (1.0 + 0.14 * wm)), mix(mix(TEXT_DIM, TEXT, wm), blue(), ok));
                 if pop == 2 && resp.clicked() {
                     acts.push(Act::FrameLayout(if i == 4 { 255 } else { i as u8 }));
                     set_pop = 0;
@@ -836,7 +839,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 // little shape preview of the ratio
                 let k = 1.0 + 0.14 * wm;
                 let sz = if *rt >= 1.0 { vec2(14.0, 14.0 / rt) } else { vec2(14.0 * rt, 14.0) } * k;
-                let col = if on { blue() } else { mix(TEXT_DIM, TEXT, wm) };
+                let ok = ease(&ctx, bid.with(("asp_on", i)), on);
+                let col = mix(mix(TEXT_DIM, TEXT, wm), blue(), ok);
                 p.rect_stroke(Rect::from_center_size(pos2(rr.min.x + 16.0, rr.center().y), sz), 1.5, EStroke::new(1.2_f32, col));
                 p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
                 if pop == 3 && resp.clicked() {
@@ -947,7 +951,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let cur = *v == stroke_pos;
                 wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
                 let k = 1.0 + 0.14 * wm;
-                let col = if cur { blue() } else { mix(TEXT_DIM, TEXT, wm) };
+                let ok = ease(&ctx, bid.with(("spos_on", i)), cur);
+                let col = mix(mix(TEXT_DIM, TEXT, wm), blue(), ok);
                 stroke_pos_icon(&p, pos2(rr.min.x + 16.0, rr.center().y), k, col, *v);
                 p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
                 if pop == 5 && resp.clicked() {
@@ -996,6 +1001,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         }
         if tk > 0.0 {
             if let Some((tx, text)) = ctx.data(|d| d.get_temp::<(f32, String)>(bid.with("tipv"))) {
+                // Slides from button to button instead of jumping (snaps in when it was hidden)
+                let tx = super::micro::glide(&ctx, bid.with("tipx"), tx, tk < 0.05);
                 let gl = p.layout_no_wrap(text, FontId::proportional(11.5), TEXT.gamma_multiply(tk));
                 let tr = Rect::from_center_size(pos2(tx, bar.min.y - 18.0 + (1.0 - tk) * 4.0), gl.size() + vec2(16.0, 8.0));
                 glass(&p, tr, 6.0, tk);

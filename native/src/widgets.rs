@@ -310,7 +310,8 @@ pub(crate) const NOTE_COLORS: [&str; 6] = ["#303030", "#3f2a0a", "#0f3324", "#2a
 /// The active tab as a single shape: rounded top corners, flared feet that curve
 /// into the canvas, and a flat bottom exactly on the canvas edge. One mesh means
 /// no seams between pieces; a thin outline on top gives the curves soft edges.
-pub(crate) fn paint_active_tab(p: &egui::Painter, top: f32, x: f32, w: f32, bot: f32, canvas: Rect, now: f64) {
+/// Returned as shapes so the title bar can slot it in under every tab's title while it slides.
+pub(crate) fn active_tab_shapes(top: f32, x: f32, w: f32, bot: f32, canvas: Rect, now: f64) -> Vec<egui::Shape> {
     use egui::epaint::{Mesh, Vertex, WHITE_UV};
     let (r_top, r_foot) = (8.0_f32, 7.0_f32);
     let mut pts: Vec<Pos2> = Vec::new();
@@ -340,12 +341,13 @@ pub(crate) fn paint_active_tab(p: &egui::Painter, top: f32, x: f32, w: f32, bot:
     for i in 1..pts.len() as u32 {
         m.add_triangle(0, i, i + 1);
     }
-    p.add(m);
+    let mut out = vec![egui::Shape::mesh(m)];
     // Soft edge on the curved sides only (the bottom must stay flush with the canvas)
     for pair in pts.windows(2) {
         let c = colour(pair[0]);
-        p.line_segment([pair[0], pair[1]], EStroke::new(1.0_f32, c));
+        out.push(egui::Shape::line_segment([pair[0], pair[1]], EStroke::new(1.0_f32, c)));
     }
+    out
 }
 
 /// World-scaled font, or None when it would be too small to read.

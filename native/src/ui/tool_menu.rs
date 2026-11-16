@@ -283,7 +283,9 @@ impl App {
                         let resp = ui.interact(bar.expand(4.0), egui::Id::new("qd_tm_hue"), Sense::click_and_drag());
                         let (hv, _) = hover_fx(ctx, &resp, true);
                         let ch = egui::ecolor::Hsva::from(hex(&self.pen_color));
-                        let kx = inner.min.x + inner.width() * ch.h;
+                        // Knob glides to a hue picked elsewhere (swatch, click); follows the pointer while dragged
+                        let gh = super::micro::glide(ctx, egui::Id::new("qd_tm_hue_kx"), ch.h, resp.dragged() || st < 0.05);
+                        let kx = inner.min.x + inner.width() * gh;
                         let kr = 8.0 + 1.5 * hv;
                         p.circle_filled(pos2(kx, bar.center().y + 1.5), kr, Color32::from_black_alpha((80.0 * st) as u8));
                         p.circle_filled(pos2(kx, bar.center().y), kr, Color32::WHITE.gamma_multiply(st));

@@ -198,7 +198,7 @@ impl App {
         let (uh, up) = bar_fx(&ctx, &undo_resp, can_undo);
         p.rect_filled(undo_r, Rounding { nw: 6.0, sw: 6.0, ne: 0.0, se: 0.0 }, hover_fill(uh, up));
         let uc = undo_r.center();
-        let u_col = if can_undo { mix(TEXT_DIM, Color32::WHITE, uh) } else { TEXT_FAINT.gamma_multiply(0.6) };
+        let u_col = mix(TEXT_FAINT.gamma_multiply(0.6), mix(TEXT_DIM, Color32::WHITE, uh), ease(&ctx, undo_resp.id.with("can"), can_undo));
         // Draw crisp curved undo arrow
         p.line_segment([pos2(uc.x - 4.5, uc.y), pos2(uc.x - 1.5, uc.y - 3.0)], EStroke::new(1.3_f32, u_col));
         p.line_segment([pos2(uc.x - 4.5, uc.y), pos2(uc.x - 1.5, uc.y + 3.0)], EStroke::new(1.3_f32, u_col));
@@ -217,7 +217,7 @@ impl App {
         let (rh, rp) = bar_fx(&ctx, &redo_resp, can_redo);
         p.rect_filled(redo_r, Rounding::ZERO, hover_fill(rh, rp));
         let rc = redo_r.center();
-        let r_col = if can_redo { mix(TEXT_DIM, Color32::WHITE, rh) } else { TEXT_FAINT.gamma_multiply(0.6) };
+        let r_col = mix(TEXT_FAINT.gamma_multiply(0.6), mix(TEXT_DIM, Color32::WHITE, rh), ease(&ctx, redo_resp.id.with("can"), can_redo));
         // Draw crisp curved redo arrow
         p.line_segment([pos2(rc.x + 4.5, rc.y), pos2(rc.x + 1.5, rc.y - 3.0)], EStroke::new(1.3_f32, r_col));
         p.line_segment([pos2(rc.x + 4.5, rc.y), pos2(rc.x + 1.5, rc.y + 3.0)], EStroke::new(1.3_f32, r_col));
@@ -240,7 +240,11 @@ impl App {
         let (zh, zp) = bar_fx(&ctx, &zoom_resp, true);
         p.rect_filled(zoom_r, Rounding::same(4.0), hover_fill(zh, zp));
         let z_col = mix(TEXT_DIM, Color32::WHITE, zh);
-        p.text(zoom_r.center(), Align2::CENTER_CENTER, zoom_text, FontId::proportional(11.5), z_col);
+        // Digits roll to the new zoom like the size pills (theme.rs)
+        let zf = FontId::proportional(11.5);
+        let zs = p.layout_no_wrap(zoom_text.clone(), zf.clone(), z_col).size();
+        let zo = zoom_r.center() - zs / 2.0;
+        roll_text(&p.with_clip_rect(zoom_r.intersect(p.clip_rect())), egui::Id::new("qd_roll_zoom"), zo, &zoom_text, &zf, z_col, 0.0, 0.25 * anim_k());
         if zoom_resp.on_hover_text("Reset zoom to 100%").clicked() {
             acts.push(Act::ZoomReset);
         }

@@ -212,19 +212,23 @@ impl App {
             Act::ResetStretch => {
                 if let Some((_, id)) = self.menu_hit.clone() {
                     self.snapshot();
+                    let mut to = None;
                     if let Some(i) = self.board.images.iter_mut().find(|i| i.id == id) {
-                        // keep the width, restore the original aspect around the same centre
-                        // same overall size (geometric mean of the two scales), same centre
+                        // restore the original aspect around the same centre
                         let (cx, cy) = (i.x + i.width / 2.0, i.y + i.height / 2.0);
+                        let (mut w, mut h) = (i.width, i.height);
                         if i.original_width > 0.0 && i.original_height > 0.0 {
                             let (sx, sy) = i.scale();
                             // back to the size it had before stretching (fallback: the smaller side's scale)
                             let k = i.base_scale.take().unwrap_or(sx.min(sy));
-                            (i.width, i.height) = (i.original_width * k, i.original_height * k);
+                            (w, h) = (i.original_width * k, i.original_height * k);
                         }
-                        (i.x, i.y) = (cx - i.width / 2.0, cy - i.height / 2.0);
+                        to = Some([cx - w / 2.0, cy - h / 2.0, w, h]);
                     }
-                    self.mark_dirty();
+                    // Eases back to shape instead of snapping (canvas/glide.rs)
+                    if let Some(r) = to {
+                        self.glide_to(vec![((Kind::Image, id.clone()), r)]);
+                    }
                 }
             }
             Act::Corner(v) => {

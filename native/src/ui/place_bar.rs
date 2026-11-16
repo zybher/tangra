@@ -513,6 +513,8 @@ impl App {
         }
         if tk > 0.0 {
             if let Some((tx, text)) = ctx.data(|d| d.get_temp::<(f32, String)>(bid.with("tipv"))) {
+                // Slides from button to button instead of jumping (snaps in when it was hidden)
+                let tx = super::micro::glide(&ctx, bid.with("tipx"), tx, tk < 0.05);
                 let gl = p.layout_no_wrap(text, FontId::proportional(11.5), TEXT.gamma_multiply(tk));
                 let tr = Rect::from_center_size(pos2(tx, bar.min.y - 18.0 + (1.0 - tk) * 4.0), gl.size() + vec2(16.0, 8.0));
                 glass(&p, tr, 6.0, tk);

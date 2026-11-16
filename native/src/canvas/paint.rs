@@ -455,9 +455,20 @@ impl App {
         }
 
         // Canvas drag: the frame the cursor is in lights up ("let go to drop it here")
-        if let Some(g) = self.drop_target().and_then(|t| self.board.group_cards.iter().find(|g| g.id == t)) {
-            let r = item_rect(g.x, g.y, g.width, g.height).expand(1.0);
-            p.rect_stroke(r, group_radius(g) * z, EStroke::new(2.0_f32, blue()));
+        // (fades in and out, and keeps the last frame while it fades)
+        {
+            let ctx = p.ctx().clone();
+            let did = egui::Id::new("qd_drop_glow");
+            let now = self.drop_target();
+            if let Some(t) = &now {
+                ctx.data_mut(|d| d.insert_temp(did, t.clone()));
+            }
+            let a = ctx.animate_bool_with_time(did.with("a"), now.is_some(), 0.12 * anim_k());
+            let last: Option<String> = ctx.data(|d| d.get_temp(did));
+            if let Some(g) = last.filter(|_| a > 0.01).and_then(|t| self.board.group_cards.iter().find(|g| g.id == t)) {
+                let r = item_rect(g.x, g.y, g.width, g.height).expand(1.0);
+                p.rect_stroke(r, group_radius(g) * z, EStroke::new(2.0_f32, blue().gamma_multiply(a)));
+            }
         }
 
         // Selection outlines
@@ -532,7 +543,9 @@ impl App {
             }
         }
 
-        // Multi-selection: one bounding box with the same size pills as a single object
+        // Multi-selection: one bounding box with the same size pills as a single object; it fades in
+        // (multi_edit.rs scales its corner dots in with the same ease)
+        let multi_a = p.ctx().animate_bool_with_time(egui::Id::new("qd_multi_a"), self.selected.len() > 1, 0.12 * anim_k());
         if self.selected.len() > 1 {
             let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
             for (k, id) in &self.selected {
@@ -542,7 +555,7 @@ impl App {
             }
             if x1 > x0 {
                 let r = item_rect(x0, y0, x1 - x0, y1 - y0).expand(0.5);
-                p.rect_stroke(r, 0.0, EStroke::new(1.5_f32, blue()));
+                p.rect_stroke(r, 0.0, EStroke::new(1.5_f32, blue().gamma_multiply(multi_a)));
                 // Keyed by the selection itself, so adding/removing an object glides the pills too
                 let key = {
                     use std::hash::{Hash, Hasher};
@@ -561,12 +574,28 @@ impl App {
         self.paint_multi_handles(p, v, hover);
 
         // Marquee selection box
-        if let Drag::BoxSelect { start, current, .. } = self.drag {
-            let p1 = v.s(start.x, start.y);
-            let p2 = v.s(current.x, current.y);
-            let marquee = Rect::from_two_pos(p1, p2);
-            p.rect_filled(marquee, 0.0, blue().gamma_multiply(0.18));
-            p.rect_stroke(marquee, 0.0, EStroke::new(1.0_f32, blue()));
+        // (fades out where it was let go instead of vanishing)
+        {
+            let ctx = p.ctx().clone();
+            let mid = egui::Id::new("qd_marquee");
+            let on = if let Drag::BoxSelect { start, current, .. } = self.drag {
+                ctx.data_mut(|d| d.insert_temp(mid, [start.x, start.y, current.x, current.y]));
+                true
+            } else {
+                false
+            };
+            // Appears at once (it follows the drag), only the release fades
+            let a = if on {
+                ctx.animate_bool_with_time(mid.with("a"), true, 0.0);
+                1.0
+            } else {
+                ctx.animate_bool_with_time(mid.with("a"), false, 0.12 * anim_k())
+            };
+            if let Some(m) = ctx.data(|d| d.get_temp::<[f32; 4]>(mid)).filter(|_| a > 0.01) {
+                let marquee = Rect::from_two_pos(v.s(m[0], m[1]), v.s(m[2], m[3]));
+                p.rect_filled(marquee, 0.0, blue().gamma_multiply(0.18 * a));
+                p.rect_stroke(marquee, 0.0, EStroke::new(1.0_f32, blue().gamma_multiply(a)));
+            }
         }
 
         self.paint_lasso(p, v);

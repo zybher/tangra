@@ -104,10 +104,15 @@ impl App {
             return;
         }
         let Some([x, y, w, h]) = self.multi_box() else { return };
-        for (cx, cy) in [(x, y), (x + w, y), (x, y + h), (x + w, y + h)] {
-            let c = v.s(cx, cy);
-            p.circle_filled(c, 4.0, Color32::WHITE);
-            p.circle_stroke(c, 4.0, egui::Stroke::new(1.5_f32, blue()));
+        // Scale in with the box's fade (paint.rs), overshooting a touch like the single handles
+        let sc = p.ctx().animate_bool_with_time(egui::Id::new("qd_multi_a"), self.selected.len() > 1, 0.12 * anim_k());
+        let rad = 4.0 * sc * (1.0 + 0.25 * (sc * std::f32::consts::PI).sin() * (1.0 - sc).min(0.5) * 2.0);
+        if rad > 0.3 {
+            for (cx, cy) in [(x, y), (x + w, y), (x, y + h), (x + w, y + h)] {
+                let c = v.s(cx, cy);
+                p.circle_filled(c, rad, Color32::WHITE);
+                p.circle_stroke(c, rad, egui::Stroke::new(1.5_f32 * sc, blue()));
+            }
         }
         let hit = match &self.drag {
             Drag::MultiResize { left, top, rx, ry, .. } => Some((*left, *top, *rx, *ry)),

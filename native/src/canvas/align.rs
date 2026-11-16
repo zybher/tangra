@@ -249,14 +249,17 @@ impl App {
                 self.board.group_cards.insert(at, g);
             }
         }
+        // Starts a touch larger and closes in on the selection (glide.rs)
+        let m = 8.0 / self.board.camera.zoom.max(0.01);
         if let Some(g) = self.board.group_cards.iter_mut().find(|g| g.id == id) {
-            (g.x, g.y, g.width, g.height) = (b[0], b[1], b[2], b[3]);
+            (g.x, g.y, g.width, g.height) = (b[0] - m, b[1] - m, b[2] + 2.0 * m, b[3] + 2.0 * m);
             g.title = "Frame".into();
             g.clip = true;
             // Plain wrapper: no fill, square corners
             g.color = "none".into();
             g.corner = Some(0.0);
         }
+        self.glide_to(vec![((Kind::Group, id.clone()), b)]);
         self.board.parents.insert(id.clone(), home);
         for (_, t) in &targets {
             self.board.parents.insert(t.clone(), id.clone());
