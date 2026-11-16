@@ -32,3 +32,11 @@ pub(crate) fn take(ctx: &egui::Context, bid: egui::Id, other: egui::Id, now: f64
 pub(crate) fn taken(ctx: &egui::Context, bid: egui::Id, now: f64) -> bool {
     ctx.data(|d| d.get_temp::<f64>(bid.with("taken"))).is_some_and(|t| now - t < 0.6)
 }
+
+/// Centre x for a bar of resting width `w0` over `cx`, kept inside `lo..hi`. Measured on the
+/// resting width with room for the hover swell: clamping on the swollen width moved the bar
+/// under the pointer, which moved the swell, which moved the bar (jitter at the screen edge)
+pub(crate) fn edge_cx(cx: f32, lo: f32, hi: f32, w0: f32) -> f32 {
+    let m = w0 / 2.0 + 8.0 + 20.0;
+    cx.clamp(lo + m, (hi - m).max(lo + m))
+}

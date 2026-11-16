@@ -94,7 +94,7 @@ impl App {
             // Resting width, kept after the bar hides (the shown Rect is cleared then, which read
             // as width 0 and let the bar pop back up: a never-ending flash at the screen edge)
             let bw = ctx.data(|d| d.get_temp::<f32>(bid.with("rest_w"))).unwrap_or(0.0);
-            let cx = fr.center().x.clamp(left + bw / 2.0 + 8.0, (rect.max.x - bw / 2.0 - 8.0).max(left + bw / 2.0 + 8.0));
+            let cx = super::bar_morph::edge_cx(fr.center().x, left, rect.max.x, bw);
             cx >= fr.min.x && cx <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y
         });
         // Going off screen with a dropdown open: the dropdown closes first, then the bar
@@ -258,7 +258,7 @@ impl App {
                 // Away from the object: above a style bar that sits above it, below one that sits below
                 let above = sb.center().y <= fr.center().y && sb.min.y - 8.0 - h >= rect.min.y + 8.0;
                 let cy = if above { sb.min.y - 8.0 - h / 2.0 } else { sb.max.y + 8.0 + h / 2.0 };
-                let cx = sb.center().x.clamp(rect.min.x + w / 2.0 + 8.0, rect.max.x - w / 2.0 - 8.0);
+                let cx = super::bar_morph::edge_cx(sb.center().x, rect.min.x, rect.max.x, w_rest);
                 (cx, cy)
             }
             None => {
@@ -269,7 +269,7 @@ impl App {
                 }
                 let nr = ctx.cumulative_pass_nr();
                 ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_bar_side"), (on_top, nr)));
-                let cx = fr.center().x.clamp(rect.min.x + w / 2.0 + 8.0, rect.max.x - w / 2.0 - 8.0);
+                let cx = super::bar_morph::edge_cx(fr.center().x, rect.min.x, rect.max.x, w_rest);
                 (cx, cy.clamp(rect.min.y + h / 2.0 + 8.0, rect.max.y - h / 2.0 - 70.0))
             }
         };

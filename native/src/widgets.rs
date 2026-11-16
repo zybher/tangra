@@ -380,7 +380,9 @@ pub(crate) fn zoom_text(pl: &egui::Painter, tv: egui::Vec2, sc: f32, pos: Pos2, 
         let tf = |q: Pos2| pos2(q.x * sc + tv.x, q.y * sc + tv.y);
         let cid = egui::LayerId::new(lid.order, lid.id.with("ztxt_crisp"));
         ctx.set_transform_layer(cid, egui::emath::TSTransform::IDENTITY);
-        let p = pl.clone().with_layer_id(cid).with_clip_rect(Rect::from_min_max(tf(c.min), tf(c.max)));
+        // set, not intersected: the parent's clip is in the scaled layer's units
+        let mut p = pl.clone().with_layer_id(cid);
+        p.set_clip_rect(Rect::from_min_max(tf(c.min), tf(c.max)));
         // Quarter-pixel sizes: sharp, and only a handful of sizes ever reach the glyph atlas
         let fs = (size * sc * 4.0).round() / 4.0;
         p.text(tf(pos), align, text.to_string(), FontId::proportional(fs), col);
@@ -389,6 +391,8 @@ pub(crate) fn zoom_text(pl: &egui::Painter, tv: egui::Vec2, sc: f32, pos: Pos2, 
     ctx.request_repaint();
     ctx.set_transform_layer(tid, egui::emath::TSTransform::new(tv, sc / S));
     let c = pl.clip_rect();
-    let p = pl.clone().with_layer_id(tid).with_clip_rect(Rect::from_min_max(pos2(c.min.x * S, c.min.y * S), pos2(c.max.x * S, c.max.y * S)));
+    // Set, not intersected: text drawn at S x its spot past the window's edge was clipped away
+    let mut p = pl.clone().with_layer_id(tid);
+    p.set_clip_rect(Rect::from_min_max(pos2(c.min.x * S, c.min.y * S), pos2(c.max.x * S, c.max.y * S)));
     p.text(pos2(pos.x * S, pos.y * S), align, text.to_string(), FontId::proportional(size * S), col);
 }

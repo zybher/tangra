@@ -260,13 +260,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         }
         let nr = ctx.cumulative_pass_nr();
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_bar_side"), (on_top, nr)));
-        let cx = fr.center().x.clamp(rect.min.x + w / 2.0 + 8.0, rect.max.x - w / 2.0 - 8.0);
         let cy = cy.clamp(rect.min.y + h / 2.0 + 8.0, rect.max.y - h / 2.0 - 70.0);
         // Scrolled far from its object (the bar would sit beside it, not over it): put it away
         // Decided on the bar's resting width: the hover swell widens it, which shifted the clamped
         // centre off the object and back every frame (a never-ending flash at the screen edge)
         let w0 = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
-        let cx0 = fr.center().x.clamp(rect.min.x + w0 / 2.0 + 8.0, (rect.max.x - w0 / 2.0 - 8.0).max(rect.min.x + w0 / 2.0 + 8.0));
+        let cx0 = super::bar_morph::edge_cx(fr.center().x, rect.min.x, rect.max.x, w0);
+        let cx = cx0;
         let inview = cx0 >= fr.min.x && cx0 <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y;
         // A right-click menu puts the bar away too (same exit), since both share the top layer
         // and the bar would draw over the menu
