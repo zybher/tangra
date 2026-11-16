@@ -89,7 +89,36 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let (pos, tilt) = (st.pos, st.tilt);
     ctx.data_mut(|d| d.insert_temp(sid, st));
     let press = ease(ctx, egui::Id::new("qd_cursor_press"), ctx.input(|i| i.pointer.primary_down()));
-    crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, Color32::from_rgb(18, 18, 20));
+    let ink = Color32::from_rgb(18, 18, 20);
+    crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, ink);
+    // The drawing tool's own toolbar icon rides beside the crosshair, so each tool reads apart
+    let pass = ctx.cumulative_pass_nr();
+    let badge = ctx.data(|d| d.get_temp::<(&'static str, u64)>(badge_id())).filter(|(_, f)| *f == pass && sh.name == "crosshair").map(|(n, _)| n);
+    let bk = ease(ctx, badge_id().with("k"), badge.is_some());
+    if let Some(name) = badge {
+        ctx.data_mut(|d| d.insert_temp(badge_id().with("last"), name));
+    }
+    let name = badge.or_else(|| ctx.data(|d| d.get_temp::<&'static str>(badge_id().with("last"))));
+    if let (Some(name), true) = (name, bk > 0.01) {
+        let (sn, cs) = tilt.sin_cos();
+        let o = vec2(15.0, 15.0);
+        let c = pos + vec2(o.x * cs - o.y * sn, o.x * sn + o.y * cs);
+        let r = 9.5 * (0.7 + 0.3 * bk) * (1.0 - (1.0 - PRESS_SCALE) * press);
+        p.circle_filled(c + vec2(0.0, 1.0), r + 1.0, Color32::from_black_alpha((50.0 * bk) as u8));
+        p.circle_filled(c, r, ink.gamma_multiply(0.92 * bk));
+        p.circle_stroke(c, r, egui::Stroke::new(1.0, Color32::from_white_alpha((40.0 * bk) as u8)));
+        crate::ui::svg_icons::draw(&p, name, c, r * 1.25, Color32::WHITE.gamma_multiply(bk));
+    }
+}
+
+fn badge_id() -> egui::Id {
+    egui::Id::new("qd_cursor_badge")
+}
+
+/// The canvas names the drawing tool's icon (pack name) for the crosshair badge, every frame
+pub(crate) fn set_badge(ctx: &egui::Context, name: &'static str) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(badge_id(), (name, pass)));
 }
 
 struct Shape {
@@ -112,7 +141,7 @@ fn shape(icon: egui::CursorIcon) -> Option<Shape> {
         C::ResizeNwSe | C::ResizeNorthWest | C::ResizeSouthEast => ("resize-nwse", 30.0, 0.0),
         C::ResizeNeSw | C::ResizeNorthEast | C::ResizeSouthWest => ("resize-nesw", 30.0, 0.0),
         C::Crosshair => ("crosshair", 32.0, 1.0),
-        C::Text => ("text", 30.0, 0.5),
+        C::Text => ("text-cursor", 30.0, 0.5),
         C::Grabbing => ("grabbing", 30.0, 1.0),
         _ => return None,
     };

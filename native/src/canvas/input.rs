@@ -656,6 +656,21 @@ impl App {
                 hand_cursor(ctx, hp, false);
             }
         } else if resp.hovered() {
+            // The crosshair carries the tool's toolbar icon (ui/cursor.rs)
+            let badge = match self.tool {
+                Tool::Pen => Some("pencil"),
+                Tool::Highlighter => Some("highlighter"),
+                Tool::Pixelate => Some("pixelate"),
+                Tool::Rect => Some("rectangle"),
+                Tool::Ellipse => Some("ellipse"),
+                Tool::Arrow => Some("arrow"),
+                Tool::Frame => Some("frame"),
+                Tool::Lasso => Some("lasso"),
+                _ => None,
+            };
+            if let Some(b) = badge {
+                crate::ui::cursor::set_badge(ctx, b);
+            }
             ctx.set_cursor_icon(match self.tool {
                 Tool::Pen | Tool::Highlighter | Tool::Pixelate | Tool::Rect | Tool::Ellipse | Tool::Arrow | Tool::Frame | Tool::Lasso => egui::CursorIcon::Crosshair,
                 Tool::Text => egui::CursorIcon::Text,

@@ -353,6 +353,13 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
         for it in items.iter() {
             for (v, closed) in &it.subs {
                 let v: Vec<Pos2> = pts(v, *closed).into_iter().map(|q| q + off).collect();
+                // A tiny closed shape (a dot): a stroke wider than the shape folds into junk, so
+                // its edge is just a bigger disc behind it
+                let bb = egui::Rect::from_points(&v);
+                if *closed && bb.width().max(bb.height()) < 5.0 * k {
+                    p.circle_filled(bb.center(), bb.width().max(bb.height()) / 2.0 + (w(it) + extra) / 2.0, col);
+                    continue;
+                }
                 if *closed {
                     fan(p, &v, col);
                 }
@@ -368,6 +375,11 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
     for it in items.iter() {
         for (v, closed) in &it.subs {
             let v = pts(v, *closed);
+            let bb = egui::Rect::from_points(&v);
+            if *closed && bb.width().max(bb.height()) < 5.0 * k {
+                p.circle_filled(bb.center(), bb.width().max(bb.height()) / 2.0, fill);
+                continue;
+            }
             if *closed {
                 fan(p, &v, fill);
             } else {
@@ -451,7 +463,7 @@ const PACK: &[(&str, &str)] = &[
     ("resize-nwse", r##"<path d="M6 6l12 12M6 11V6h5M18 13v5h-5"/>"##),
     ("resize-nesw", r##"<path d="M18 6L6 18M13 6h5v5M11 18H6v-5"/>"##),
     ("crosshair", r##"<path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21"/><circle cx="12" cy="12" r="1" fill="currentColor"/>"##),
-    ("text", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
+    ("text-cursor", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
     ("grabbing", r##"<path d="M7 10.5V8a1.5 1.5 0 0 1 3 0v1.5M10 9V7a1.5 1.5 0 0 1 3 0v2M13 9V7.5a1.5 1.5 0 0 1 3 0V10M16 10V9a1.5 1.5 0 0 1 3 0v3.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),
     ("frame", r##"<path d="M7.5 3v18M16.5 3v18M3 7.5h18M3 16.5h18"/>"##),
     ("rectangle", r##"<rect x="4" y="5" width="16" height="14" rx="2"/>"##),
