@@ -445,7 +445,7 @@ impl App {
                     let round = match k {
                         Kind::Image => self.board.images.iter().find(|i| i.id == id).map_or(0.0, |i| i.corner * z),
                         Kind::Group => self.board.group_cards.iter().find(|g| g.id == id).map_or(0.0, |g| group_radius(g) * z),
-                        Kind::Stroke => self.find_stroke(&id).and_then(|s| s.radius).map_or(2.0, |r| r * z),
+                        Kind::Stroke => self.find_stroke(&id).and_then(super::geometry::outline_round).map_or(2.0, |r| r * z),
                         Kind::Text => 2.0,
                         _ => 10.0 * z,
                     };
@@ -468,7 +468,7 @@ impl App {
                 let round = match k {
                     Kind::Image => self.board.images.iter().find(|i| &i.id == id).map_or(0.0, |i| i.corner * z),
                     Kind::Group => self.board.group_cards.iter().find(|g| &g.id == id).map_or(0.0, |g| group_radius(g) * z),
-                    Kind::Stroke => self.find_stroke(id).and_then(|s| s.radius).map_or(2.0, |r| r * z),
+                    Kind::Stroke => self.find_stroke(id).and_then(super::geometry::outline_round).map_or(2.0, |r| r * z),
                     Kind::Text => 2.0,
                     _ => 10.0 * z,
                 };

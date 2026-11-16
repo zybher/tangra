@@ -137,6 +137,15 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     p.add(super::stroke_mesh::stroke_mesh(&line, width, col));
 }
 
+/// Corner rounding (world units) for the accent outline around a shape: a rectangle's own
+/// corner radius (square when it has none); None for anything without corners to match
+pub(crate) fn outline_round(s: &Stroke) -> Option<f32> {
+    match (s.closed_len(), s.radius) {
+        (Some(4), r) => Some(r.unwrap_or(0.0).max(0.0)),
+        (_, r) => r,
+    }
+}
+
 /// How far a closed outline of `width` moves inward for its stroke position (inside / centre / outside)
 pub(crate) fn stroke_inset(pos: u8, width: f32) -> f32 {
     match pos {
