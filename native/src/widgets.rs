@@ -264,7 +264,7 @@ pub(crate) fn wave_rows_k(ctx: &egui::Context, id: egui::Id, left: f32, bottom: 
     // lock blends between that and the wave, so pressing / letting go with the pointer still on
     // the held row doesn't dip it.
     let hid = id.with("lock_row");
-    let mut held: Option<usize> = ctx.data(|d| d.get_temp(hid));
+    let mut held: Option<usize> = ctx.data(|d| d.get_temp::<Option<usize>>(hid)).flatten();
     if lock {
         if let Some((i, _)) = pinned.iter().enumerate().filter(|(_, v)| **v > 0.0).max_by(|a, b| a.1.total_cmp(b.1)) {
             held = Some(i);
