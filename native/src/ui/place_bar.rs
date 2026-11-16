@@ -259,7 +259,7 @@ impl App {
                 // Away from the object: above a style bar that sits above it, below one that sits below
                 let above = sb.center().y <= fr.center().y && sb.min.y - 8.0 - h >= rect.min.y + 8.0;
                 let cy = if above { sb.min.y - 8.0 - h / 2.0 } else { sb.max.y + 8.0 + h / 2.0 };
-                let cx = super::bar_morph::edge_cx(sb.center().x, rect.min.x, rect.max.x, w_rest);
+                let cx = super::bar_morph::edge_cx(sb.center().x, rect.min.x, super::bar_morph::wall_hi(&ctx, rect.max.x, cy - h / 2.0, cy + h / 2.0), w_rest);
                 (cx, cy)
             }
             None => {
@@ -267,7 +267,7 @@ impl App {
                 let cy = if on_top { fr.min.y - 32.0 - h / 2.0 } else { fr.max.y + 32.0 + h / 2.0 };
                 let nr = ctx.cumulative_pass_nr();
                 ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_bar_side"), (on_top, nr)));
-                let cx = super::bar_morph::edge_cx(fr.center().x, rect.min.x, rect.max.x, w_rest);
+                let cx = super::bar_morph::edge_cx(fr.center().x, rect.min.x, super::bar_morph::wall_hi(&ctx, rect.max.x, cy - h / 2.0, cy + h / 2.0), w_rest);
                 (cx, cy.clamp(rect.min.y + h / 2.0 + 8.0, rect.max.y - h / 2.0 - 70.0))
             }
         };

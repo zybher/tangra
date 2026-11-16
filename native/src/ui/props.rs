@@ -179,6 +179,8 @@ impl App {
             ctx.request_repaint();
         }
         let card = Rect::from_min_size(pos2(canvas.max.x - EDGE - w, canvas.min.y + EDGE), vec2(w, h));
+        // the hover bars keep clear of it (bar_morph::wall_hi)
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_props_card"), card));
         let t_sel: f64 = ctx.data(|d| d.get_temp(bid.with("t_sel"))).unwrap_or(now);
         let xs = ((now - t_sel) as f32 / (0.6 * k)).clamp(0.0, 1.0);
         if xs < 1.0 {
