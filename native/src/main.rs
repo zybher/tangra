@@ -847,7 +847,7 @@ impl eframe::App for App {
             let pctx = ui.ctx().clone();
             self.side_panel_ui(&pctx, canvas_rect);
             self.outline_ui(&pctx, canvas_rect);
-            self.props_ui(&pctx, &mut acts);
+            self.props_ui(&pctx, &mut acts, canvas_rect);
             self.tool_menu_ui(&pctx);
 
             resp.context_menu(|ui| self.menu_ui(ui, &mut acts));

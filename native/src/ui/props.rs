@@ -1,9 +1,9 @@
-//! Properties: the lower part of the outline panel (split like Blender's right side, rows like
-//! Figma's). Shows only what the selection can change, like the hover bars (which stay):
-//! position and size, align, opacity and corners, fill, stroke, text size, and a picture's
-//! adjustments and 3D. Number fields scrub sideways, or take a typed value on click. The
-//! divider above it drags to share the height with the layers. With nothing selected it folds
-//! away, and springs back up with the bars' jelly once something is picked.
+//! Properties: a floating card in the canvas's top-right corner (rows like Figma's). Shows
+//! only what the selection can change, like the hover bars (which stay): position and size,
+//! align, opacity and corners, fill, stroke, text size, and a picture's adjustments and 3D.
+//! Number fields scrub sideways, or take a typed value on click. With nothing selected it's a
+//! small card with a hint; picking something morphs it (same glide as the bars) to fit what
+//! that object has, at whichever of 4:3, 1:1 or 3:4 suits that much content best.
 
 use crate::image_edit::{ImageEdit, ADJUST_ROWS, TILT_ROWS};
 use crate::*;
@@ -11,13 +11,10 @@ use crate::*;
 /// Field height
 const FH: f32 = 26.0;
 const GAP: f32 = 6.0;
-const PH_DEFAULT: f32 = 300.0;
-const PH_MIN: f32 = 120.0;
-
-/// Height the properties take from the bottom of the outline panel (one pass late)
-pub(crate) fn reserved(ctx: &egui::Context) -> f32 {
-    ctx.data(|d| d.get_temp(egui::Id::new("qd_props_h"))).unwrap_or(0.0)
-}
+/// Card padding and distance from the canvas edges
+const PAD: f32 = 12.0;
+const EDGE: f32 = 12.0;
+const HINT: &str = "Select something to see its properties";
 
 enum PAct {
     /// key, value, first change of this edit (takes the undo step)
@@ -130,16 +127,9 @@ fn link(ui: &mut egui::Ui, id: egui::Id, right: Pos2, text: &str, a: f32) -> boo
 }
 
 impl App {
-    /// Drawn after the outline panel, inside its lower part
-    pub(crate) fn props_ui(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
+    /// The properties card, top right of the canvas
+    pub(crate) fn props_ui(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>, canvas: Rect) {
         let bid = egui::Id::new("qd_props");
-        let hid = egui::Id::new("qd_props_h");
-        let nr = ctx.cumulative_pass_nr();
-        let shell: Option<(Rect, f32, u64)> = ctx.data(|d| d.get_temp(egui::Id::new("qd_outline_shell")));
-        let Some((shell, ok)) = shell.filter(|s| s.2 + 1 >= nr && s.1 > 0.01).map(|s| (s.0, s.1)) else {
-            ctx.data_mut(|d| d.insert_temp(hid, 0.0f32));
-            return;
-        };
         let target: Option<Sel> = if self.sel_label.is_some() || self.selected.is_empty() {
             None
         } else {
@@ -167,38 +157,51 @@ impl App {
                 d.insert_temp(bid.with("last"), target.clone());
             }
         });
-        // Springs up with the bars' jelly; folds away on deselect
-        let f = if has {
-            let t0: f64 = ctx.data(|d| d.get_temp(bid.with("t0"))).unwrap_or(now);
-            let x = ((now - t0) as f32 / (0.6 * k)).clamp(0.0, 1.0);
-            if x < 1.0 {
-                ctx.request_repaint();
-            }
-            1.0 - (-4.5 * x).exp() * (8.0 * x).cos()
+        // Content fades out on deselect (the last object's rows stay while they go)
+        let ca = ease(ctx, bid.with("ca"), has);
+        let shown = if has { target } else { last }.filter(|s| ca > 0.01 && self.rect_of(s.0, &s.1).is_some());
+
+        // Card size: the hint's when empty; else the content's height (measured last pass) at
+        // the ratio whose width suits it best (4:3 short lists, 1:1, 3:4 long ones)
+        let max_h = (canvas.height() - 2.0 * EDGE - 70.0).max(120.0);
+        let hint_w = ctx.fonts(|f| f.layout_no_wrap(HINT.to_string(), FontId::proportional(11.5), TEXT_DIM).size().x);
+        let (tw, th) = if has {
+            let ch: f32 = ctx.data(|d| d.get_temp(bid.with("ch"))).unwrap_or(240.0);
+            let h = (ch + 2.0 * PAD).min(max_h);
+            let w = [4.0 / 3.0, 1.0, 3.0 / 4.0].into_iter().map(|r| h * r).min_by(|a: &f32, b: &f32| (a - 280.0).abs().total_cmp(&(b - 280.0).abs())).unwrap_or(280.0);
+            (w.clamp(240.0, 330.0), h)
         } else {
-            let tg: f64 = ctx.data(|d| d.get_temp(bid.with("t_gone"))).unwrap_or(now);
-            let e = ((now - tg) as f32 / (0.3 * k)).clamp(0.0, 1.0);
-            if e < 1.0 {
-                ctx.request_repaint();
-            }
-            1.0 - egui::emath::easing::cubic_in(e)
+            (hint_w + 2.0 * PAD + 8.0, 44.0)
         };
-        let shown = if has { target } else { last };
-        let Some((kind, id)) = shown.filter(|s| f > 0.001 && self.rect_of(s.0, &s.1).is_some()) else {
-            ctx.data_mut(|d| d.insert_temp(hid, 0.0f32));
-            return;
-        };
-        let max_ph = (shell.height() - 230.0).max(PH_MIN);
-        let ph_t = if self.settings.props_height > 0.0 { self.settings.props_height } else { PH_DEFAULT }.clamp(PH_MIN, max_ph);
-        let ph = ph_t * f.max(0.0);
-        ctx.data_mut(|d| d.insert_temp(hid, ph));
-        let bottom = shell.max.y - 40.0;
-        let top = bottom - ph;
+        let w = super::micro::glide(ctx, bid.with("gw"), tw, false);
+        let h = super::micro::glide(ctx, bid.with("gh"), th, false);
+        if w != tw || h != th {
+            ctx.request_repaint();
+        }
+        let card = Rect::from_min_size(pos2(canvas.max.x - EDGE - w, canvas.min.y + EDGE), vec2(w, h));
         let t_sel: f64 = ctx.data(|d| d.get_temp(bid.with("t_sel"))).unwrap_or(now);
         let xs = ((now - t_sel) as f32 / (0.6 * k)).clamp(0.0, 1.0);
         if xs < 1.0 {
             ctx.request_repaint();
         }
+
+        let paint_card = |ui: &egui::Ui| {
+            let p = ui.painter();
+            p.rect_filled(card.translate(vec2(0.0, 2.0)), 10.0, Color32::from_black_alpha(40));
+            p.rect_filled(card, 10.0, frame_bg());
+            p.rect_stroke(card, 10.0, EStroke::new(1.0_f32, border()));
+            let ha = 1.0 - ca;
+            if ha > 0.01 {
+                p.with_clip_rect(card).text(card.center(), Align2::CENTER_CENTER, HINT, FontId::proportional(11.5), TEXT_DIM.gamma_multiply(ha));
+            }
+        };
+        let Some((kind, id)) = shown else {
+            egui::Area::new(bid).order(egui::Order::Middle).fixed_pos(card.min).show(ctx, |ui| {
+                ui.allocate_exact_size(card.size(), Sense::click());
+                paint_card(ui);
+            });
+            return;
+        };
 
         // What this selection can change
         let r0 = self.rect_of(kind, &id).unwrap_or([0.0; 4]);
@@ -257,41 +260,18 @@ impl App {
         let is_group = kind == Kind::Group;
 
         let mut out: Vec<PAct> = Vec::new();
-        let area = Rect::from_min_max(pos2(shell.min.x, top), pos2(shell.max.x, bottom));
-        // Stay above the outline (a click there brings its layer to the front)
-        ctx.memory_mut(|m| m.areas_mut().move_to_top(egui::LayerId::new(egui::Order::Middle, bid)));
-        egui::Area::new(bid).order(egui::Order::Middle).fixed_pos(pos2(shell.min.x, top - 4.0)).interactable(has).show(ctx, |ui| {
-            ui.set_opacity(ok.clamp(0.0, 1.0));
-            ui.set_clip_rect(area.expand2(vec2(0.0, 4.0)));
-            // Divider: drag to share the height with the layers
-            let dr = Rect::from_min_max(pos2(shell.min.x + 1.0, top - 4.0), pos2(shell.max.x - 1.0, top + 4.0));
-            let dresp = ui.interact(dr, bid.with("div"), Sense::drag());
-            let dk = ease(ctx, bid.with("dk"), has && (dresp.hovered() || dresp.dragged()));
-            if has && (dresp.hovered() || dresp.dragged()) {
-                ctx.set_cursor_icon(CursorIcon::ResizeVertical);
-            }
-            if has && dresp.dragged() {
-                self.settings.props_height = (ph_t - dresp.drag_delta().y).clamp(PH_MIN, max_ph);
-                ctx.request_repaint();
-            }
-            if dresp.drag_stopped() {
-                save_settings(&self.settings);
-            }
-            let p = ui.painter().clone();
-            p.rect_filled(Rect::from_min_max(pos2(shell.min.x + 1.0, top), pos2(shell.max.x - 1.0, bottom)), 0.0, frame_bg());
-            p.line_segment([pos2(shell.min.x, top), pos2(shell.max.x, top)], EStroke::new(1.0_f32, border()));
-            if dk > 0.01 {
-                p.line_segment([pos2(shell.min.x + 14.0, top), pos2(shell.max.x - 14.0, top)], EStroke::new(2.0_f32, blue().gamma_multiply(dk)));
-            }
-            p.rect_filled(Rect::from_center_size(pos2(shell.center().x, top), vec2(28.0, 4.0)), 2.0, mix(border(), Color32::from_gray(200), dk));
-
-            let cr = Rect::from_min_max(pos2(shell.min.x + 12.0, top + 8.0), pos2(shell.max.x - 12.0, bottom));
+        egui::Area::new(bid).order(egui::Order::Middle).fixed_pos(card.min).show(ctx, |ui| {
+            ui.allocate_exact_size(card.size(), Sense::click());
+            paint_card(ui);
+            ui.set_opacity(ca);
+            let cr = card.shrink(PAD);
             #[allow(deprecated)]
             ui.allocate_ui_at_rect(cr, |ui| {
                 ui.set_clip_rect(cr);
                 egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(cr.height()).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     let w = ui.available_width() - 4.0;
+                    let y_top = ui.min_rect().min.y;
                     // Each row rises into place a beat after the one above (like the bars' buttons)
                     let mut ri = 0usize;
                     let mut row = |ui: &mut egui::Ui, h: f32| -> (Rect, f32) {
@@ -499,7 +479,11 @@ impl App {
                         }
                     }
                     let _ = first;
-                    ui.add_space(10.0);
+                    // measured for next pass's card height (only for what's selected now)
+                    if has {
+                        let ch = ui.min_rect().max.y - y_top;
+                        ctx.data_mut(|d| d.insert_temp(bid.with("ch"), ch));
+                    }
                 });
             });
         });

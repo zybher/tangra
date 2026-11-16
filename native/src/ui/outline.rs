@@ -568,7 +568,7 @@ impl App {
                         sc.interact_handle_opacity = 1.0;
                     }
                     ui.visuals_mut().extreme_bg_color = Color32::TRANSPARENT;
-                    egui::ScrollArea::vertical().auto_shrink([false, false]).drag_to_scroll(false).max_height(ui.available_height() - 8.0 - super::props::reserved(ctx)).show(ui, |ui| {
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).drag_to_scroll(false).max_height(ui.available_height() - 8.0).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         // Toolbar-style wave: rows near the pointer lift into a tile that slides right
                         let pitch = ROW_H + 2.0;
