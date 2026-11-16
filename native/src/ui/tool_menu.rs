@@ -130,32 +130,11 @@ impl App {
                     }
                 }
             });
-        // The submenu being left fades and slides back out instead of vanishing (#66): its panel
-        // is kept as a ghost for the same 0.16 s the new one takes to come in
-        let ghost_id = egui::Id::new("qd_tm_sub_ghost");
-        let last_id = egui::Id::new("qd_tm_sub_last");
+        // Switching rows keeps the submenu's panel and morphs it to the new one's size (like the
+        // frame bar's dropdowns); only the items fade and rise back in
         if hover_row.is_some() && hover_row != self.tool_sub {
-            if let Some(last) = ctx.data(|d| d.get_temp::<Rect>(last_id)).filter(|_| self.tool_sub.is_some()) {
-                // Read the time first: ctx's lock isn't re-entrant, so no ctx calls inside data_mut
-                let now = ctx.input(|i| i.time);
-                ctx.data_mut(|d| d.insert_temp(ghost_id, (last, now)));
-            }
             self.tool_sub = hover_row;
             self.tool_sub_since = ctx.input(|i| i.time);
-        }
-        if let Some((gr, since)) = ctx.data(|d| d.get_temp::<(Rect, f64)>(ghost_id)) {
-            let k = ((ctx.input(|i| i.time) - since) / (0.16 * anim_k().max(0.01) as f64)).clamp(0.0, 1.0) as f32;
-            if k >= 1.0 {
-                ctx.data_mut(|d| d.remove::<(Rect, f64)>(ghost_id));
-            } else {
-                ctx.request_repaint();
-                let a = (1.0 - k).powi(3) * t;
-                let gr = gr.translate(vec2(-10.0 * (1.0 - (1.0 - k).powi(3)), 0.0));
-                let gp = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, ghost_id));
-                gp.rect_filled(gr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * a) as u8));
-                gp.rect_filled(gr, 10.0, popup().gamma_multiply(a));
-                gp.rect_stroke(gr, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
-            }
         }
 
         // Submenu, to the right of the list, bottom edges lined up (so it stays clear of the toolbar)
@@ -165,6 +144,7 @@ impl App {
             Colour(Color32),
         }
         let mut pick: Option<Pick> = None;
+        let bk = ease(ctx, egui::Id::new("qd_tm_sub_morph").with("k"), self.tool_sub.filter(|i| *i < rows.len()).is_some()) * t;
         if let Some(si) = self.tool_sub.filter(|i| *i < rows.len()) {
             let c = rows[si];
             let k = ((ctx.input(|i| i.time) - self.tool_sub_since) / 0.16).clamp(0.0, 1.0) as f32;
@@ -216,7 +196,12 @@ impl App {
             let (srows, smags, sp) = wave_rows(ctx, egui::Id::new(("qd_tm_wave_sub", c)), sub_left, main.max.y, sw, 28.0, items.len(), &sub_pinned);
             sub_rect = if c == 'c' { Rect::from_min_size(pos2(sub_left, main.max.y - sh), vec2(sw, sh)) } else { sp };
             let r0 = sub_rect;
-            ctx.data_mut(|d| d.insert_temp(last_id, r0.translate(vec2((1.0 - st) * 10.0, 0.0))));
+            // The panel glides between submenus' rects (snaps when it first opens: glide only
+            // carries on from a rect drawn the frame before); it fades in once, on opening
+            let tr = r0.translate(vec2((1.0 - st) * 10.0, 0.0));
+            let gid = egui::Id::new("qd_tm_sub_morph");
+            let g = |n: u8, v: f32| super::micro::glide(ctx, gid.with(n), v, false);
+            let br = Rect::from_min_max(pos2(g(0, tr.min.x), g(1, tr.min.y)), pos2(g(2, tr.max.x), g(3, tr.max.y)));
             egui::Area::new(egui::Id::new("qd_tool_sub_area"))
                 .order(egui::Order::Foreground)
                 .fixed_pos(r0.min)
@@ -225,9 +210,9 @@ impl App {
                 .show(ctx, |ui| {
                     let _ = ui.allocate_rect(r0, Sense::hover());
                     let p = &ui.painter().clone().with_clip_rect(ctx.screen_rect());
-                    p.rect_filled(r0.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * st) as u8));
-                    p.rect_filled(r0, 10.0, popup().gamma_multiply(st));
-                    p.rect_stroke(r0, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(st)));
+                    p.rect_filled(br.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha((70.0 * bk) as u8));
+                    p.rect_filled(br, 10.0, popup().gamma_multiply(bk));
+                    p.rect_stroke(br, 10.0, EStroke::new(1.0_f32, border().gamma_multiply(bk)));
                     if c == 'c' {
                         let cur = hex(&self.pen_color);
                         let top = r0.min.y + 10.0;

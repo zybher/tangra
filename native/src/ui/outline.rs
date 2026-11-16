@@ -317,23 +317,33 @@ impl App {
 
         // Flatten the visible rows
         let mut rows: Vec<(usize, usize)> = Vec::new();
-        fn walk(t: &Tree, i: usize, d: usize, fold: &HashSet<String>, out: &mut Vec<(usize, usize)>) {
+        // How open each row is (product of its frames' fold eases): a folding frame's children
+        // stay listed while they shrink away, and unfolding grows them back in
+        let mut row_k: Vec<f32> = Vec::new();
+        #[allow(clippy::too_many_arguments)]
+        fn walk(t: &Tree, i: usize, d: usize, k: f32, fold: &HashSet<String>, open: &dyn Fn(&str, bool) -> f32, out: &mut Vec<(usize, usize)>, ks: &mut Vec<f32>) {
             out.push((i, d));
-            if !fold.contains(&t.items[i].0 .1) {
+            ks.push(k);
+            if t.kids[i].is_empty() {
+                return;
+            }
+            let o = open(t.items[i].0 .1.as_str(), !fold.contains(&t.items[i].0 .1));
+            if o > 0.001 {
                 for &c in &t.kids[i] {
-                    walk(t, c, d + 1, fold, out);
+                    walk(t, c, d + 1, k * o, fold, open, out, ks);
                 }
             }
         }
+        let open = |id: &str, on: bool| ease(ctx, egui::Id::new(("qd_ol_fold", id)), on);
         let qid = egui::Id::new("qd_outline_q");
         let mut query: String = ctx.data(|d| d.get_temp(qid)).unwrap_or_default();
         let q = query.trim().to_string();
         if board_scope || ri.is_none() {
             for &r in &tree.roots {
-                walk(&tree, r, 0, &fold, &mut rows);
+                walk(&tree, r, 0, 1.0, &fold, &open, &mut rows, &mut row_k);
             }
         } else if let Some(ri) = ri {
-            walk(&tree, ri, 0, &fold, &mut rows);
+            walk(&tree, ri, 0, 1.0, &fold, &open, &mut rows, &mut row_k);
         }
         // Searching: keep matches plus the frames around them (unfolded), drop the rest
         if !q.is_empty() {
@@ -366,6 +376,7 @@ impl App {
             for t in tops {
                 walk_all(&tree, t, 0, &keep, &mut rows);
             }
+            row_k = vec![1.0; rows.len()];
         }
 
         // Same reveal as the canvas popup: a short slide + fade, rows cascading in after the shell
@@ -552,10 +563,17 @@ impl App {
                         let mut laid: Vec<(Rect, f32, f32, egui::Response)> = Vec::with_capacity(rows.len());
                         for (ri_, &(i, _)) in rows.iter().enumerate() {
                             let (s, _) = &tree.items[i];
-                            let (r0, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click_and_drag());
+                            // A folding/unfolding frame's children take part of their height
+                            let fk = row_k.get(ri_).copied().unwrap_or(1.0);
+                            let (r0, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H * fk), Sense::click_and_drag());
+                            if fk < 1.0 {
+                                // ...and of the gap after them
+                                ui.add_space(-2.0 * (1.0 - fk));
+                            }
+                            let r0 = Rect::from_center_size(r0.center(), vec2(r0.width(), ROW_H));
                             // Cascade in after the shell, top row first
                             let e = (k * 1.7 - (ri_ as f32 * 0.04).min(0.6)).clamp(0.0, 1.0);
-                            let e = 1.0 - (1.0 - e).powi(3);
+                            let e = (1.0 - (1.0 - e).powi(3)) * fk * fk;
                             let renaming = ren.as_ref().is_some_and(|(rs, _)| rs == s);
                             // Hover lift; a row being renamed stays lifted, and easing in/out of it means
                             // no snap when the field opens or closes (the field steals the row's hover)
@@ -594,7 +612,10 @@ impl App {
                                 let (a, b) = (laid[lo].0, laid[hi].0);
                                 let x0 = a.min.x + (b.min.x - a.min.x) * f;
                                 let x1 = a.max.x + (b.max.x - a.max.x) * f;
-                                let pill = Rect::from_min_max(pos2(x0, top0 + v * pitch), pos2(x1, top0 + v * pitch + ROW_H));
+                                // Between the two rows' own tops (rows above may be folding)
+                                let y = a.min.y + (b.min.y - a.min.y) * f;
+                                let _ = (top0, pitch);
+                                let pill = Rect::from_min_max(pos2(x0, y), pos2(x1, y + ROW_H));
                                 ui.painter().with_clip_rect(ui.clip_rect()).rect_filled(pill, 8.0, blue().gamma_multiply(0.22 * pa * k));
                             }
                         }
