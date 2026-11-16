@@ -18,6 +18,7 @@ pub(crate) mod micro;
 pub(crate) mod props;
 mod bar_morph;
 pub(crate) mod outline_drag;
+pub(crate) mod outline_pick;
 mod style_bar;
 mod titlebar;
 mod logo_anim;

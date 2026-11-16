@@ -175,7 +175,7 @@ impl App {
 
     /// Glide the camera to `r` (world) if it's off-screen or too small to see, keeping it
     /// clear of the outline panel
-    fn outline_focus(&mut self, r: [f32; 4], canvas: Rect) {
+    pub(crate) fn outline_focus(&mut self, r: [f32; 4], canvas: Rect) {
         let cam = self.board.camera;
         let left = width() + GAP + 10.0;
         let (aw, ah) = ((canvas.width() - left - 40.0).max(80.0), (canvas.height() - 120.0).max(80.0));
@@ -401,7 +401,7 @@ impl App {
         // The panel's contents stay above the morphing shape (clicking the tab raises its layer)
         ctx.memory_mut(|mm| mm.areas_mut().move_to_top(egui::LayerId::new(egui::Order::Middle, egui::Id::new("qd_outline"))));
         let h = (canvas.height() - 20.0).max(120.0);
-        let mut pick: Option<Sel> = None;
+        let mut pick: Option<(Sel, (bool, bool))> = None;
         let mut toggle: Option<String> = None;
         let mut hov: Option<Sel> = None;
         let mut close = false;
@@ -611,34 +611,51 @@ impl App {
                             laid.push((r, m, e, resp));
                         }
                         // Pass 2: the selection pill glides between rows (same rate as the hotkey list's
-                        // pill), on top of the tiles and following each row's wave shift
+                        // pill), on top of the tiles. When the selected row folds away into a frame the
+                        // pill rides it into that frame's row (and back out on unfold) instead of fading
                         {
-                            let target = rows.iter().position(|&(i, _)| Some(&tree.items[i].0) == self.sel.as_ref());
+                            let pos_of = |sel: &Sel| rows.iter().position(|&(i, _)| &tree.items[i].0 == sel);
+                            let target: Option<Rect> = self.sel.as_ref().and_then(|sel| {
+                                // nearest listed ancestor (the frame it folded into)
+                                let anc = idx(sel).and_then(|mut j| loop {
+                                    j = tree.parent[j]?;
+                                    if let Some(n) = pos_of(&tree.items[j].0) {
+                                        break Some(n);
+                                    }
+                                });
+                                match (pos_of(sel), anc) {
+                                    (Some(n), Some(a)) => {
+                                        let f = row_k.get(n).copied().unwrap_or(1.0);
+                                        let (rs, ra) = (laid[n].0, laid[a].0);
+                                        Some(Rect::from_min_max(ra.min + (rs.min - ra.min) * f, ra.max + (rs.max - ra.max) * f))
+                                    }
+                                    (Some(n), None) => Some(laid[n].0),
+                                    (None, Some(a)) => Some(laid[a].0),
+                                    (None, None) => None,
+                                }
+                            });
                             let gid = egui::Id::new("qd_outline_glide");
                             let pa = ease(ctx, gid.with("a"), target.is_some());
+                            // y relative to the list top, so scrolling doesn't make it lag
                             let cur: Option<f32> = ctx.data(|d| d.get_temp(gid));
-                            let v = match (target.map(|n| n as f32), cur) {
+                            let last: Option<Rect> = ctx.data(|d| d.get_temp(gid.with("r")));
+                            let v = match (target.map(|t| t.min.y - top0), cur) {
                                 // Coming back from hidden: appear in place instead of flying across
                                 (Some(t), Some(c)) if pa > 0.05 => {
                                     let dt = ctx.input(|i| i.stable_dt).min(0.05);
                                     let v = c + (t - c) * (1.0 - (-dt * 16.0).exp());
-                                    if (v - t).abs() < 0.01 { t } else { ctx.request_repaint(); v }
+                                    if (v - t).abs() < 0.3 { t } else { ctx.request_repaint(); v }
                                 }
                                 (Some(t), _) => t,
                                 (None, c) => c.unwrap_or(0.0),
                             };
                             ctx.data_mut(|d| d.insert_temp(gid, v));
-                            if pa > 0.01 && !laid.is_empty() {
-                                let lo = (v.floor().max(0.0) as usize).min(laid.len() - 1);
-                                let hi = (lo + 1).min(laid.len() - 1);
-                                let f = (v - lo as f32).clamp(0.0, 1.0);
-                                let (a, b) = (laid[lo].0, laid[hi].0);
-                                let x0 = a.min.x + (b.min.x - a.min.x) * f;
-                                let x1 = a.max.x + (b.max.x - a.max.x) * f;
-                                // Between the two rows' own tops (rows above may be folding)
-                                let y = a.min.y + (b.min.y - a.min.y) * f;
-                                let _ = (top0, pitch);
-                                let pill = Rect::from_min_max(pos2(x0, y), pos2(x1, y + ROW_H));
+                            if let Some(t) = target {
+                                ctx.data_mut(|d| d.insert_temp(gid.with("r"), t));
+                            }
+                            if let Some(t) = target.or(last).filter(|_| pa > 0.01) {
+                                let _ = pitch;
+                                let pill = Rect::from_min_size(pos2(t.min.x, top0 + v), vec2(t.width(), ROW_H));
                                 ui.painter().with_clip_rect(ui.clip_rect()).rect_filled(pill, 8.0, blue().gamma_multiply(0.22 * pa * k));
                             }
                         }
@@ -760,7 +777,7 @@ impl App {
                                 } else if on_caret {
                                     toggle = Some(s.1.clone());
                                 } else {
-                                    pick = Some(s.clone());
+                                    pick = Some((s.clone(), ctx.input(|i| (i.modifiers.shift, i.modifiers.command))));
                                 }
                             }
                         }
@@ -896,11 +913,9 @@ impl App {
             );
             pick = None;
         }
-        if let Some(s) = pick {
-            if let Some(i) = idx(&s) {
-                self.outline_focus(tree.items[i].1, canvas);
-            }
-            self.select_only(s);
+        if let Some((s, (shift, ctrl))) = pick {
+            let order: Vec<Sel> = rows.iter().map(|&(i, _)| tree.items[i].0.clone()).collect();
+            self.outline_pick(ctx, s, shift, ctrl, &order, |s| idx(s).map(|i| tree.items[i].1), canvas);
         }
         if k > 0.01 && k < 0.999 {
             ctx.request_repaint();

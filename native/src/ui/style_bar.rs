@@ -1004,7 +1004,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let zone = if pop_rect.is_positive() { bar.union(pop_rect) } else { bar };
             let far = ctx.input(|i| i.pointer.hover_pos()).map_or(true, |q| {
                 let d = vec2((zone.min.x - q.x).max(q.x - zone.max.x).max(0.0), (zone.min.y - q.y).max(q.y - zone.max.y).max(0.0));
-                d.length() > 140.0
+                d.length() > 220.0
             });
             // Just moved to the object's other side: wait until the pointer has reached it
             let grace = super::drop_anim::flip_grace(&ctx, bid);
