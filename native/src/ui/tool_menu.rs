@@ -136,7 +136,9 @@ impl App {
         let last_id = egui::Id::new("qd_tm_sub_last");
         if hover_row.is_some() && hover_row != self.tool_sub {
             if let Some(last) = ctx.data(|d| d.get_temp::<Rect>(last_id)).filter(|_| self.tool_sub.is_some()) {
-                ctx.data_mut(|d| d.insert_temp(ghost_id, (last, ctx.input(|i| i.time))));
+                // Read the time first: ctx's lock isn't re-entrant, so no ctx calls inside data_mut
+                let now = ctx.input(|i| i.time);
+                ctx.data_mut(|d| d.insert_temp(ghost_id, (last, now)));
             }
             self.tool_sub = hover_row;
             self.tool_sub_since = ctx.input(|i| i.time);
