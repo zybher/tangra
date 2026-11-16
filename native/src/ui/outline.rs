@@ -468,7 +468,10 @@ impl App {
                     let focused = ctx.memory(|m| m.has_focus(te_id));
                     let fk = ease(ctx, te_id.with("f"), focused);
                     p.rect_filled(sr, 7.0, Color32::from_black_alpha(60));
-                    if fk > 0.01 {
+                    let son = te_id.with("on");
+                    let on: bool = ctx.data(|d| d.get_temp(son)).unwrap_or(false);
+                    // While typing the field draws its own ring; this one fades it out after
+                    if fk > 0.01 && !on {
                         p.rect_stroke(sr.shrink(0.5), 7.0, EStroke::new(1.0_f32, blue().gamma_multiply(fk)));
                     }
                     // Magnifier
@@ -476,13 +479,32 @@ impl App {
                     let ms = EStroke::new(1.2_f32, TEXT_DIM);
                     p.circle_stroke(mc, 4.0, ms);
                     p.line_segment([mc + vec2(2.9, 2.9), mc + vec2(5.6, 5.6)], ms);
-                    let te = ui.put(
-                        Rect::from_min_max(pos2(sr.min.x + 26.0, sr.min.y), pos2(sr.max.x - 24.0, sr.max.y)),
-                        egui::TextEdit::singleline(&mut query).id(te_id).frame(false).hint_text("Search layers").font(FontId::proportional(11.5)).vertical_align(egui::Align::Center),
-                    );
-                    if te.has_focus() && ctx.input(|i| i.key_pressed(Key::Escape)) {
-                        query.clear();
-                        te.surrender_focus();
+                    // Typed in place like a rename: gliding caret and selection (inline_text.rs)
+                    let tr = Rect::from_min_max(pos2(sr.min.x + 30.0, sr.min.y), pos2(sr.max.x - 24.0, sr.max.y));
+                    let sfont = FontId::proportional(11.5);
+                    if query.is_empty() {
+                        p.text(tr.left_center(), Align2::LEFT_CENTER, "Search layers", sfont.clone(), TEXT_FAINT);
+                    }
+                    if on {
+                        match super::inline_text::edit(ui, te_id, tr, &mut query, sfont, TEXT, false, super::inline_text::Ring::Fixed(sr, 7.0)) {
+                            Some(false) => {
+                                query.clear();
+                                ctx.data_mut(|d| d.insert_temp(son, false));
+                            }
+                            Some(true) => ctx.data_mut(|d| d.insert_temp(son, false)),
+                            None => {}
+                        }
+                    } else {
+                        let sresp = ui.interact(tr, te_id.with("click"), Sense::click());
+                        if sresp.hovered() {
+                            ctx.set_cursor_icon(egui::CursorIcon::Text);
+                        }
+                        if !sresp.clicked() {
+                            p.with_clip_rect(tr.expand2(vec2(2.0, 4.0))).text(tr.left_center(), Align2::LEFT_CENTER, query.as_str(), sfont.clone(), TEXT);
+                        } else {
+                            ctx.data_mut(|d| d.insert_temp(son, true));
+                            super::inline_text::edit(ui, te_id, tr, &mut query, sfont, TEXT, true, super::inline_text::Ring::Fixed(sr, 7.0));
+                        }
                     }
                     if !query.is_empty() {
                         let cr = Rect::from_center_size(pos2(sr.max.x - 12.0, sr.center().y), vec2(18.0, 18.0));

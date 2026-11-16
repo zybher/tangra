@@ -14,6 +14,7 @@ mod nesting;
 mod glide;
 pub(crate) mod round_clip;
 pub(crate) mod stroke_mesh;
+pub(crate) mod ellipse_mesh;
 pub(crate) mod tilt3d;
 mod lasso;
 pub(crate) mod align;

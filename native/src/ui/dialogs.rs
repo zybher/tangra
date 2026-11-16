@@ -183,16 +183,32 @@ impl App {
                         let focused = ctx.memory(|m| m.has_focus(id));
                         let fk = ease(ctx, id.with("f"), focused);
                         p.rect_filled(fr, 8.0, frame_bg().gamma_multiply(a1));
-                        p.rect_stroke(fr, 8.0, EStroke::new(1.0_f32, mix(border(), blue(), fk).gamma_multiply(a1)));
-                        ui.multiply_opacity(a1);
-                        let resp = ui.put(
-                            fr.shrink2(vec2(10.0, 7.0)),
-                            egui::TextEdit::singleline(text).id(id).frame(false).font(FontId::proportional(13.0)).hint_text("Board name"),
-                        );
-                        ui.multiply_opacity(1.0 / a1.max(0.01));
-                        if live && !resp.has_focus() {
-                            resp.request_focus();
+                        // The blue ring is drawn by the field itself while typing
+                        p.rect_stroke(fr, 8.0, EStroke::new(1.0_f32, border().gamma_multiply(a1 * (1.0 - fk))));
+                        // Typed in place like an outline rename: gliding caret and selection (inline_text.rs)
+                        let tr = fr.shrink2(vec2(10.0, 7.0));
+                        let font = FontId::proportional(13.0);
+                        if text.is_empty() {
+                            p.text(tr.left_center(), Align2::LEFT_CENTER, "Board name", font.clone(), TEXT_FAINT.gamma_multiply(a1));
                         }
+                        ui.multiply_opacity(a1);
+                        if live {
+                            let son = id.with("on");
+                            let on: bool = ctx.data(|d| d.get_temp(son)).unwrap_or(false);
+                            let enter = ui.input(|i| i.key_pressed(Key::Enter));
+                            let ring = super::inline_text::Ring::Fixed(fr, 8.0);
+                            let res = super::inline_text::edit(ui, id, tr, text, font, TEXT, !on, ring);
+                            ctx.data_mut(|d| d.insert_temp(son, res.is_none()));
+                            match res {
+                                Some(true) if enter => ok = !danger,
+                                Some(false) => cancel = true,
+                                // Focus wandered off (a click in the dialog): it picks back up next frame
+                                _ => {}
+                            }
+                        } else {
+                            p.text(tr.left_center(), Align2::LEFT_CENTER, text.as_str(), font, TEXT.gamma_multiply(a1));
+                        }
+                        ui.multiply_opacity(1.0 / a1.max(0.01));
                     }
                     Prompt::ConfirmDelete => {
                         let g = p.layout(

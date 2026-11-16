@@ -108,7 +108,12 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     }
     if let (Some(n), true) = (s.closed_len(), s.fill) {
         let fc = rgba(r, g, b, (s.fill_alpha() * 255.0) as u8);
-        p.add(Shape::convex_polygon(pts[..n].to_vec(), fc, EStroke::NONE));
+        // Ellipses: own mesh, egui's feathering spikes out of a thin ellipse's ends (ellipse_mesh.rs)
+        if n > 4 {
+            p.add(super::ellipse_mesh::fill(&pts[..n], fc));
+        } else {
+            p.add(Shape::convex_polygon(pts[..n].to_vec(), fc, EStroke::NONE));
+        }
         if s.no_stroke {
             return;
         }
@@ -118,6 +123,10 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     if let Some(n) = s.closed_len() {
         // An inside stroke is never thicker than the shape itself
         let width = if s.stroke_pos == 1 { width.min(Rect::from_points(&pts[..n]).size().min_elem().max(0.5)) } else { width };
+        if n > 4 {
+            p.add(super::ellipse_mesh::stroke(&pts[..n], stroke_inset(s.stroke_pos, width), width, col));
+            return;
+        }
         let line = offset_closed(&pts[..n], stroke_inset(s.stroke_pos, width));
         p.add(Shape::closed_line(line, EStroke::new(width, col)));
         return;
