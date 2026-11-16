@@ -1,7 +1,9 @@
 //! The app's own arrow pointer, from the icon pack (svg_icons.rs). Wherever the native cursor
 //! would be the plain arrow, it is hidden and this one is painted on top at the pointer.
 //! The resize arrows, the frame / shape crosshair, the text I-beam and the grabbing fist are the
-//! pack's too (drawn still, centred on the pointer); the pan hand is its own (widgets.rs).
+//! pack's too, centred on the pointer, with the same glide, trail and press squeeze; the resize
+//! arrows don't lean (they keep pointing the way they resize) and the I-beam leans half as much.
+//! The pan hand is its own (widgets.rs).
 //!
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
 //! where it points) and leans into sideways movement, tipping right when moving right and left
@@ -38,17 +40,10 @@ struct St {
 pub(crate) fn paint(ctx: &egui::Context) {
     let sid = egui::Id::new("qd_cursor_st");
     let icon = ctx.output(|o| o.cursor_icon);
-    if icon != egui::CursorIcon::Default {
+    let Some(sh) = shape(icon) else {
         ctx.data_mut(|d| d.remove::<St>(sid));
-        if let (Some(name), Some(at)) = (shape(icon), ctx.pointer_hover_pos()) {
-            if ctx.input(|i| i.pointer.has_pointer()) {
-                ctx.set_cursor_icon(egui::CursorIcon::None);
-                let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("qd_cursor")));
-                crate::ui::svg_icons::draw_cursor(&p, name, at, [12.0, 12.0], 24.0, 0.0, Color32::WHITE, Color32::from_rgb(18, 18, 20));
-            }
-        }
         return;
-    }
+    };
     let at = match ctx.pointer_hover_pos() {
         Some(at) if ctx.input(|i| i.pointer.has_pointer()) => at,
         _ => {
@@ -65,7 +60,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
         Some(s) if ak > 0.0 => {
             let pos = s.pos + (at - s.pos) * (1.0 - (-dt * FOLLOW / ak).exp());
             let vx = (pos.x - s.pos.x) / dt;
-            let target = MAX_TILT * (vx / TILT_SPEED).tanh();
+            let target = MAX_TILT * sh.lean * (vx / TILT_SPEED).tanh();
             // Quick to lean in, unhurried coming back
             let rate = if target.abs() > s.tilt.abs() && target * s.tilt >= 0.0 { TILT_IN } else { TILT_OUT };
             let tilt = s.tilt + (target - s.tilt) * (1.0 - (-dt * rate / ak).exp());
@@ -82,7 +77,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
         ctx.request_repaint();
     }
     let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("qd_cursor")));
-    // Faint trail from the tip: thins and fades with age
+    // Faint trail from the hot spot: thins and fades with age
     let life = (TRAIL_LIFE * ak as f64).max(1e-3);
     for w in st.trail.windows(2) {
         let ((a, _), (b, tb)) = (w[0], w[1]);
@@ -91,27 +86,35 @@ pub(crate) fn paint(ctx: &egui::Context) {
             p.line_segment([a, b], egui::Stroke::new(0.8 + 1.6 * f, Color32::WHITE.gamma_multiply(TRAIL_ALPHA * f * f)));
         }
     }
-    if let Some((a, _)) = st.trail.last() {
-        p.line_segment([*a, st.pos], egui::Stroke::new(2.4, Color32::WHITE.gamma_multiply(TRAIL_ALPHA)));
-    }
     let (pos, tilt) = (st.pos, st.tilt);
     ctx.data_mut(|d| d.insert_temp(sid, st));
-    // The arrow's tip (5.5, 3.5 in the icon's box) sits on the pointer
     let press = ease(ctx, egui::Id::new("qd_cursor_press"), ctx.input(|i| i.pointer.primary_down()));
-    crate::ui::svg_icons::draw_cursor(&p, "cursor", pos, [5.5, 3.5], 26.0 * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, Color32::from_rgb(18, 18, 20));
+    crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, Color32::from_rgb(18, 18, 20));
+}
+
+struct Shape {
+    name: &'static str,
+    /// The point of the icon's 24-unit box that sits on the pointer
+    hot: [f32; 2],
+    px: f32,
+    /// How much of the lean it takes: resize arrows keep their direction, the I-beam leans less
+    lean: f32,
 }
 
 /// The pack icon drawn for a native cursor (None = leave it native)
-fn shape(icon: egui::CursorIcon) -> Option<&'static str> {
+fn shape(icon: egui::CursorIcon) -> Option<Shape> {
     use egui::CursorIcon as C;
-    Some(match icon {
-        C::ResizeHorizontal | C::ResizeEast | C::ResizeWest | C::ResizeColumn => "resize-h",
-        C::ResizeVertical | C::ResizeNorth | C::ResizeSouth | C::ResizeRow => "resize-v",
-        C::ResizeNwSe | C::ResizeNorthWest | C::ResizeSouthEast => "resize-nwse",
-        C::ResizeNeSw | C::ResizeNorthEast | C::ResizeSouthWest => "resize-nesw",
-        C::Crosshair => "crosshair",
-        C::Text => "text",
-        C::Grabbing => "grabbing",
+    let (name, px, lean) = match icon {
+        // The arrow's tip (5.5, 3.5 in the icon's box) sits on the pointer
+        C::Default => return Some(Shape { name: "cursor", hot: [5.5, 3.5], px: 26.0, lean: 1.0 }),
+        C::ResizeHorizontal | C::ResizeEast | C::ResizeWest | C::ResizeColumn => ("resize-h", 30.0, 0.0),
+        C::ResizeVertical | C::ResizeNorth | C::ResizeSouth | C::ResizeRow => ("resize-v", 30.0, 0.0),
+        C::ResizeNwSe | C::ResizeNorthWest | C::ResizeSouthEast => ("resize-nwse", 30.0, 0.0),
+        C::ResizeNeSw | C::ResizeNorthEast | C::ResizeSouthWest => ("resize-nesw", 30.0, 0.0),
+        C::Crosshair => ("crosshair", 32.0, 1.0),
+        C::Text => ("text", 30.0, 0.5),
+        C::Grabbing => ("grabbing", 30.0, 1.0),
         _ => return None,
-    })
+    };
+    Some(Shape { name, hot: [12.0, 12.0], px, lean })
 }
