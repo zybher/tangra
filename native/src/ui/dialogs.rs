@@ -5,20 +5,9 @@ use crate::*;
 impl App {
     pub(crate) fn edit_ui(&mut self, ctx: &egui::Context, v: View) {
         let Some(mut e) = self.edit.take() else { return };
-        let multiline = matches!(e.target, EditTarget::Note(_));
-        let width = match &e.target {
-            EditTarget::Note(id) => self
-                .board
-                .sticky_notes
-                .iter()
-                .find(|n| &n.id == id)
-                .map(|n| (n.width * v.cam.zoom).clamp(200.0, 520.0))
-                .unwrap_or(240.0),
-            _ => 240.0,
-        };
         let mut done: Option<bool> = None;
         // Titles and canvas text are edited right where they sit, in their own
-        // font, size and colour. Only notes get a popup editor.
+        // font, size and colour. Sticky notes are gone (no editor for old boards' notes).
         let z = v.cam.zoom;
         let inline: Option<(Pos2, f32, Color32, u8)> = match &e.target {
             EditTarget::Note(_) => None,
@@ -76,32 +65,8 @@ impl App {
                     }
                 });
         } else {
-        egui::Area::new(egui::Id::new("qd_edit"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(v.s(e.world.x, e.world.y))
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    let r = if multiline {
-                        ui.add(egui::TextEdit::multiline(&mut e.text).desired_width(width).desired_rows(5).hint_text("Write a note…"))
-                    } else {
-                        ui.add(egui::TextEdit::singleline(&mut e.text).desired_width(width).hint_text("Type, then press Enter"))
-                    };
-                    if e.fresh > 0 {
-                        e.fresh -= 1;
-                        r.request_focus();
-                    } else if r.lost_focus() {
-                        // Esc cancels a new label; notes always keep what you typed
-                        let esc = ui.input(|i| i.key_pressed(Key::Escape));
-                        done = Some(multiline || !esc);
-                    }
-                    if multiline {
-                        ui.label(egui::RichText::new("Click outside or Ctrl+Enter to save").size(10.5).color(TEXT_FAINT));
-                        if ui.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) {
-                            done = Some(true);
-                        }
-                    }
-                });
-            });
+            // Nothing left to edit in place (the item is gone): drop the edit
+            done = Some(false);
         }
         if done.is_some() {
             // Lets the canvas tell that this press only ended the edit (see canvas input)

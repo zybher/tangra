@@ -8,8 +8,10 @@ impl App {
         let b = &self.board;
         let r_top = Rounding { nw: 10.0, ne: 10.0, sw: 0.0, se: 0.0 };
         p.rect_filled(rect, r_top, bg());
-        if gradient_on() {
-            fill_rounded_top(p, rect, 10.0, |q| gradient_at(q, rect));
+        // The gradient fades in and out (audit #92)
+        let gk = ease(p.ctx(), egui::Id::new("qd_grad_k"), gradient_on());
+        if gk > 0.001 {
+            fill_rounded_top(p, rect, 10.0, |q| gradient_at(q, rect).gamma_multiply(gk));
         }
 
         if aurora() {
@@ -26,23 +28,8 @@ impl App {
             }
         }
 
-        // Dot grid
-        let mut g = 32.0 * z;
-        while g < 20.0 {
-            g *= 2.0;
-        }
-        let dot = rgba(255, 255, 255, (self.settings.grid_dots.clamp(0.0, 100.0) * 0.26) as u8);
-        if dot.a() > 0 {
-        let mut x = rect.min.x + (-v.cam.x * z).rem_euclid(g);
-        while x < rect.max.x {
-            let mut y = rect.min.y + (-v.cam.y * z).rem_euclid(g);
-            while y < rect.max.y {
-                draw_pattern(&p, pos2(x + 0.75, y + 0.75), self.settings.pattern, dot, 1.0);
-                y += g;
-            }
-            x += g;
-        }
-        }
+        // Dot grid (canvas/grid_fade.rs: zoom levels and pattern changes crossfade)
+        super::grid_fade::paint_grid(p, rect, v, self.settings.pattern, self.settings.grid_dots, self.now);
 
         let item_rect = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_max(v.s(x, y), v.s(x + w, y + h));
 
@@ -65,9 +52,15 @@ impl App {
         };
         let hid = self.hidden_ids();
         // Objects inside a clipping frame are cropped to it
-        let clips = self.clip_boxes();
+        let clips = self.clip_boxes_eased(p.ctx());
         // Faded objects (and everything inside a faded frame)
         let fades = self.fades();
+        // How present each item is: entering / leaving / hidden fade, opacity glides (canvas/presence.rs)
+        let pctx = p.ctx().clone();
+        let pres = |id: &str| -> Option<(f32, f32)> {
+            let (vk, op) = self.presence_k(&pctx, id, hid.contains(id), fades.get(id).copied().unwrap_or(1.0));
+            (vk > 0.001).then_some((vk, op))
+        };
         // Frames
         // The title lights with the hover outline (one source of truth, set below last frame)
         let hovered_now: Option<Sel> = p.ctx().data(|d| d.get_temp::<Option<Sel>>(egui::Id::new("qd_hover_now"))).flatten();
@@ -75,19 +68,17 @@ impl App {
         let mut late_strokes: Vec<(egui::Painter, egui::Shape)> = Vec::new();
         // Parents paint before the frames inside them, so a nested frame is never hidden
         for c in self.frames_paint_order() {
-            if hid.contains(&c.id) {
-                continue;
-            }
-            // The title is not faded with the frame (it labels the frame, it isn't part of it)
-            let title_p = match clips.get(&c.id) {
+            let Some((vk, op)) = pres(&c.id) else { continue };
+            // The title is not faded with the frame (it labels the frame, it isn't part of it),
+            // only with it coming and going
+            let mut title_p = match clips.get(&c.id) {
                 Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
                 None => p.clone(),
             };
+            title_p.multiply_opacity(vk);
             let clipped_p = {
                 let mut q = title_p.clone();
-                if let Some(o) = fades.get(&c.id) {
-                    q.multiply_opacity(*o);
-                }
+                q.multiply_opacity(op);
                 q
             };
             let p = &clipped_p;
@@ -99,8 +90,8 @@ impl App {
             let panel = Color32::from_rgb(36, 36, 36);
             let custom = !c.color.is_empty() && !c.color.eq_ignore_ascii_case("#1e293b");
             let (fill_color, stroke_color, title_color) = if c.color.eq_ignore_ascii_case("none") {
-                // No fill: only the outline (and title) show
-                (Color32::TRANSPARENT, Color32::from_white_alpha(48), FRAME_TITLE_COL)
+                // No fill: only the outline (and title) show (the panel's grey gone clear, so it fades)
+                (Color32::from_rgba_unmultiplied(36, 36, 36, 0), Color32::from_white_alpha(48), FRAME_TITLE_COL)
             } else if custom {
                 let [cr, cg, cb] = hex_rgb(&c.color);
                 // The frame is the colour picked; the title keeps the neutral grey
@@ -109,7 +100,13 @@ impl App {
             } else {
                 (panel, Color32::from_white_alpha(48), FRAME_TITLE_COL)
             };
-            let fr = group_radius(c) * z;
+            // Looks glide to new values (canvas/presence.rs, audit #18, #22-24)
+            use super::presence::{gcol, gf};
+            let fid = egui::Id::new(("qd_fg", c.id.as_str()));
+            let un = |c: Color32| if c == Color32::from_rgba_unmultiplied(36, 36, 36, 0) { [36, 36, 36, 0] } else { c.to_srgba_unmultiplied() };
+            let fill_color = gcol(&pctx, fid, un(fill_color));
+            let stroke_color = gcol(&pctx, fid.with("s"), stroke_color.to_srgba_unmultiplied());
+            let fr = gf(&pctx, fid.with("r"), group_radius(c)) * z;
             let cut = round_cut(&c.id, r, fr).filter(|(_, safe)| !safe);
             match &cut {
                 Some((poly, _)) if poly.len() >= 3 => {
@@ -121,14 +118,11 @@ impl App {
                 }
             }
             // Stroke is in world units: it scales with the zoom like the frame itself
-            let bw = c.border.unwrap_or(1.0) * z;
-            // Stroke position: inside keeps the frame's size, outside grows past it
-            let (sr, sfr) = match c.stroke_pos {
-                1 => (r.shrink(bw / 2.0), (fr - bw / 2.0).max(0.0)),
-                2 => (r.expand(bw / 2.0), fr + bw / 2.0),
-                _ => (r, fr),
-            };
-            if bw > 0.0 {
+            let bw = gf(&pctx, fid.with("w"), c.border.unwrap_or(1.0)) * z;
+            // Stroke position: inside keeps the frame's size, outside grows past it (slides between)
+            let spk = gf(&pctx, fid.with("sp"), match c.stroke_pos { 1 => -1.0, 2 => 1.0, _ => 0.0 });
+            let (sr, sfr) = (r.expand(spk * bw / 2.0), (fr + spk * bw / 2.0).max(0.0));
+            if bw > 0.001 {
                 match round_cut(&c.id, sr, sfr).filter(|(_, safe)| !safe) {
                     Some((poly, _)) if poly.len() >= 3 => {
                         late_strokes.push((p.clone(), egui::Shape::closed_line(poly, EStroke::new(bw, stroke_color))));
@@ -169,17 +163,13 @@ impl App {
 
         // Images + their annotations
         for img in &b.images {
-            if hid.contains(&img.id) {
-                continue;
-            }
+            let Some((vk, op)) = pres(&img.id) else { continue };
             let clipped_p = {
                 let mut q = match clips.get(&img.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
                     None => p.clone(),
                 };
-                if let Some(o) = fades.get(&img.id) {
-                    q.multiply_opacity(*o);
-                }
+                q.multiply_opacity(vk * op);
                 q
             };
             let p = &clipped_p;
@@ -188,14 +178,44 @@ impl App {
                 continue;
             }
             // Rounded corners (screen px), never more than half the short side
-            let rd = (img.corner * z).clamp(0.0, r.width().min(r.height()) / 2.0);
+            let rd = (super::presence::gf(&pctx, egui::Id::new(("qd_ic", img.id.as_str())), img.corner) * z).clamp(0.0, r.width().min(r.height()) / 2.0);
             // Cut to a rounded frame's corners (None: away from them, drawn as usual)
             let cut = round_cut(&img.id, r, rd).filter(|(_, safe)| !safe).map(|(poly, _)| poly);
             let tilt = img.edit.as_ref().filter(|e| e.has_tilt()).map(|e| super::tilt3d::Tilt::new(e, img.x, img.y, img.width, img.height));
             // An adjusted / cut picture shows its edited copy
             let tex = self.edited.get(&img.id).map(|t| &t.1).or(self.textures.get(&img.asset_file_name).map(|t| &t.0));
-            if let (Some(t), Some(tex)) = (&tilt, tex) {
-                p.add(egui::Shape::mesh(t.mesh([img.x, img.y, img.width, img.height], |x, y| v.s(x, y), tex.id(), Color32::WHITE)));
+            // One picture texture drawn with a tint (the crossfade below draws two)
+            let draw_tex = |tex: &egui::TextureHandle, tint: Color32| {
+                if let Some(t) = &tilt {
+                    p.add(egui::Shape::mesh(t.mesh([img.x, img.y, img.width, img.height], |x, y| v.s(x, y), tex.id(), tint)));
+                } else if let Some(poly) = &cut {
+                    p.add(egui::Shape::mesh(super::round_clip::textured_poly(poly, r, tex.id(), tint)));
+                } else if rd > 0.0 {
+                    let mut rs = egui::epaint::RectShape::filled(r, rd, tint);
+                    rs.fill_texture_id = tex.id();
+                    rs.uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                    p.add(rs);
+                } else {
+                    p.image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
+                }
+            };
+            // A new cut / restore / adjustment crossfades from the old look (canvas/tex_fade.rs)
+            let ncuts = img.edit.as_ref().map_or(0, |e| e.cuts.len());
+            let draw_pic = |tex: &egui::TextureHandle| match super::tex_fade::fade(&img.id, tex, ncuts, self.now) {
+                Some((old, w, old_under)) => {
+                    p.ctx().request_repaint();
+                    if old_under {
+                        draw_tex(&old, Color32::WHITE);
+                        draw_tex(tex, Color32::WHITE.gamma_multiply(w));
+                    } else {
+                        draw_tex(tex, Color32::WHITE);
+                        draw_tex(&old, Color32::WHITE.gamma_multiply(1.0 - w));
+                    }
+                }
+                None => draw_tex(tex, Color32::WHITE),
+            };
+            if let (Some(_), Some(tex)) = (&tilt, tex) {
+                draw_pic(tex);
             } else {
             // Only pictures straight on the board, and not ones with cut-out holes (it shows grey through)
             if cut.is_none() && self.parent_of(&img.id).is_none() && !img.edit.as_ref().is_some_and(|e| !e.cuts.is_empty()) {
@@ -210,16 +230,7 @@ impl App {
             );
             }
             if let Some(tex) = tex {
-                if let Some(poly) = &cut {
-                    p.add(egui::Shape::mesh(super::round_clip::textured_poly(poly, r, tex.id(), Color32::WHITE)));
-                } else if rd > 0.0 {
-                    let mut rs = egui::epaint::RectShape::filled(r, rd, Color32::WHITE);
-                    rs.fill_texture_id = tex.id();
-                    rs.uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
-                    p.add(rs);
-                } else {
-                    p.image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-                }
+                draw_pic(tex);
             } else if let Some(poly) = cut.as_ref().filter(|q| q.len() >= 3) {
                 p.add(egui::Shape::convex_polygon(poly.clone(), rgba(30, 41, 59, 255), EStroke::NONE));
             } else {
@@ -242,13 +253,20 @@ impl App {
                 }
                 None => v.s(x, y),
             };
+            // each mark fades in / out on its own (erased, cleared, undone)
+            let mark_p = |id: &str| {
+                let mut q = ip.clone();
+                q.multiply_opacity(super::presence::k(id, self.now));
+                q
+            };
             for s in img.annotations.strokes.iter().filter(|s| s.pixelate) {
-                self.paint_pixelate(&ip, img, s, v);
+                self.paint_pixelate(&mark_p(&s.id), img, s, v);
             }
             for s in img.annotations.strokes.iter().filter(|s| !s.pixelate) {
-                paint_stroke(&ip, s, |q| to_s(img.x + q.x * sx, img.y + q.y * sy), s.width * z);
+                paint_stroke(&mark_p(&s.id), s, |q| to_s(img.x + q.x * sx, img.y + q.y * sy), s.width * z);
             }
             for t in &img.annotations.texts {
+                let ip = mark_p(&t.id);
                 let fs = if t.font_size > 0.0 { t.font_size } else { 16.0 };
                 let editing = matches!(&self.edit, Some(Edit { target: EditTarget::ImageLabel { label, .. }, .. }) if label == &t.id);
                 let picked = matches!(&self.sel_label, Some((_, l)) if l == &t.id);
@@ -270,17 +288,13 @@ impl App {
 
         // Link cards
         for l in &b.link_cards {
-            if hid.contains(&l.id) {
-                continue;
-            }
+            let Some((vk, op)) = pres(&l.id) else { continue };
             let clipped_p = {
                 let mut q = match clips.get(&l.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
                     None => p.clone(),
                 };
-                if let Some(o) = fades.get(&l.id) {
-                    q.multiply_opacity(*o);
-                }
+                q.multiply_opacity(vk * op);
                 q
             };
             let p = &clipped_p;
@@ -307,17 +321,13 @@ impl App {
 
         // Sticky notes
         for n in &b.sticky_notes {
-            if hid.contains(&n.id) {
-                continue;
-            }
+            let Some((vk, op)) = pres(&n.id) else { continue };
             let clipped_p = {
                 let mut q = match clips.get(&n.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
                     None => p.clone(),
                 };
-                if let Some(o) = fades.get(&n.id) {
-                    q.multiply_opacity(*o);
-                }
+                q.multiply_opacity(vk * op);
                 q
             };
             let p = &clipped_p;
@@ -350,38 +360,34 @@ impl App {
 
         // Free-floating strokes and text
         for s in &b.world_strokes {
-            if hid.contains(&s.id) {
-                continue;
-            }
+            let Some((vk, op)) = pres(&s.id) else { continue };
             let clipped_p = {
                 let mut q = match clips.get(&s.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
                     None => p.clone(),
                 };
-                if let Some(o) = fades.get(&s.id) {
-                    q.multiply_opacity(*o);
-                }
+                q.multiply_opacity(vk * op);
                 q
             };
             let p = &clipped_p;
             paint_stroke(p, s, |q| v.s(q.x, q.y), s.width * z);
         }
         for t in &b.world_texts {
-            if hid.contains(&t.id) {
-                continue;
-            }
+            let Some((vk, op)) = pres(&t.id) else { continue };
             let clipped_p = {
                 let mut q = match clips.get(&t.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
                     None => p.clone(),
                 };
-                if let Some(o) = fades.get(&t.id) {
-                    q.multiply_opacity(*o);
-                }
+                q.multiply_opacity(vk * op);
                 q
             };
             let p = &clipped_p;
             let fs = if t.font_size > 0.0 { t.font_size } else { 16.0 };
+            // colour and size glide (audit #18, #25)
+            let tid = egui::Id::new(("qd_tg", t.id.as_str()));
+            let fs = super::presence::gf(&pctx, tid, fs);
+            let tcol = super::presence::gcol(&pctx, tid.with("c"), hex(&t.color).to_srgba_unmultiplied());
             // Hidden while it is being edited in place
             let editing = matches!(&self.edit, Some(Edit { target: EditTarget::WorldText(id), .. }) if id == &t.id);
             if editing || t.text.is_empty() {
@@ -389,13 +395,13 @@ impl App {
             }
             if font(fs * z).is_some() {
                 let fam = styled_font(FontId::proportional(fs), t.style).family;
-                smooth_text(p, v.s(t.x, t.y), &t.text, fam, fs, z, None, hex(&t.color));
+                smooth_text(p, v.s(t.x, t.y), &t.text, fam, fs, z, None, tcol);
             } else {
                 // Too small to read: a bar in the text's colour keeps it findable
                 let (w, h) = text_wh(&t.text, fs);
                 let at = v.s(t.x, t.y + h * 0.3);
                 let bar = Rect::from_min_size(at, vec2((w * z).max(3.0), (h * z * 0.4).max(1.5)));
-                p.rect_filled(bar, 1.0, hex(&t.color).gamma_multiply(0.6));
+                p.rect_filled(bar, 1.0, tcol.gamma_multiply(0.6));
             }
         }
 

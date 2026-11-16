@@ -24,6 +24,8 @@ impl App {
     pub(crate) fn blocked_ids(&self) -> HashSet<String> {
         let mut s = self.spread(&self.board.locked);
         s.extend(self.hidden_ids());
+        // fading out of a delete: can't be picked any more (canvas/presence.rs)
+        s.extend(crate::canvas::presence::dying_ids());
         s
     }
 

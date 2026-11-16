@@ -88,6 +88,8 @@ impl App {
         // The copy left behind keeps the name; the one you're holding gets the next number
         for (k, p) in pairs {
             for (orig, copy) in p {
+                // the copy left behind fades in under the one you hold (audit #34)
+                crate::canvas::presence::enter([copy.clone()], self.now, 0.0);
                 self.number_duplicate(k, &orig, &copy);
             }
         }
@@ -132,6 +134,8 @@ impl App {
             new_sel.insert((Kind::Stroke, i.id.clone()));
             self.board.world_strokes.push(i);
         }
+        // pasted items fade in (audit #31)
+        crate::canvas::presence::enter(new_sel.iter().map(|s| s.1.clone()), self.now, 0.0);
         self.sel = new_sel.iter().find(|s| s.0 == Kind::Group).or(new_sel.iter().next()).cloned();
         self.selected = new_sel;
         self.tool = Tool::Select;

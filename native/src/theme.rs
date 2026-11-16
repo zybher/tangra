@@ -48,7 +48,12 @@ pub(crate) const PATTERNS: [&str; 5] = ["Dots", "Plus", "Stars", "Shuriken", "Cr
 pub(crate) const AURORA: usize = 6;
 pub(crate) static THEME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// The canvas colour on screen (gliding to a new pick, theme_glide.rs)
 pub(crate) fn theme_rgb() -> [u8; 3] {
+    crate::theme_glide::shown_theme().unwrap_or_else(theme_target)
+}
+/// The picked theme's colour
+pub(crate) fn theme_target() -> [u8; 3] {
     THEMES[THEME.load(std::sync::atomic::Ordering::Relaxed) % THEMES.len()].1
 }
 /// Three tones per theme, all from the theme's base colour: the tab bar is darkest, the
@@ -88,8 +93,13 @@ pub(crate) fn spacing_col() -> Color32 {
 }
 
 pub(crate) fn blue() -> Color32 {
+    let [r, g, b] = crate::theme_glide::shown_accent().unwrap_or_else(accent_target);
+    Color32::from_rgb(r, g, b)
+}
+/// The picked accent
+pub(crate) fn accent_target() -> [u8; 3] {
     let v = ACCENT.load(std::sync::atomic::Ordering::Relaxed);
-    Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
+    [(v >> 16) as u8, (v >> 8) as u8, v as u8]
 }
 /// Floating surfaces: menus, dialogs, pills, toasts.
 pub(crate) const TEXT: Color32 = Color32::from_rgb(236, 236, 236);

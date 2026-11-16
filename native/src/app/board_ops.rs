@@ -4,11 +4,10 @@ use crate::*;
 
 impl App {
     pub(crate) fn delete_selected(&mut self) {
-        if let Some((image, label)) = self.sel_label.take() {
+        // Deleted things fade out first and are removed when that ends (canvas/presence.rs)
+        if let Some((_, label)) = self.sel_label.take() {
             self.snapshot();
-            if let Some(img) = self.board.images.iter_mut().find(|i| i.id == image) {
-                img.annotations.texts.retain(|l| l.id != label);
-            }
+            self.kill_or_remove(vec![label]);
             return;
         }
         if self.selected.is_empty() {
@@ -17,21 +16,15 @@ impl App {
         self.snapshot();
         let to_delete = std::mem::take(&mut self.selected);
         self.sel = None;
-        let b = &mut self.board;
-        for (k, id) in to_delete {
-            match k {
-                Kind::Image => b.images.retain(|i| i.id != id),
-                Kind::Note => b.sticky_notes.retain(|i| i.id != id),
-                Kind::Link => b.link_cards.retain(|i| i.id != id),
-                Kind::Group => b.group_cards.retain(|i| i.id != id),
-                Kind::Text => b.world_texts.retain(|i| i.id != id),
-                Kind::Stroke => {
-                    b.world_strokes.retain(|s| s.id != id);
-                    for img in &mut b.images {
-                        img.annotations.strokes.retain(|s| s.id != id);
-                    }
-                }
-            }
+        self.kill_or_remove(to_delete.into_iter().map(|s| s.1).collect());
+    }
+
+    /// Fades these items out (removed at the end), or removes them now with animations off
+    pub(crate) fn kill_or_remove(&mut self, ids: Vec<String>) {
+        if anim_k() == 0.0 {
+            self.remove_ids(&ids.into_iter().collect());
+        } else {
+            crate::canvas::presence::kill(ids, self.now);
         }
     }
 
@@ -58,6 +51,8 @@ impl App {
                 Kind::Stroke => front!(self.board.world_strokes, id),
             }
         }
+        // the moved items dip and come back so the restack reads (audit #37)
+        crate::canvas::presence::enter(self.selected.iter().map(|s| s.1.clone()), self.now, 0.3);
     }
 
     /// Ctrl+[ : the selection goes beneath everything of its kind
@@ -84,6 +79,8 @@ impl App {
                 Kind::Stroke => back!(self.board.world_strokes, id),
             }
         }
+        // the moved items dip and come back so the restack reads (audit #37)
+        crate::canvas::presence::enter(self.selected.iter().map(|s| s.1.clone()), self.now, 0.3);
     }
 
     /// Double-click / "edit": notes and frames open an editor, links open in the browser.
@@ -91,16 +88,8 @@ impl App {
         let (k, id) = sel;
         match k {
             Kind::Stroke => {}
-            Kind::Note => {
-                if let Some(n) = self.board.sticky_notes.iter().find(|n| n.id == id) {
-                    self.edit = Some(Edit {
-                        target: EditTarget::Note(id),
-                        world: Pt { x: n.x, y: n.y },
-                        text: n.text.clone(),
-                        fresh: 2,
-                    });
-                }
-            }
+            // Sticky notes were removed; an old board's notes still show but aren't edited
+            Kind::Note => {}
             Kind::Group => {
                 if let Some(g) = self.board.group_cards.iter().find(|g| g.id == id) {
                     self.edit = Some(Edit {
@@ -212,20 +201,21 @@ impl App {
     pub(crate) fn erase_at(&mut self, p: Pt) -> bool {
         let zoom = self.board.camera.zoom;
         let r = 9.0 / zoom;
-        let b = &mut self.board;
-        let before = b.world_strokes.len() + b.world_texts.len();
-        b.world_strokes.retain(|s| !stroke_hit(s, p, r + s.width / zoom / 2.0));
-        b.world_texts.retain(|l| !label_hit(l, p, r * 0.3));
-        let mut changed = before != b.world_strokes.len() + b.world_texts.len();
-        if let Some(img) = b.images.iter_mut().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
+        // Erased marks fade out (canvas/presence.rs); ones already fading are skipped
+        use crate::canvas::presence::is_dying;
+        let b = &self.board;
+        let mut hit: Vec<String> = Vec::new();
+        hit.extend(b.world_strokes.iter().filter(|s| !is_dying(&s.id) && stroke_hit(s, p, r + s.width / zoom / 2.0)).map(|s| s.id.clone()));
+        hit.extend(b.world_texts.iter().filter(|l| !is_dying(&l.id) && label_hit(l, p, r * 0.3)).map(|l| l.id.clone()));
+        if let Some(img) = b.images.iter().rev().find(|i| inside(p, i.x, i.y, i.width, i.height)) {
             let (sx, sy) = img.scale();
             let lp = Pt { x: (p.x - img.x) / sx, y: (p.y - img.y) / sy };
-            let a = &mut img.annotations;
-            let n = a.strokes.len() + a.texts.len();
-            a.strokes.retain(|s| !stroke_hit(s, lp, (r + s.width / 2.0) / sx));
-            a.texts.retain(|l| !label_hit(l, lp, r * 0.3 / sx));
-            changed |= n != a.strokes.len() + a.texts.len();
+            let a = &img.annotations;
+            hit.extend(a.strokes.iter().filter(|s| !is_dying(&s.id) && stroke_hit(s, lp, (r + s.width / 2.0) / sx)).map(|s| s.id.clone()));
+            hit.extend(a.texts.iter().filter(|l| !is_dying(&l.id) && label_hit(l, lp, r * 0.3 / sx)).map(|l| l.id.clone()));
         }
+        let changed = !hit.is_empty();
+        self.kill_or_remove(hit);
         changed
     }
 
@@ -247,6 +237,8 @@ impl App {
     }
 
     pub(crate) fn switch_board(&mut self, id: &str) {
+        self.finish_dying();
+        self.land_glides();
         self.save_now();
         self.drop_deleted_assets();
         self.tex_lvl.clear();
@@ -258,6 +250,8 @@ impl App {
         self.deselect_all();
         self.edit = None;
         self.board = load_board(id);
+        // the new board's items fade in rather than pop (audit #33)
+        crate::canvas::presence::enter(crate::canvas::presence::board_ids(&self.board), self.now, 0.0);
         self.settings.active_board_id = id.to_string();
         save_settings(&self.settings);
         self.toast(format!("Board: {}", self.board.name));

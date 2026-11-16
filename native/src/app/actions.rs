@@ -331,6 +331,7 @@ impl App {
                     g.height = fh;
                     g.square = self.frame_square;
                 }
+                crate::canvas::presence::enter([id.clone()], self.now, 0.0);
                 self.select_only((Kind::Group, id));
             }
             Act::LabelHere => self.begin_label(self.menu_world),
@@ -363,11 +364,12 @@ impl App {
                     .collect();
                 if !target_ids.is_empty() {
                     self.snapshot();
-                    for id in target_ids {
-                        if let Some(i) = self.board.images.iter_mut().find(|i| i.id == id) {
-                            i.annotations = Annotations::default();
-                        }
-                    }
+                    // the marks fade out rather than vanish (audit #28)
+                    let marks: Vec<String> = self.board.images.iter()
+                        .filter(|i| target_ids.contains(&i.id))
+                        .flat_map(|i| i.annotations.strokes.iter().map(|s| s.id.clone()).chain(i.annotations.texts.iter().map(|t| t.id.clone())))
+                        .collect();
+                    self.kill_or_remove(marks);
                 }
             }
             Act::Delete => self.delete_selected(),

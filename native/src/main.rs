@@ -5,6 +5,7 @@ mod image_names;
 mod image_edit;
 mod platform;
 mod theme;
+mod theme_glide;
 mod app;
 mod canvas;
 mod ui;
@@ -672,6 +673,8 @@ impl eframe::App for App {
         ui::scale::update_ui_scale(ctx);
         self.now = ctx.input(|i| i.time);
         self.tick_glides(ctx);
+        self.tick_presence(ctx);
+        theme_glide::tick(ctx);
         self.stamp_parents();
         if matches!(self.drag, Drag::None) {
             let mut auto = Vec::new();

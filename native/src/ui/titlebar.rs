@@ -77,7 +77,11 @@ impl App {
             let text_w = name.chars().count() as f32 * 7.5;
             let tab_w = (text_w + 56.0).clamp(90.0, 180.0).min(max_per_tab);
             let tab_h = 37.0_f32;
-            let tab_r = Rect::from_min_size(pos2(cur_x, rect.min.y + 7.0), vec2(tab_w, tab_h));
+            // Tabs slide and resize to their place when one opens, closes or is renamed (audit #86)
+            let tg = egui::Id::new(("qd_tab_g", id.as_str()));
+            let gx = super::micro::glide(ctx, tg.with("x"), cur_x, false);
+            let gw = super::micro::glide(ctx, tg.with("w"), tab_w, false);
+            let tab_r = Rect::from_min_size(pos2(gx, rect.min.y + 7.0), vec2(gw, tab_h));
 
             let tab_resp = ui.allocate_rect(tab_r, Sense::click());
             let is_hovered = tab_resp.hovered();

@@ -560,6 +560,7 @@ impl App {
                         let _ = (area, y0);
                         // Pass 1: lay out every row (wave lift, cascade) and paint the hover tiles
                         let top0 = ui.cursor().min.y;
+                        let folding = row_k.iter().any(|k| *k < 0.999);
                         let mut laid: Vec<(Rect, f32, f32, egui::Response)> = Vec::with_capacity(rows.len());
                         for (ri_, &(i, _)) in rows.iter().enumerate() {
                             let (s, _) = &tree.items[i];
@@ -571,6 +572,11 @@ impl App {
                                 ui.add_space(-2.0 * (1.0 - fk));
                             }
                             let r0 = Rect::from_center_size(r0.center(), vec2(r0.width(), ROW_H));
+                            // A reordered row (drop, undo, restack) glides from its old place (audit #41);
+                            // folding already moves smoothly, so rows follow it exactly then
+                            let rel = r0.min.y - top0;
+                            let gy = super::micro::glide(ctx, egui::Id::new(("qd_ol_y", &s.1)), rel, folding);
+                            let r0 = r0.translate(vec2(0.0, gy - rel));
                             // Cascade in after the shell, top row first
                             let e = (k * 1.7 - (ri_ as f32 * 0.04).min(0.6)).clamp(0.0, 1.0);
                             let e = (1.0 - (1.0 - e).powi(3)) * fk * fk;

@@ -43,6 +43,19 @@ impl App {
         }
     }
 
+    /// Lands every glide at its end now (before a new undo step, undo or redo, so a
+    /// half-way box is never recorded)
+    pub(crate) fn land_glides(&mut self) {
+        let gl = std::mem::take(&mut GLIDES.lock().unwrap().1);
+        if gl.is_empty() {
+            return;
+        }
+        for x in gl {
+            self.set_rect(x.sel.0, &x.sel.1, x.to);
+        }
+        self.mark_dirty();
+    }
+
     /// Run every frame
     pub(crate) fn tick_glides(&mut self, ctx: &egui::Context) {
         let mut g = GLIDES.lock().unwrap();

@@ -84,40 +84,52 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
     if s.points.len() < 2 {
         return;
     }
+    // Its looks glide to new values instead of snapping (canvas/presence.rs, audit #18-24)
+    use super::presence::gf;
+    let gid = egui::Id::new(("qd_sg", s.id.as_str()));
+    let ctx = p.ctx();
     let [r, g, b] = hex_rgb(&s.color);
     let o = s.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
-    let col = rgba(r, g, b, (o * 255.0) as u8);
+    let [r, g, b, a] = super::presence::gcol(ctx, gid, [r, g, b, (o * 255.0) as u8]).to_srgba_unmultiplied();
+    let o = a as f32 / 255.0;
+    // fill / outline turned on and off fade
+    let fk = gf(ctx, gid.with("f"), if s.fill { 1.0 } else { 0.0 });
+    let sk = gf(ctx, gid.with("s"), if s.no_stroke { 0.0 } else { 1.0 });
+    let col = rgba(r, g, b, (o * sk * 255.0) as u8);
+    let fill_col = rgba(r, g, b, (s.fill_alpha() * fk * 255.0) as u8);
     let pts: Vec<Pos2> = s.points.iter().map(|q| map(*q)).collect();
     let zk = width / s.width.max(0.01);
     // No floor: a line keeps its size relative to the board at any zoom (too thin to draw
     // just fades out instead of staying 1px wide)
-    let width = width.max(0.0);
+    let width = (gf(ctx, gid.with("w"), s.width) * zk).max(0.0);
+    // stroke position slides between inside / centre / outside
+    let spk = gf(ctx, gid.with("sp"), stroke_inset(s.stroke_pos, 2.0));
+    let inset = |w: f32| spk * w / 2.0;
     // Rectangle with rounded corners
     if let (Some(rad), Some(4)) = (s.radius.filter(|r| *r > 0.0), s.closed_len()) {
         let rr = Rect::from_points(&pts[..4]);
-        let rad = (rad * zk).min(rr.width().min(rr.height()) / 2.0);
-        if s.fill {
-            p.rect_filled(rr, rad, rgba(r, g, b, (s.fill_alpha() * 255.0) as u8));
+        let rad = (gf(ctx, gid.with("r"), rad) * zk).min(rr.width().min(rr.height()) / 2.0);
+        if fk > 0.001 {
+            p.rect_filled(rr, rad, fill_col);
         }
-        if !s.no_stroke {
+        if sk > 0.001 {
             let width = if s.stroke_pos == 1 { width.min(rr.size().min_elem().max(0.5)) } else { width };
             // Own mesh: egui's rounded stroke kept square outer corners once the stroke was
             // thicker than the radius (round_rect_mesh.rs)
-            p.add(super::round_rect_mesh::stroke(rr, rad, stroke_inset(s.stroke_pos, width), width, col));
+            p.add(super::round_rect_mesh::stroke(rr, rad, inset(width), width, col));
         }
         return;
     }
-    if let (Some(n), true) = (s.closed_len(), s.fill) {
-        let fc = rgba(r, g, b, (s.fill_alpha() * 255.0) as u8);
+    if let (Some(n), true) = (s.closed_len(), fk > 0.001) {
         // Ellipses: own mesh, egui's feathering spikes out of a thin ellipse's ends (ellipse_mesh.rs)
         if n > 4 {
-            p.add(super::ellipse_mesh::fill(&pts[..n], fc));
+            p.add(super::ellipse_mesh::fill(&pts[..n], fill_col));
         } else {
-            p.add(Shape::convex_polygon(pts[..n].to_vec(), fc, EStroke::NONE));
+            p.add(Shape::convex_polygon(pts[..n].to_vec(), fill_col, EStroke::NONE));
         }
-        if s.no_stroke {
-            return;
-        }
+    }
+    if s.closed_len().is_some() && sk <= 0.001 {
+        return;
     }
     // Rectangle / ellipse outline: one closed line with sharp joins (never smoothed: rounding
     // it like a pen line melted the corners and left the overlap points sticking out)
@@ -125,10 +137,10 @@ pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Po
         // An inside stroke is never thicker than the shape itself
         let width = if s.stroke_pos == 1 { width.min(Rect::from_points(&pts[..n]).size().min_elem().max(0.5)) } else { width };
         if n > 4 {
-            p.add(super::ellipse_mesh::stroke(&pts[..n], stroke_inset(s.stroke_pos, width), width, col));
+            p.add(super::ellipse_mesh::stroke(&pts[..n], inset(width), width, col));
             return;
         }
-        let line = offset_closed(&pts[..n], stroke_inset(s.stroke_pos, width));
+        let line = offset_closed(&pts[..n], inset(width));
         p.add(Shape::closed_line(line, EStroke::new(width, col)));
         return;
     }
