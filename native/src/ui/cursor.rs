@@ -5,18 +5,22 @@
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
 //! where it points) and leans into sideways movement, tipping right when moving right and left
 //! when moving left, then settling upright. It turns around its tip, so the click point never
-//! moves. A faint trail fades out behind the tip. All of it turns off with the app's
+//! moves; it leans in quickly and comes back upright more slowly. Pressing squeezes it a little.
+//! A faint trail fades out behind the tip. All of it turns off with the app's
 //! animations (anim_k = 0).
 use crate::*;
 
 /// How fast the drawn arrow catches the pointer (1/s): higher = tighter
 const FOLLOW: f32 = 40.0;
-/// Largest lean, radians (~26°)
-const MAX_TILT: f32 = 0.45;
+/// Largest lean, radians (~31°)
+const MAX_TILT: f32 = 0.55;
 /// Sideways speed (px/s) that gives about 3/4 of the lean
 const TILT_SPEED: f32 = 650.0;
-/// How fast the lean follows the speed (1/s)
-const TILT_EASE: f32 = 16.0;
+/// How fast it leans in (1/s), and how much slower it comes back upright
+const TILT_IN: f32 = 16.0;
+const TILT_OUT: f32 = 6.5;
+/// Pressing squeezes the arrow to this size (eased like every other press)
+const PRESS_SCALE: f32 = 0.86;
 /// How long the faint trail behind the tip lasts (s) and its strongest alpha
 const TRAIL_LIFE: f64 = 0.12;
 const TRAIL_ALPHA: f32 = 0.22;
@@ -53,7 +57,9 @@ pub(crate) fn paint(ctx: &egui::Context) {
             let pos = s.pos + (at - s.pos) * (1.0 - (-dt * FOLLOW / ak).exp());
             let vx = (pos.x - s.pos.x) / dt;
             let target = MAX_TILT * (vx / TILT_SPEED).tanh();
-            let tilt = s.tilt + (target - s.tilt) * (1.0 - (-dt * TILT_EASE / ak).exp());
+            // Quick to lean in, unhurried coming back
+            let rate = if target.abs() > s.tilt.abs() && target * s.tilt >= 0.0 { TILT_IN } else { TILT_OUT };
+            let tilt = s.tilt + (target - s.tilt) * (1.0 - (-dt * rate / ak).exp());
             let mut trail = s.trail;
             trail.retain(|(_, t)| now - t < TRAIL_LIFE * ak as f64);
             if trail.last().map_or(true, |(q, _)| (*q - pos).length() > 0.5) {
@@ -82,5 +88,6 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let (pos, tilt) = (st.pos, st.tilt);
     ctx.data_mut(|d| d.insert_temp(sid, st));
     // The arrow's tip (5.5, 3.5 in the icon's box) sits on the pointer
-    crate::ui::svg_icons::draw_cursor(&p, "cursor", pos, [5.5, 3.5], 26.0, tilt, Color32::WHITE, Color32::from_rgb(18, 18, 20));
+    let press = ease(ctx, egui::Id::new("qd_cursor_press"), ctx.input(|i| i.pointer.primary_down()));
+    crate::ui::svg_icons::draw_cursor(&p, "cursor", pos, [5.5, 3.5], 26.0 * (1.0 - (1.0 - PRESS_SCALE) * press), tilt, Color32::WHITE, Color32::from_rgb(18, 18, 20));
 }
