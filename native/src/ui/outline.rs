@@ -660,6 +660,13 @@ impl App {
                             }
                         }
                         // Pass 3: row contents on top
+                        // The pill's row (also just after the selection is cleared, while the pill
+                        // fades out there), which must not get the multi-select tint on top of it
+                        let pid = egui::Id::new("qd_outline_glide").with("s");
+                        if let Some(s) = &self.sel {
+                            ctx.data_mut(|d| d.insert_temp(pid, s.clone()));
+                        }
+                        let pill_sel: Option<Sel> = self.sel.clone().or_else(|| ctx.data(|d| d.get_temp(pid)));
                         let hid_all = self.hidden_ids();
                         let lock_all = self.blocked_ids();
                         let mut drag_rows: Vec<(Rect, usize, usize)> = Vec::with_capacity(rows.len());
@@ -673,7 +680,7 @@ impl App {
                             let selected = self.selected.contains(s);
                             let sk = ease(ctx, egui::Id::new(("qd_outline_selk", &s.1)), selected);
                             // Extra selected rows (multi-select) just tint; the primary one is the pill
-                            if sk > 0.01 && Some(s) != self.sel.as_ref() {
+                            if sk > 0.01 && Some(s) != pill_sel.as_ref() {
                                 p.rect_filled(r, 8.0, blue().gamma_multiply(0.22 * sk * e));
                             }
                             let mut p = p.with_clip_rect(r.intersect(ui.clip_rect()));
