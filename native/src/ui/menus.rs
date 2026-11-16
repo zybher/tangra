@@ -48,6 +48,9 @@ impl App {
             if item(ui, "Bring to front", "", true) {
                 acts.push(Act::Front);
             }
+            if item(ui, "Send to back", "", true) {
+                acts.push(Act::Back);
+            }
             if item(ui, "Delete all selected", "Del", true) {
                 acts.push(Act::Delete);
             }
@@ -100,6 +103,9 @@ impl App {
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
                 }
+                if item(ui, "Send to back", "", true) {
+                    acts.push(Act::Back);
+                }
                 if item(ui, "Delete image", "Del", true) {
                     acts.push(Act::Delete);
                 }
@@ -140,6 +146,9 @@ impl App {
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
                 }
+                if item(ui, "Send to back", "", true) {
+                    acts.push(Act::Back);
+                }
                 if item(ui, "Delete note", "Del", true) {
                     acts.push(Act::Delete);
                 }
@@ -151,6 +160,9 @@ impl App {
                 }
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
+                }
+                if item(ui, "Send to back", "", true) {
+                    acts.push(Act::Back);
                 }
                 if item(ui, "Delete link", "Del", true) {
                     acts.push(Act::Delete);
@@ -169,22 +181,12 @@ impl App {
                 if check_item(ui, "Clip content", clip) {
                     acts.push(Act::ToggleClip);
                 }
-                let can_fit = matches!(&self.sel, Some((Kind::Group, id)) if self.board.group_cards.iter().any(|g| &g.id == id && g.layout == 0) && !self.descendants(id).is_empty());
-                if item(ui, "Resize to fit content", "Ctrl+Alt+Shift+R", can_fit) {
-                    acts.push(Act::FitFrame);
-                }
-                // Border position, like Figma's stroke Inside / Center / Outside
-                header(ui, "   STROKE");
-                let sp = match &self.sel {
-                    Some((Kind::Group, id)) => self.board.group_cards.iter().find(|g| &g.id == id).map_or(0, |g| g.stroke_pos),
-                    _ => 0,
-                };
-                if let Some(v) = choice_row(ui, &[("Inside", 1.0), ("Center", 0.0), ("Outside", 2.0)], sp as f32, 0.5) {
-                    acts.push(Act::StrokePos(v as u8));
-                }
                 divider(ui);
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
+                }
+                if item(ui, "Send to back", "", true) {
+                    acts.push(Act::Back);
                 }
                 if item(ui, "Delete frame", "Del", true) {
                     acts.push(Act::Delete);
@@ -216,6 +218,9 @@ impl App {
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
                 }
+                if item(ui, "Send to back", "", true) {
+                    acts.push(Act::Back);
+                }
                 if item(ui, "Delete drawing", "Del", true) {
                     acts.push(Act::Delete);
                 }
@@ -232,6 +237,9 @@ impl App {
                 divider(ui);
                 if item(ui, "Bring to front", "", true) {
                     acts.push(Act::Front);
+                }
+                if item(ui, "Send to back", "", true) {
+                    acts.push(Act::Back);
                 }
                 if item(ui, "Delete text", "Del", true) {
                     acts.push(Act::Delete);

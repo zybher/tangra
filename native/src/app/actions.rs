@@ -451,6 +451,7 @@ impl App {
                 }
             }
             Act::Front => self.bring_to_front(),
+            Act::Back => self.send_to_back(),
         }
     }
 }

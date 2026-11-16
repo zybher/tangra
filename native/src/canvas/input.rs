@@ -241,6 +241,9 @@ impl App {
                 self.drag = Drag::Draw;
             }
             Tool::Eraser => {
+                // marks still fading from the last stroke of the eraser are gone first, so
+                // undo only brings back this one
+                self.finish_dying();
                 self.drag_board = Some(self.board.clone());
                 self.drag_changed = self.erase_at(w);
                 self.drag = Drag::Erase;
@@ -739,6 +742,7 @@ impl App {
                     }
                     Tool::Text => self.begin_label(w),
                     Tool::Eraser => {
+                        self.finish_dying();
                         let before = self.board.clone();
                         if self.erase_at(w) {
                             self.push_undo(before);

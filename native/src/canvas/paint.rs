@@ -1,6 +1,7 @@
 //! Draws the board: background, items, annotations, selection, overlays.
 
 use crate::*;
+use std::collections::HashMap;
 
 impl App {
     pub(crate) fn paint(&self, p: &egui::Painter, rect: Rect, v: View, hover: Option<Pos2>) {
@@ -65,10 +66,11 @@ impl App {
         // The title lights with the hover outline (one source of truth, set below last frame)
         let hovered_now: Option<Sel> = p.ctx().data(|d| d.get_temp::<Option<Sel>>(egui::Id::new("qd_hover_now"))).flatten();
         // Frame strokes go on after the objects, so content never covers a frame's edge
-        let mut late_strokes: Vec<(egui::Painter, egui::Shape)> = Vec::new();
+        // (kept per frame and put on once everything inside it is painted)
+        let late_strokes: std::cell::RefCell<HashMap<String, Vec<(egui::Painter, egui::Shape)>>> = Default::default();
         // Parents paint before the frames inside them, so a nested frame is never hidden
-        for c in self.frames_paint_order() {
-            let Some((vk, op)) = pres(&c.id) else { continue };
+        let paint_frame = |c: &Group| {
+            let Some((vk, op)) = pres(&c.id) else { return };
             // The title is not faded with the frame (it labels the frame, it isn't part of it),
             // only with it coming and going
             let mut title_p = match clips.get(&c.id) {
@@ -84,7 +86,7 @@ impl App {
             let p = &clipped_p;
             let r = item_rect(c.x, c.y, c.width, c.height);
             if !r.intersects(rect) {
-                continue;
+                return;
             }
             // A solid panel with its title above it; the old default slate counts as "no colour"
             let panel = Color32::from_rgb(36, 36, 36);
@@ -125,12 +127,12 @@ impl App {
             if bw > 0.001 {
                 match round_cut(&c.id, sr, sfr).filter(|(_, safe)| !safe) {
                     Some((poly, _)) if poly.len() >= 3 => {
-                        late_strokes.push((p.clone(), egui::Shape::closed_line(poly, EStroke::new(bw, stroke_color))));
+                        late_strokes.borrow_mut().entry(c.id.clone()).or_default().push((p.clone(), egui::Shape::closed_line(poly, EStroke::new(bw, stroke_color))));
                     }
                     Some(_) => {}
                     None => {
                         // rect_stroke paints outward from the rect: hand it the inner edge
-                        late_strokes.push((p.clone(), egui::Shape::rect_stroke(sr.shrink(bw / 2.0), (sfr - bw / 2.0).max(0.0), EStroke::new(bw, stroke_color))));
+                        late_strokes.borrow_mut().entry(c.id.clone()).or_default().push((p.clone(), egui::Shape::rect_stroke(sr.shrink(bw / 2.0), (sfr - bw / 2.0).max(0.0), EStroke::new(bw, stroke_color))));
                     }
                 }
             }
@@ -159,11 +161,11 @@ impl App {
                     title_p.galley(tp - vec2(0.0, g.size().y), g, title_color);
                 }
             }
-        }
+        };
 
         // Images + their annotations
-        for img in &b.images {
-            let Some((vk, op)) = pres(&img.id) else { continue };
+        let paint_img = |img: &ImageNode| {
+            let Some((vk, op)) = pres(&img.id) else { return };
             let clipped_p = {
                 let mut q = match clips.get(&img.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
@@ -175,7 +177,7 @@ impl App {
             let p = &clipped_p;
             let r = item_rect(img.x, img.y, img.width, img.height);
             if !r.intersects(rect) {
-                continue;
+                return;
             }
             // Rounded corners (screen px), never more than half the short side
             let rd = (super::presence::gf(&pctx, egui::Id::new(("qd_ic", img.id.as_str())), img.corner) * z).clamp(0.0, r.width().min(r.height()) / 2.0);
@@ -284,11 +286,11 @@ impl App {
                     draw_label(&ip, pos, galley, hex(&t.color), t.style, fs * sx * z);
                 }
             }
-        }
+        };
 
         // Link cards
-        for l in &b.link_cards {
-            let Some((vk, op)) = pres(&l.id) else { continue };
+        let paint_link = |l: &LinkCard| {
+            let Some((vk, op)) = pres(&l.id) else { return };
             let clipped_p = {
                 let mut q = match clips.get(&l.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
@@ -300,7 +302,7 @@ impl App {
             let p = &clipped_p;
             let r = item_rect(l.x, l.y, l.width, l.height);
             if !r.intersects(rect) {
-                continue;
+                return;
             }
             p.rect_filled(r, 10.0 * z, Color32::from_rgb(38, 38, 38));
             p.rect_stroke(r, 10.0 * z, EStroke::new(1.0_f32, rgba(255, 255, 255, 22)));
@@ -317,11 +319,11 @@ impl App {
                 let title = if l.title.is_empty() { &l.url } else { &l.title };
                 cp.text(v.s(l.x + 14.0, l.y + 36.0), Align2::LEFT_TOP, title, f, rgba(241, 245, 249, 255));
             }
-        }
+        };
 
         // Sticky notes
-        for n in &b.sticky_notes {
-            let Some((vk, op)) = pres(&n.id) else { continue };
+        let paint_note = |n: &Note| {
+            let Some((vk, op)) = pres(&n.id) else { return };
             let clipped_p = {
                 let mut q = match clips.get(&n.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
@@ -333,7 +335,7 @@ impl App {
             let p = &clipped_p;
             let r = item_rect(n.x, n.y, n.width, n.height);
             if !r.intersects(rect) {
-                continue;
+                return;
             }
             let op = n.opacity.clamp(0.0, 1.0);
             let col_hex = if n.color.is_empty() || n.color == "#1e293b" { "#303030" } else { &n.color };
@@ -356,11 +358,11 @@ impl App {
                 let _ = f;
                 smooth_text(&cp, v.s(n.x + 12.0, n.y + 12.0), &text, egui::FontFamily::Proportional, fs, z, Some(n.width - 24.0), col);
             }
-        }
+        };
 
         // Free-floating strokes and text
-        for s in &b.world_strokes {
-            let Some((vk, op)) = pres(&s.id) else { continue };
+        let paint_stroke_item = |s: &Stroke| {
+            let Some((vk, op)) = pres(&s.id) else { return };
             let clipped_p = {
                 let mut q = match clips.get(&s.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
@@ -371,9 +373,9 @@ impl App {
             };
             let p = &clipped_p;
             paint_stroke(p, s, |q| v.s(q.x, q.y), s.width * z);
-        }
-        for t in &b.world_texts {
-            let Some((vk, op)) = pres(&t.id) else { continue };
+        };
+        let paint_text = |t: &Label| {
+            let Some((vk, op)) = pres(&t.id) else { return };
             let clipped_p = {
                 let mut q = match clips.get(&t.id) {
                     Some(q) => p.with_clip_rect(item_rect(q[0], q[1], q[2], q[3]).intersect(p.clip_rect())),
@@ -391,7 +393,7 @@ impl App {
             // Hidden while it is being edited in place
             let editing = matches!(&self.edit, Some(Edit { target: EditTarget::WorldText(id), .. }) if id == &t.id);
             if editing || t.text.is_empty() {
-                continue;
+                return;
             }
             if font(fs * z).is_some() {
                 let fam = styled_font(FontId::proportional(fs), t.style).family;
@@ -403,10 +405,39 @@ impl App {
                 let bar = Rect::from_min_size(at, vec2((w * z).max(3.0), (h * z * 0.4).max(1.5)));
                 p.rect_filled(bar, 1.0, tcol.gamma_multiply(0.6));
             }
-        }
+        };
 
-        for (lp, s) in late_strokes {
-            lp.add(s);
+        // Everything in the one stacking order the outline shows (canvas/z_order.rs)
+        {
+            use super::z_order::Step;
+            let groups: HashMap<&str, &Group> = b.group_cards.iter().map(|x| (x.id.as_str(), x)).collect();
+            let images: HashMap<&str, &ImageNode> = b.images.iter().map(|x| (x.id.as_str(), x)).collect();
+            let links: HashMap<&str, &LinkCard> = b.link_cards.iter().map(|x| (x.id.as_str(), x)).collect();
+            let notes: HashMap<&str, &Note> = b.sticky_notes.iter().map(|x| (x.id.as_str(), x)).collect();
+            let strokes: HashMap<&str, &Stroke> = b.world_strokes.iter().map(|x| (x.id.as_str(), x)).collect();
+            let texts: HashMap<&str, &Label> = b.world_texts.iter().map(|x| (x.id.as_str(), x)).collect();
+            for st in self.paint_steps() {
+                match st {
+                    Step::Item((k, id)) => {
+                        let id = id.as_str();
+                        match k {
+                            Kind::Group => groups.get(id).map(|x| paint_frame(x)),
+                            Kind::Image => images.get(id).map(|x| paint_img(x)),
+                            Kind::Link => links.get(id).map(|x| paint_link(x)),
+                            Kind::Note => notes.get(id).map(|x| paint_note(x)),
+                            Kind::Stroke => strokes.get(id).map(|x| paint_stroke_item(x)),
+                            Kind::Text => texts.get(id).map(|x| paint_text(x)),
+                        };
+                    }
+                    // A frame's outline goes over its own contents, under whatever is in front of it
+                    Step::End(id) => {
+                        let ls = late_strokes.borrow_mut().remove(&id);
+                        for (lp, s) in ls.into_iter().flatten() {
+                            lp.add(s);
+                        }
+                    }
+                }
+            }
         }
         // Stroke being drawn right now
         if let Some((target, s)) = &self.active {

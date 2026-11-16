@@ -120,12 +120,19 @@ impl App {
         let mut cur = self.parent_of(id);
         for _ in 0..64 {
             let Some(pid) = cur else { break };
-            if let Some(g) = self.board.group_cards.iter().find(|g| g.id == pid && g.clip) {
+            // Clipping switched on / off just now: the eased box, its corners rounding with it
+            // (canvas/clip_fade.rs)
+            let eased = super::clip_fade::easing(pid);
+            if let Some(g) = self.board.group_cards.iter().find(|g| g.id == pid && (g.clip || eased.is_some())) {
                 let rad = group_radius(g);
                 any_round |= rad > 0.5;
                 // Cropped at the stroke's inner edge, like the rect clip
-                let b = self.crop_box(g);
-                out.push((b, (rad - (b[0] - g.x)).max(0.0)));
+                let full = self.crop_box(g);
+                let r = (rad - (full[0] - g.x)).max(0.0);
+                match eased {
+                    Some((b, k)) => out.push((b, r * k)),
+                    None => out.push((full, r)),
+                }
             }
             cur = self.parent_of(pid);
         }

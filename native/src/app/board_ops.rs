@@ -33,52 +33,22 @@ impl App {
             return;
         }
         self.snapshot();
-        macro_rules! front {
-            ($v:expr, $id:expr) => {
-                if let Some(i) = $v.iter().position(|i| &i.id == $id) {
-                    let it = $v.remove(i);
-                    $v.push(it);
-                }
-            };
-        }
-        for (k, id) in &self.selected {
-            match k {
-                Kind::Image => front!(self.board.images, id),
-                Kind::Note => front!(self.board.sticky_notes, id),
-                Kind::Link => front!(self.board.link_cards, id),
-                Kind::Group => front!(self.board.group_cards, id),
-                Kind::Text => front!(self.board.world_texts, id),
-                Kind::Stroke => front!(self.board.world_strokes, id),
-            }
-        }
+        // within their own frame, in the order the outline and canvas share (canvas/z_order.rs)
+        let ids: HashSet<String> = self.selected.iter().map(|s| s.1.clone()).collect();
+        self.restack(&ids, true);
         // the moved items dip and come back so the restack reads (audit #37)
         crate::canvas::presence::enter(self.selected.iter().map(|s| s.1.clone()), self.now, 0.3);
     }
 
-    /// Ctrl+[ : the selection goes beneath everything of its kind
+    /// Ctrl+[ : the selection goes beneath everything else in its frame
     pub(crate) fn send_to_back(&mut self) {
         if self.selected.is_empty() {
             return;
         }
         self.snapshot();
-        macro_rules! back {
-            ($v:expr, $id:expr) => {
-                if let Some(i) = $v.iter().position(|i| &i.id == $id) {
-                    let it = $v.remove(i);
-                    $v.insert(0, it);
-                }
-            };
-        }
-        for (k, id) in &self.selected {
-            match k {
-                Kind::Image => back!(self.board.images, id),
-                Kind::Note => back!(self.board.sticky_notes, id),
-                Kind::Link => back!(self.board.link_cards, id),
-                Kind::Group => back!(self.board.group_cards, id),
-                Kind::Text => back!(self.board.world_texts, id),
-                Kind::Stroke => back!(self.board.world_strokes, id),
-            }
-        }
+        // within their own frame, in the order the outline and canvas share (canvas/z_order.rs)
+        let ids: HashSet<String> = self.selected.iter().map(|s| s.1.clone()).collect();
+        self.restack(&ids, false);
         // the moved items dip and come back so the restack reads (audit #37)
         crate::canvas::presence::enter(self.selected.iter().map(|s| s.1.clone()), self.now, 0.3);
     }

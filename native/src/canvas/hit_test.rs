@@ -174,36 +174,15 @@ impl App {
     }
 
     pub(crate) fn hit_test(&self, p: Pt) -> Option<Sel> {
-        let bl = self.blocked_at(p);
-        let b = &self.board;
-        // A frame's title (above it) selects the whole frame, like Figma; double-click still renames
+        // A frame's title (above it) selects / drags the whole frame, like Figma; double-click still renames
         if let Some(t) = self.frame_title_at(p) {
             return Some(t);
         }
         if let Some(s) = self.selected_drawing_at(p) {
             return Some(s);
         }
-        if let Some(s) = self.stroke_at(p) {
-            return Some(s);
-        }
-        if let Some(t) = b.world_texts.iter().rev().find(|l| !bl.contains(&l.id) && label_hit(l, p, 4.0)) {
-            return Some((Kind::Text, t.id.clone()));
-        }
-        if let Some(n) = b.sticky_notes.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
-            return Some((Kind::Note, n.id.clone()));
-        }
-        if let Some(n) = b.link_cards.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
-            return Some((Kind::Link, n.id.clone()));
-        }
-        if let Some(n) = self.image_at(p) {
-            return Some((Kind::Image, n.id.clone()));
-        }
-        // Topmost first: the same order frames paint in
-        self.frames_paint_order()
-            .into_iter()
-            .rev()
-            .find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height))
-            .map(|n| (Kind::Group, n.id.clone()))
+        // Whatever is in front there (canvas/z_order.rs)
+        self.hit_ordered(p, false)
     }
 
     pub(crate) fn frame_hit_drag(&self, g: &Group, p: Pt) -> bool {
@@ -240,35 +219,15 @@ impl App {
     }
 
     pub(crate) fn hit_test_drag(&self, p: Pt) -> Option<Sel> {
-        let bl = self.blocked_at(p);
-        let b = &self.board;
-        // Dragging a frame by its title moves the whole frame
+        // A frame's title (above it) selects / drags the whole frame, like Figma; double-click still renames
         if let Some(t) = self.frame_title_at(p) {
             return Some(t);
         }
         if let Some(s) = self.selected_drawing_at(p) {
             return Some(s);
         }
-        if let Some(s) = self.stroke_at(p) {
-            return Some(s);
-        }
-        if let Some(t) = b.world_texts.iter().rev().find(|l| !bl.contains(&l.id) && label_hit(l, p, 4.0)) {
-            return Some((Kind::Text, t.id.clone()));
-        }
-        if let Some(n) = b.sticky_notes.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
-            return Some((Kind::Note, n.id.clone()));
-        }
-        if let Some(n) = b.link_cards.iter().rev().find(|i| !bl.contains(&i.id) && inside(p, i.x, i.y, i.width, i.height)) {
-            return Some((Kind::Link, n.id.clone()));
-        }
-        if let Some(n) = self.image_at(p) {
-            return Some((Kind::Image, n.id.clone()));
-        }
-        self.frames_paint_order()
-            .into_iter()
-            .rev()
-            .find(|g| !bl.contains(&g.id) && self.frame_hit_drag(g, p))
-            .map(|n| (Kind::Group, n.id.clone()))
+        // Whatever is in front there (canvas/z_order.rs)
+        self.hit_ordered(p, true)
     }
 
     pub(crate) fn items_in_rect(&self, box_r: [f32; 4]) -> Vec<Sel> {

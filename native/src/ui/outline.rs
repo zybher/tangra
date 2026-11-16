@@ -111,10 +111,10 @@ impl App {
                 kids[*p].push(i);
             }
         }
-        // Order dragged in the outline first; otherwise frames first, then the order they were
-        // made in (not position, so moving or aligning an object never shuffles the list)
-        let ord = &self.board.layer_order;
-        let key = |i: usize| (ord.get(&items[i].0 .1).copied().unwrap_or(f32::MAX), (items[i].0 .0 != Kind::Group) as u8, i as f32, 0.0_f32);
+        // Same order as the canvas: dragged rows keep their place, unplaced objects by kind and
+        // age (not position, so moving or aligning an object never shuffles the list)
+        // The canvas stacking order, top row in front (canvas/z_order.rs)
+        let key = |i: usize| self.z_key(&items[i].0, i);
         let cmp = |a: &usize, b: &usize| key(*a).partial_cmp(&key(*b)).unwrap_or(std::cmp::Ordering::Equal);
         for k in kids.iter_mut() {
             k.sort_by(cmp);
