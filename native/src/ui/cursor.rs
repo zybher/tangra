@@ -5,8 +5,8 @@
 //! arrows don't lean (they keep pointing the way they resize) and the I-beam leans half as much.
 //! Switching between shapes morphs one into the other (cursor_morph.rs).
 //! The pan hand (Grab) closes into the fist (Grabbing) while dragging, and the eraser's ring is
-//! asked for by name (`set_pose`); both morph to and from every other pointer. So is the pen
-//! over a path's line while editing points (`set_pose_at`, its nib on the pointer).
+//! asked for by name (`set_pose`); both morph to and from every other pointer. Over a path's
+//! line while editing points the arrow grows a little and carries the pen badge.
 //!
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
 //! where it points) and leans into sideways movement, tipping right when moving right and left
@@ -44,8 +44,8 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let sid = egui::Id::new("qd_cursor_st");
     let icon = ctx.output(|o| o.cursor_icon);
     let pass = ctx.cumulative_pass_nr();
-    let named = ctx.data(|d| d.get_temp::<(&'static str, f32, [f32; 2], u64)>(pose_id())).filter(|(_, _, _, f)| *f == pass);
-    let sh = shape(icon).or_else(|| named.filter(|_| icon == egui::CursorIcon::None).map(|(name, px, hot, _)| Shape { name, hot, px, lean: if hot == [12.0, 12.0] { 0.0 } else { 1.0 } }));
+    let named = ctx.data(|d| d.get_temp::<(&'static str, f32, u64)>(pose_id())).filter(|(_, _, f)| *f == pass);
+    let sh = shape(icon).or_else(|| named.filter(|_| icon == egui::CursorIcon::None).map(|(name, px, _)| Shape { name, hot: [12.0, 12.0], px, lean: 0.0 }));
     let Some(sh) = sh else {
         ctx.data_mut(|d| d.remove::<St>(sid));
         ctx.data_mut(|d| d.remove::<Pose>(last_id()));
@@ -99,7 +99,11 @@ pub(crate) fn paint(ctx: &egui::Context) {
     ctx.data_mut(|d| d.insert_temp(sid, st));
     let press = ease(ctx, egui::Id::new("qd_cursor_press"), ctx.input(|i| i.pointer.primary_down()));
     let ink = Color32::from_rgb(18, 18, 20);
-    let squeeze = 1.0 - (1.0 - PRESS_SCALE) * press;
+    // The arrow with a badge (adding a path point) grows a little, eased
+    let pass = ctx.cumulative_pass_nr();
+    let badge = ctx.data(|d| d.get_temp::<(&'static str, u64)>(badge_id())).filter(|(_, f)| *f == pass && (sh.name == "crosshair" || sh.name == "cursor")).map(|(n, _)| n);
+    let on_arrow = ease(ctx, badge_id().with("arrow"), badge.is_some() && sh.name == "cursor");
+    let squeeze = (1.0 - (1.0 - PRESS_SCALE) * press) * (1.0 + 0.15 * on_arrow);
     // A new shape morphs out of the last one (cursor_morph.rs)
     let me = Pose { name: sh.name, hot: sh.hot, px: sh.px };
     let last: Option<Pose> = ctx.data(|d| d.get_temp(last_id()));
@@ -125,8 +129,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
         _ => crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * squeeze, tilt, Color32::WHITE, ink),
     }
     // The drawing tool's own toolbar icon rides beside the crosshair, so each tool reads apart
-    let pass = ctx.cumulative_pass_nr();
-    let badge = ctx.data(|d| d.get_temp::<(&'static str, u64)>(badge_id())).filter(|(_, f)| *f == pass && sh.name == "crosshair").map(|(n, _)| n);
+    // (and beside the arrow over a path's line while editing points: path_edit.rs)
     let bk = ease(ctx, badge_id().with("k"), badge.is_some());
     if let Some(name) = badge {
         ctx.data_mut(|d| d.insert_temp(badge_id().with("last"), name));
@@ -134,7 +137,8 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let name = badge.or_else(|| ctx.data(|d| d.get_temp::<&'static str>(badge_id().with("last"))));
     if let (Some(name), true) = (name, bk > 0.01) {
         let (sn, cs) = tilt.sin_cos();
-        let o = vec2(15.0, 15.0);
+        // past the arrow's tail on the arrow, by the centre on the crosshair
+        let o = vec2(15.0, 15.0) + vec2(7.0, 9.0) * on_arrow;
         let c = pos + vec2(o.x * cs - o.y * sn, o.x * sn + o.y * cs);
         let r = 9.5 * (0.7 + 0.3 * bk) * (1.0 - (1.0 - PRESS_SCALE) * press);
         p.circle_filled(c + vec2(0.0, 1.0), r + 1.0, Color32::from_black_alpha((50.0 * bk) as u8));
@@ -167,14 +171,8 @@ fn pose_id() -> egui::Id {
 /// A pointer with no native cursor (the eraser ring), by pack name and size, every frame;
 /// the caller sets CursorIcon::None
 pub(crate) fn set_pose(ctx: &egui::Context, name: &'static str, px: f32) {
-    set_pose_at(ctx, name, px, [12.0, 12.0]);
-}
-
-/// Like `set_pose`, with `hot` (the point of the icon's 24-unit box) on the pointer; such a
-/// pointer leans as it moves, like the arrow (the pen over a path's line: path_edit.rs)
-pub(crate) fn set_pose_at(ctx: &egui::Context, name: &'static str, px: f32, hot: [f32; 2]) {
     let pass = ctx.cumulative_pass_nr();
-    ctx.data_mut(|d| d.insert_temp(pose_id(), (name, px, hot, pass)));
+    ctx.data_mut(|d| d.insert_temp(pose_id(), (name, px, pass)));
 }
 
 struct Shape {

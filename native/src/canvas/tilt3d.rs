@@ -206,53 +206,79 @@ fn flat_outline(bx: [f32; 4], rd: f32) -> Vec<(f32, f32)> {
     out
 }
 
-/// A soft shadow under a convex outline (screen points): one mesh fading out across its edge,
-/// around its edge, matching the flat pictures' `Shadow` (offset, blur, darkness)
+/// A soft shadow under a convex outline (screen points), matching the flat pictures' `Shadow`
+/// (offset, blur, darkness): half dark at the edge, fading to clear `blur / 2` outside it,
+/// with rounded corners. Nothing is pulled inward, so a thin (steeply turned) or sharply
+/// cornered outline can't fold over itself into dark streaks.
 pub(crate) fn soft_shadow(p: &egui::Painter, pts: &[Pos2], offset: egui::Vec2, blur: f32, alpha: f32) {
     let mut q: Vec<Pos2> = Vec::new();
     for &pt in pts {
-        if q.last().map_or(true, |l: &Pos2| (*l - pt - offset).length() > 1.0) {
+        if q.last().map_or(true, |l: &Pos2| (*l - pt - offset).length() > 0.5) {
             q.push(pt + offset);
         }
     }
-    if q.len() > 2 && (q[0] - q[q.len() - 1]).length() <= 1.0 {
+    while q.len() > 2 && (q[0] - q[q.len() - 1]).length() <= 0.5 {
         q.pop();
     }
     if q.len() < 3 {
         return;
     }
     let n = q.len();
-    let c = q.iter().fold(egui::Vec2::ZERO, |a, p| a + p.to_vec2()) / n as f32;
-    // outward direction at each point: its two edges' normals, turned away from the centre
-    let normals: Vec<egui::Vec2> = (0..n)
-        .map(|i| {
-            let e = |a: Pos2, b: Pos2| {
-                let d = (b - a).normalized();
-                let nn = egui::vec2(d.y, -d.x);
-                if nn.dot(a.lerp(b, 0.5).to_vec2() - c) < 0.0 { -nn } else { nn }
-            };
-            let v = (e(q[(i + n - 1) % n], q[i]) + e(q[i], q[(i + 1) % n])).normalized();
-            if v.is_finite() { v } else { (q[i].to_vec2() - c).normalized() }
-        })
-        .collect();
-    // One mesh: solid inside the edge pulled in by half the blur, fading to clear at the edge
-    // pushed out by half the blur (colours blend between, so no steps and no jagged layers)
+    // which way is out: from the outline's winding, not its centre (which fails when thin)
+    let area: f32 = (0..n).map(|i| { let (a, b) = (q[i], q[(i + 1) % n]); a.x * b.y - b.x * a.y }).sum();
+    if area.abs() < 1.0 {
+        return;
+    }
+    let sg = area.signum();
+    let out = |a: Pos2, b: Pos2| {
+        let d = (b - a).normalized();
+        egui::vec2(d.y, -d.x) * sg
+    };
     let col = Color32::from_black_alpha((alpha * 255.0).round() as u8);
+    let edge = Color32::from_black_alpha((alpha * 127.5).round() as u8);
     let half = blur / 2.0;
+    let c = q.iter().fold(egui::Vec2::ZERO, |a, p| a + p.to_vec2()) / n as f32;
     let mut m = Mesh::default();
     m.colored_vertex(c.to_pos2(), col);
-    for (pt, nn) in q.iter().zip(&normals) {
-        m.colored_vertex(*pt - *nn * half, col);
+    // the inside: a fan from the centre to the edge
+    for pt in &q {
+        m.colored_vertex(*pt, edge);
     }
-    for (pt, nn) in q.iter().zip(&normals) {
-        m.colored_vertex(*pt + *nn * half, Color32::TRANSPARENT);
+    for i in 0..n as u32 {
+        m.add_triangle(0, 1 + i, 1 + (i + 1) % n as u32);
     }
-    let n = n as u32;
+    // the fade: per point, outward rims swept round from one side's normal to the next
+    let mut rims: Vec<Vec<u32>> = Vec::with_capacity(n);
     for i in 0..n {
-        let (a, b) = (1 + i, 1 + (i + 1) % n);
-        m.add_triangle(0, a, b);
-        m.add_triangle(a, b, b + n);
-        m.add_triangle(a, b + n, a + n);
+        let (n0, n1) = (out(q[(i + n - 1) % n], q[i]), out(q[i], q[(i + 1) % n]));
+        let a0 = n0.y.atan2(n0.x);
+        let mut da = n1.y.atan2(n1.x) - a0;
+        while da > std::f32::consts::PI {
+            da -= std::f32::consts::TAU;
+        }
+        while da < -std::f32::consts::PI {
+            da += std::f32::consts::TAU;
+        }
+        let steps = ((da.abs() / 0.3).ceil() as usize).max(1);
+        let mut rim = Vec::with_capacity(steps + 1);
+        for k in 0..=steps {
+            let a = a0 + da * k as f32 / steps as f32;
+            rim.push(m.vertices.len() as u32);
+            m.colored_vertex(q[i] + egui::vec2(a.cos(), a.sin()) * half, Color32::TRANSPARENT);
+        }
+        // the corner's round fan
+        for w in rim.windows(2) {
+            m.add_triangle(1 + i as u32, w[0], w[1]);
+        }
+        rims.push(rim);
+    }
+    // the band along each side
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let (a, b) = (1 + i as u32, 1 + j as u32);
+        let (ao, bo) = (*rims[i].last().unwrap(), rims[j][0]);
+        m.add_triangle(a, ao, bo);
+        m.add_triangle(a, bo, b);
     }
     p.add(egui::Shape::mesh(m));
 }
