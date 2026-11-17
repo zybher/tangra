@@ -435,14 +435,16 @@ fn safe_line(p: &egui::Painter, v: &[Pos2], st: Stroke) {
 
 /// Fills a (star-shaped) polygon as a fan of triangles from its first point
 fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
-    for i in 1..v.len().saturating_sub(1) {
-        // flat (zero-area) triangles: the edge smoothing turns them into spikes
-        let (a, b) = (v[i] - v[0], v[i + 1] - v[0]);
-        if (a.x * b.y - a.y * b.x).abs() < 1e-3 {
-            continue;
-        }
-        p.add(Shape::convex_polygon(vec![v[0], v[i], v[i + 1]], col, Stroke::NONE));
+    // One plain mesh, no edge smoothing: smoothed edges of thin fan triangles shoot out as
+    // long spikes (the outline stroke drawn over the edge keeps it clean)
+    let mut m = egui::Mesh::default();
+    for q in v {
+        m.colored_vertex(*q, col);
     }
+    for i in 1..v.len().saturating_sub(1) {
+        m.add_triangle(0, i as u32, i as u32 + 1);
+    }
+    p.add(Shape::mesh(m));
 }
 
 /// Paints icon `name` centred on `c`, its 24-unit box `px` pixels wide
