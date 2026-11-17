@@ -848,7 +848,7 @@ impl eframe::App for App {
             self.bottom_bar_ui(ui, &mut acts, canvas_rect);
             self.toolbar_ui(ui, &mut acts, canvas_rect);
             self.style_bar_ui(ui, &mut acts, canvas_rect);
-            self.place_bar_ui(ui, canvas_rect);
+            self.place_keys(ui.ctx());
             let pctx = ui.ctx().clone();
             self.side_panel_ui(&pctx, canvas_rect);
             self.outline_ui(&pctx, canvas_rect);

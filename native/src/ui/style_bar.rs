@@ -21,17 +21,26 @@ impl App {
             Align,
             /// Stroke inside / centre / outside (frames)
             StrokePos,
+            /// Picture dropdowns: colour adjust, 3D tilt (image_sliders.rs)
+            Adjust,
+            Tilt,
+            /// Restore lasso-cut areas: only while the picture has cuts (eases in and out)
+            Restore,
         }
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_style_bar");
         let mut target = match (&self.sel, self.selected.len()) {
-            (Some((k @ (Kind::Group | Kind::Stroke | Kind::Text), id)), 1) if self.sel_label.is_none() => Some((*k, id.clone())),
+            // Any single object: what it can edit comes from its kind below, plus align and
+            // opacity whenever it sits in a frame
+            (Some((k, id)), 1) if self.sel_label.is_none() => Some((*k, id.clone())),
             // Several frames: one bar for all of them (values shown from the first)
             (_, n) if n > 1 && self.selected.iter().all(|s| s.0 == Kind::Group) => {
                 let mut ids: Vec<&String> = self.selected.iter().map(|s| &s.1).collect();
                 ids.sort();
                 Some((Kind::Group, ids[0].clone()))
             }
+            // Several objects sharing a frame: align + opacity only
+            (_, n) if n > 1 && self.share_frame(&self.place_targets()) => self.place_targets().first().cloned(),
             _ => None,
         };
         // A dialog (new board, rename...) folds the bar away with its usual exit
@@ -39,6 +48,8 @@ impl App {
             target = None;
         }
         let multi = self.selected.len() > 1;
+        // A mixed multi-selection only gets the shared controls (align, opacity)
+        let place_only = multi && !self.selected.iter().all(|s| s.0 == Kind::Group);
         // Closing: keep drawing the last item's bar for a moment so it can animate out
         // (icons drop away one by one while the pill shrinks). `closing` is 0..1 progress.
         let mut closing: Option<f32> = None;
@@ -74,7 +85,7 @@ impl App {
         let mut stroke_pos = 0u8;
         // Closed shapes (rectangle, ellipse...) can be filled: Some(filled now)
         let mut shape_fill: Option<bool> = None;
-        if let Some((k, id)) = &target {
+        if let (Some((k, id)), false) = (&target, place_only) {
             match k {
                 Kind::Group => {
                     if let Some(g) = self.board.group_cards.iter().find(|g| &g.id == id) {
@@ -116,18 +127,36 @@ impl App {
                         segs = vec![Seg::Color, Seg::Num("tsize", 2, fs, 8.0, 96.0, 0.2, "Text size")];
                     }
                 }
+                Kind::Image => {
+                    if let Some(im) = self.board.images.iter().find(|i| &i.id == id) {
+                        segs = vec![Seg::Num("corner", 0, im.corner.round(), 0.0, 400.0, 0.5, "Corner radius"), Seg::Adjust, Seg::Tilt];
+                    }
+                }
                 _ => {}
             }
         }
         // Inside a frame: align (dropdown) and opacity join this bar, so there's one bar, not two
         let place_targets = self.place_targets();
         let opacity_now = place_targets.first().map_or(100.0, |t| (self.opacity_of(&t.1) * 100.0).round());
-        if !segs.is_empty() {
-            if self.share_frame(&place_targets) {
+        let framed = target.is_some() && self.share_frame(&place_targets);
+        if !segs.is_empty() || framed {
+            if framed {
                 segs.push(Seg::Align);
             }
             // Always shown, so the 0-9 opacity keys have something visible to answer to
             segs.push(Seg::Num("opacity", 3, opacity_now, 0.0, 100.0, 0.5, "Opacity"));
+        }
+        // An auto-layout frame places its pictures itself: Align greys out
+        let align_locked = self.place_locked_by_layout(&place_targets);
+        // Restore cut areas: last, and only while the picture has cuts (not part of the
+        // entrance key, so appearing doesn't replay the bar)
+        let has_cuts = match &target {
+            Some((Kind::Image, id)) if !multi => self.board.images.iter().find(|i| &i.id == id).is_some_and(|i| !i.erase.is_empty() || i.edit.as_ref().is_some_and(|e| !e.cuts.is_empty())),
+            _ => false,
+        };
+        let rest_k = ease(&ctx, bid.with("restore_k"), has_cuts);
+        if !segs.is_empty() && rest_k > 0.01 {
+            segs.push(Seg::Restore);
         }
         // Remember the controls, and close with exactly those (the selection is already gone,
         // so rebuilding them would drop in-frame extras like Align and jolt the pill)
@@ -213,6 +242,8 @@ impl App {
             Seg::Aspect => 40.0,
             Seg::Align => 40.0,
             Seg::StrokePos => 40.0,
+            Seg::Adjust | Seg::Tilt => 32.0,
+            Seg::Restore => 32.0 * rest_k,
         };
         // Dock-style magnify, like the bottom toolbar: a smoothed focus follows the pointer
         // and each segment swells (and the bar widens) by its distance from it
@@ -221,7 +252,9 @@ impl App {
             let ptr = ctx.pointer_hover_pos();
             // While scrubbing a value the magnify freezes on that segment
             let typing = super::num_edit::active(&ctx);
-            let inside = was_scrub || typing || ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q));
+            // Holds still while a picture dropdown row is dragged
+            let img_drag: bool = ctx.data(|d| d.get_temp(egui::Id::new("qd_img_pop").with("dragging"))).unwrap_or(false);
+            let inside = was_scrub || typing || (!img_drag && ptr.map_or(false, |q| prev.expand2(vec2(0.0, 8.0)).contains(q)));
             let sa = spring(&ctx, bid.with("mag_a"), inside, 18.0);
             let base = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
             let mut offs = Vec::new();
@@ -248,7 +281,7 @@ impl App {
             let open: u8 = ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0);
             segs.iter().enumerate().map(|(i, sg)| {
                 let d = (offs[i] - focus) / (seg_w(sg) * 1.05);
-                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, _ => 0 };
+                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, Seg::Adjust => 6, Seg::Tilt => 7, _ => 0 };
                 let act = spring(&ctx, bid.with(("mag_on", i)), k != 0 && open == k, 18.0);
                 (sa * (-d * d).exp()).max(act)
             }).collect()
@@ -353,7 +386,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let mut xx = bar.center().x - content_w / 2.0 + pad;
         let n = segs.len();
         // Each dropdown sits centred over its own button, like the toolbar menu
-        let mut btn_cx = [f32::NAN; 6];
+        let mut btn_cx = [f32::NAN; 8];
+        let mut img_btn = [Rect::NOTHING; 2];
+        let mut restore = false;
         for (i, s) in segs.iter().enumerate() {
             // Each group rises into place one after another as the pill widens
             let gi = match closing {
@@ -366,7 +401,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let wd = seg_ws(i, s);
             let mg = mags[i];
             let r = Rect::from_center_size(pos2(xx + wd / 2.0, cyy), vec2(seg_w(s), 26.0));
-            let dk = match s { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, _ => 0 };
+            let dk = match s { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, Seg::Adjust => 6, Seg::Tilt => 7, _ => 0 };
             if dk != 0 {
                 btn_cx[dk] = r.center().x;
             }
@@ -537,7 +572,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 }
                 Seg::Align => {
                     let resp = ui.interact(r, bid.with("aln"), Sense::click());
-                    let (hh, pp) = hover_fx(&ctx, &resp, true);
+                    let (hh, pp) = hover_fx(&ctx, &resp, !align_locked);
+                    let en_k = ease(&ctx, bid.with("aln_en"), !align_locked);
                     let on = pop == 4;
                     pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
                     // Open: accent liquid fill, like the other dropdown buttons
@@ -549,15 +585,55 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 4.0);
                     }
                     let hh = hh.max(lq);
-                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca);
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca * (0.35 + 0.65 * en_k));
                     super::icons::align(&p, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
                     let cv = pos2(r.max.x - 10.0, cyy);
                     crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
                     if resp.hovered() {
                         tip = Some((r.center().x, "Align"));
                     }
-                    if resp.clicked() {
+                    if !align_locked && resp.clicked() {
                         set_pop = if pop == 4 { 0 } else { 4 };
+                    }
+                }
+                Seg::Adjust | Seg::Tilt => {
+                    let (kind, label) = if matches!(s, Seg::Adjust) { (6u8, "Adjust") } else { (7u8, "3D") };
+                    let resp = ui.interact(r, bid.with(("img", kind)), Sense::click());
+                    let (hh, pp) = hover_fx(&ctx, &resp, true);
+                    img_btn[(kind - 6) as usize] = r;
+                    pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
+                    // Open: accent liquid fill, like the other dropdown buttons
+                    let lq = ctx.animate_bool_with_time(bid.with(("liquid", kind as i32)), pop == kind, 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    if lq >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lq > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + kind as f32);
+                    }
+                    let gc = mix(txt_dim(), hi(), hh.max(lq)).gamma_multiply(ca);
+                    if kind == 6 {
+                        super::icons::adjust(&p, pos2(r.center().x, cyy), 16.0, gc);
+                    } else {
+                        super::icons::cube(&p, pos2(r.center().x, cyy), 16.0, gc);
+                    }
+                    if resp.hovered() {
+                        tip = Some((r.center().x, label));
+                    }
+                    if resp.clicked() {
+                        set_pop = if pop == kind { 0 } else { kind };
+                    }
+                }
+                Seg::Restore => {
+                    let resp = ui.interact(r, bid.with("restore"), Sense::click());
+                    let (hh, pp) = hover_fx(&ctx, &resp, true);
+                    pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca * rest_k));
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca * rest_k);
+                    super::icons::restore_cuts(&p, pos2(r.center().x, cyy), 16.0 * rest_k, gc);
+                    if resp.hovered() {
+                        tip = Some((r.center().x, "Restore cut areas"));
+                    }
+                    if resp.clicked() && has_cuts {
+                        restore = true;
                     }
                 }
                 Seg::Arrange => {
@@ -591,6 +667,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
         }
 
+        if restore {
+            self.restore_cuts();
+        }
         // Live scrub: one undo step per drag
         let scrubbing = !scrubbed.is_empty();
         if scrubbing && !was_scrub {
@@ -632,6 +711,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     Kind::Text => {
                         if let Some(t) = self.board.world_texts.iter_mut().find(|t| &t.id == id) {
                             t.font_size = v;
+                        }
+                    }
+                    Kind::Image => {
+                        if let Some(i) = self.board.images.iter_mut().find(|i| &i.id == id) {
+                            if key == "corner" {
+                                i.corner = v;
+                            }
                         }
                     }
                     _ => {}
@@ -995,6 +1081,16 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 }
             }
         }
+        // A picture's Adjust / 3D dropdowns, on this bar's panel like the others
+        if let (Some((Kind::Image, img)), false) = (target.clone(), multi) {
+            let ir = self.image_pop(ui, rect, bar, img_btn, &da, bid, pop, &img);
+            if ir.is_positive() {
+                pop_rect = if pop_rect.is_positive() { pop_rect.union(ir) } else { ir };
+            }
+            // The size pills fold the height number away from an open dropdown
+            let nr = ctx.cumulative_pass_nr();
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_img_side_zone"), (ir, nr)));
+        }
         if pop != 0 && set_pop == pop && started {
             let q = ui.input(|i| i.pointer.interact_pos());
             if !q.is_some_and(|q| bar.contains(q) || pop_rect.contains(q)) {
@@ -1005,7 +1101,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // its popover for a moment (leaving the window counts too)
         ui_block(&ctx, if pop != 0 && pop_rect.is_positive() { bar.union(pop_rect) } else { bar });
         let zone = if pop != 0 && pop_rect.is_positive() { bar.union(pop_rect) } else { bar };
-        super::drop_anim::far_collapse(&ctx, bid, zone, pop, &mut set_pop, false);
+        let img_drag: bool = ctx.data(|d| d.get_temp(egui::Id::new("qd_img_pop").with("dragging"))).unwrap_or(false);
+        super::drop_anim::far_collapse(&ctx, bid, zone, pop, &mut set_pop, img_drag);
         ctx.data_mut(|d| d.insert_temp(bid.with("pop"), set_pop));
 
         // Tooltip above the pill (hidden while a popover is open)

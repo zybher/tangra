@@ -1,4 +1,4 @@
-//! Picture dropdowns from the placement bar (place_bar.rs): Adjust (colour) and 3D (tilt). Same
+//! Picture dropdowns from the edit bar (style_bar.rs): Adjust (colour) and 3D (tilt). Same
 //! wave list as the style bar's dropdowns, a softer wave since every row is dragged; each
 //! value row scrubs sideways like the bars' number fields (double-click resets it). Each panel
 //! is only as wide as its labels plus a value; resetting is a round arrow button floating by
@@ -17,13 +17,13 @@ const RESET_D: f32 = 26.0;
 const SOFT: f32 = 1.0;
 
 impl App {
-    /// Draws the open dropdown (bar's `pop` 2 = Adjust, 3 = 3D) for picture `img`, under (or
+    /// Draws the open dropdown (bar's `pop` 6 = Adjust, 7 = 3D, run by the bar's `da`) for picture `img`, under (or
     /// over) `bar`, starting at its button in `btns`. Returns the panel's rect while one is open.
-    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, btns: [Rect; 2], pop: u8, img: &str) -> Rect {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, btns: [Rect; 2], da: &super::drop_anim::DropAnim, bar_id: egui::Id, pop: u8, img: &str) -> Rect {
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_img_pop");
-        let da = super::drop_anim::DropAnim::new(&ctx, egui::Id::new("qd_place_bar").with("drop"), pop);
-        let pop = pop.saturating_sub(1);
+        let pop = if pop >= 6 { pop - 5 } else { 0 };
         let mut open_rect = Rect::NOTHING;
         let mut any_drag = false;
         // A reset in progress eases the values back (reset_morph.rs); grabbing a row stops it
@@ -31,7 +31,7 @@ impl App {
         self.reset_morph_step(&ctx, img, was_drag);
         let ed: ImageEdit = self.board.images.iter().find(|i| i.id == img).and_then(|i| i.edit.clone()).unwrap_or_default();
         for kind in [1u8, 2] {
-            let kk = da.k(kind + 1);
+            let kk = da.k(kind + 5);
             if kk <= 0.001 {
                 continue;
             }
@@ -44,7 +44,7 @@ impl App {
             let panel_w = super::drop_anim::fit_w(&ctx, 12.0, &sliders.iter().map(|s| s.1).collect::<Vec<_>>()) + VALUE_W;
             // Same fit as the bars' other dropdowns: off the picture, in 1-3 columns, else the
             // bar moves to the picture's other side (drop_anim.rs)
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, egui::Id::new("qd_place_bar"), bar, n, rect, panel_w);
+            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar_id, bar, n, rect, panel_w);
             let tw = grid_w(panel_w, cols);
 
             // Keep the last spot while it fades out (the button may already be gone)
