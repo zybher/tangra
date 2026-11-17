@@ -50,7 +50,7 @@ impl App {
         let ap_k = ctx.animate_bool_with_time_and_easing(egui::Id::new("qd_ap_k"), ap_open, 0.45 * anim_k(), egui::emath::easing::cubic_in_out);
         let am_k = ctx.animate_bool_with_time_and_easing(egui::Id::new("qd_am_k"), am_open, 0.45 * anim_k(), egui::emath::easing::cubic_in_out);
         let au_h = (1.0 - grad_row / 28.0) * (56.0 + ap_k * 66.0 + am_k * 34.0);
-        let H: f32 = 176.0 + au_h + ex_k * 84.0 + grad_row * (1.0 + gr_k * 66.0 / 28.0) + can_k * 66.0 + acc_k * 66.0 + pat_k * 64.0;
+        let H: f32 = 176.0 + au_h + ex_k * 56.0 + grad_row * (1.0 + gr_k * 66.0 / 28.0) + can_k * 66.0 + acc_k * 66.0 + pat_k * 64.0;
         let rise = (1.0 - t) * 10.0;
         let pop = Rect::from_min_size(pos2(btn.max.x - W, btn.min.y - 8.0 - H + rise), vec2(W, H));
         if toggle {
@@ -415,19 +415,10 @@ impl App {
                     }
                     let r0 = (ex_k * 2.0).clamp(0.0, 1.0).min((ot * 2.0 - 0.3).clamp(0.0, 1.0));
                     let r1 = (ex_k * 2.0 - 0.3).clamp(0.0, 1.0).min((ot * 2.0 - 0.38).clamp(0.0, 1.0));
-                    let r2 = (ex_k * 2.0 - 0.6).clamp(0.0, 1.0).min((ot * 2.0 - 0.46).clamp(0.0, 1.0));
                     let y1 = ey + 28.0 + (1.0 - r0) * 10.0;
                     if r0 > 0.01 && switch(ui, y1 + d1, "Rounded corners", self.settings.round_corners, "qd_sw_round", e1 * r0) {
                         self.settings.round_corners = !self.settings.round_corners;
                         self.corners_dirty = true;
-                        save_settings(&self.settings);
-                    }
-
-                    // Light mode (theme.rs): the whole UI cross-fades to light surfaces and dark ink
-                    let y2 = ey + 84.0 + (1.0 - r2) * 10.0;
-                    if r2 > 0.01 && switch(ui, y2 + d1, "Light mode", !self.settings.dark_theme, "qd_sw_light", e1 * r2) {
-                        self.settings.dark_theme = !self.settings.dark_theme;
-                        LIGHT.store(!self.settings.dark_theme, std::sync::atomic::Ordering::Relaxed);
                         save_settings(&self.settings);
                     }
 
@@ -450,7 +441,7 @@ impl App {
                     }
 
                     // Divider + shortcuts entry
-                    let dy = ey + 18.0 + 84.0 * ex_k + d0;
+                    let dy = ey + 18.0 + 56.0 * ex_k + d0;
                     let t = t * e0;
                     p.line_segment([pos2(pop.min.x + 1.0, dy), pos2(pop.max.x - 1.0, dy)], EStroke::new(1.0_f32, border().gamma_multiply(t)));
                     let row = Rect::from_min_max(pos2(pop.min.x + 6.0, dy + 5.0), pos2(pop.max.x - 6.0, pop.max.y - 6.0));

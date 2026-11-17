@@ -450,6 +450,15 @@ fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
 /// Paints icon `name` centred on `c`, its 24-unit box `px` pixels wide
 pub(crate) fn draw(p: &egui::Painter, name: &'static str, c: Pos2, px: f32, col: Color32) {
     let Some(items) = items(name) else { return };
+    draw_items(p, &items, c, px, col);
+}
+
+/// Like `draw`, for an SVG body made on the fly (pack format, not cached)
+pub(crate) fn draw_svg(p: &egui::Painter, svg: &str, c: Pos2, px: f32, col: Color32) {
+    draw_items(p, &parse(svg), c, px, col);
+}
+
+fn draw_items(p: &egui::Painter, items: &[Item], c: Pos2, px: f32, col: Color32) {
     let k = px / 24.0;
     let c = p.round_pos_to_pixels(c);
     let tf = |q: &[f32; 2]| pos2(c.x + (q[0] - 12.0) * k, c.y + (q[1] - 12.0) * k);

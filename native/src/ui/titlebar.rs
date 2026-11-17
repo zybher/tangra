@@ -62,6 +62,14 @@ impl App {
             self.begin_hide(ctx);
         }
 
+        // Light / dark toggle, left of the window buttons (ui/theme_toggle.rs)
+        let tog_r = Rect::from_center_size(pos2(min_x - 22.0, cy), vec2(28.0, 28.0));
+        if let Some(light) = super::theme_toggle::button(ui, ctx, tog_r) {
+            self.settings.dark_theme = !light;
+            save_settings(&self.settings);
+        }
+        let min_x = min_x - 44.0;
+
         // 2. Far left: the Tangra mark, ahead of the tabs (ui/title_logo.rs)
         super::title_logo::title_logo(ui, pos2(rect.min.x + 26.0, cy), 20.0);
 

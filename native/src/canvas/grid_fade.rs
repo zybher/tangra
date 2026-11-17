@@ -7,7 +7,8 @@ use crate::*;
 pub(crate) fn paint_grid(p: &egui::Painter, rect: Rect, v: View, pattern: u8, dots: f32, now: f64) {
     let z = v.cam.zoom;
     // white dots on a dark canvas, dark ones in light mode (theme.rs)
-    let dot = wa((dots.clamp(0.0, 100.0) * 0.26) as u8);
+    // (dark marks read fainter on light than white ones on dark, so they get more alpha)
+    let dot = wa((dots.clamp(0.0, 100.0) * (0.26 + 0.29 * lk())) as u8);
     if dot.a() == 0 {
         return;
     }

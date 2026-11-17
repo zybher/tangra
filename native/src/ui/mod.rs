@@ -11,6 +11,7 @@ mod place_align;
 pub(crate) mod drop_anim;
 pub(crate) mod num_edit;
 pub(crate) mod scrub_wrap;
+pub(crate) mod theme_toggle;
 pub(crate) mod reset_morph;
 pub(crate) mod inline_text;
 pub(crate) mod cursor;

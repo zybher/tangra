@@ -138,6 +138,16 @@ pub(crate) fn tick_light(ctx: &egui::Context) {
     }
 }
 
+/// Switches mode at once, no fade (the title bar's reveal covers the change)
+pub(crate) fn set_light_now(ctx: &egui::Context, on: bool) {
+    LIGHT.store(on, std::sync::atomic::Ordering::Relaxed);
+    let k: f32 = if on { 1.0 } else { 0.0 };
+    LIGHT_K.store(k.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    // land the fade's own value too, so tick_light doesn't ease it back
+    ctx.animate_bool_with_time(egui::Id::new("qd_light_k"), on, 0.0);
+    retint(ctx);
+}
+
 /// The theme's tint as a light surface: a near-white that leans the same way
 fn light_base([r, g, b]: [u8; 3]) -> [u8; 3] {
     let avg = (r as f32 + g as f32 + b as f32) / 3.0;
@@ -327,7 +337,22 @@ pub(crate) fn gradient_dir_at(q: Pos2, canvas: Rect, dir: usize) -> Color32 {
         let low = v * 0.7;
         (top + (low - top) * t) as u8
     };
-    Color32::from_rgb(ch(r), ch(g), ch(b))
+    let dark = Color32::from_rgb(ch(r), ch(g), ch(b));
+    let k = lk();
+    if k <= 0.0 {
+        return dark;
+    }
+    // Light mode: the same tint's light surface, brightest at the lit end, a few steps
+    // deeper (and a little more tinted) at the other
+    let [lr, lg, lb] = light_base([r, g, b]);
+    let avg = (lr as f32 + lg as f32 + lb as f32) / 3.0;
+    let lch = |v: u8| {
+        let v = v as f32;
+        let top = (v + 10.0).min(255.0);
+        let low = avg - 24.0 + (v - avg) * 2.2;
+        (top + (low - top) * t).round().clamp(0.0, 255.0) as u8
+    };
+    mix(dark, Color32::from_rgb(lch(lr), lch(lg), lch(lb)), k)
 }
 
 /// Fills a rect whose top corners are rounded, with a colour that varies by position

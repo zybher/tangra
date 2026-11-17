@@ -6,6 +6,7 @@ mod image_edit;
 mod platform;
 mod theme;
 mod theme_glide;
+mod theme_reveal;
 mod app;
 mod canvas;
 mod ui;
@@ -678,6 +679,7 @@ impl eframe::App for App {
         self.tick_glides(ctx);
         self.tick_presence(ctx);
         theme_glide::tick(ctx);
+        ui::theme_toggle::tick(ctx);
         tick_light(ctx);
         self.stamp_parents();
         if matches!(self.drag, Drag::None) {
