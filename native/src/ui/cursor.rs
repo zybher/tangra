@@ -118,18 +118,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
         Some((from, x)) if x < 1.0 => {
             ctx.request_repaint();
             let e = 1.0 - (1.0 - x).powi(3);
-            // The last stretch hands over to the real icon (a crossfade), so the resampled
-            // morph outline never snaps into it on the final frame
-            let s = ((x - 0.6) / 0.4).clamp(0.0, 1.0);
-            let s = s * s * (3.0 - 2.0 * s);
-            let mut pm = p.clone();
-            pm.multiply_opacity(1.0 - s);
-            super::cursor_morph::draw(&pm, &sized(from), &sized(me), pos, tilt, e, Color32::WHITE, ink);
-            if s > 0.0 {
-                let mut pf = p.clone();
-                pf.multiply_opacity(s);
-                crate::ui::svg_icons::draw_cursor(&pf, sh.name, pos, sh.hot, sh.px * squeeze, tilt, Color32::WHITE, ink);
-            }
+            super::cursor_morph::draw(&p, &sized(from), &sized(me), pos, tilt, e, Color32::WHITE, ink);
         }
         _ => crate::ui::svg_icons::draw_cursor(&p, sh.name, pos, sh.hot, sh.px * squeeze, tilt, Color32::WHITE, ink),
     }

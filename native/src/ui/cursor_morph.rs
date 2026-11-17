@@ -101,9 +101,16 @@ fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
         p.circle_filled(bb.center(), bb.width().max(bb.height()) / 2.0, col);
         return;
     }
-    // Same triangles as the still pointer (concave outlines like a hand fill right too), as
-    // one plain mesh: mid-morph the outline can fold flat, and smoothed edges then spike
-    crate::ui::svg_icons::fan_mesh(p, v, col);
+    // One plain mesh: mid-morph the outline can fold flat, and smoothed polygon edges then
+    // shoot out as long spikes
+    let mut m = egui::Mesh::default();
+    for q in v {
+        m.colored_vertex(*q, col);
+    }
+    for i in 1..v.len().saturating_sub(1) as u32 {
+        m.add_triangle(0, i, i + 1);
+    }
+    p.add(egui::Shape::mesh(m));
 }
 
 /// A stroke as separate segments with round joints (a folded polyline's mitred joins spike too)
@@ -134,9 +141,7 @@ pub(crate) fn draw(p: &egui::Painter, from: &Pose, to: &Pose, at: Pos2, rot: f32
             let rev: f32 = sa.pts.iter().zip(sb.pts.iter().rev()).map(|(x, y)| (*x - *y).length()).sum();
             let tb: Vec<Pos2> = if rev < fwd { sb.pts.iter().rev().copied().collect() } else { sb.pts.clone() };
             let pts = sa.pts.iter().zip(&tb).map(|(x, y)| *x + (*y - *x) * t).collect();
-            // The old fill fades out over the first half and the new one in over the second, so
-            // the folded in-between outline is never filled (it would flash as a white blob)
-            let filled = if sa.filled { (1.0 - 2.0 * t).max(0.0) } else { 0.0 } + if sb.filled { (2.0 * t - 1.0).max(0.0) } else { 0.0 };
+            let filled = if sa.filled { 1.0 - t } else { 0.0 } + if sb.filled { t } else { 0.0 };
             (pts, filled)
         })
         .collect();

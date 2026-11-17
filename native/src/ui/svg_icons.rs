@@ -15,8 +15,6 @@ struct Item {
     dash: Option<(f32, f32)>,
     /// fill="none": a closed shape a pointer keeps hollow (pointers fill closed shapes otherwise)
     hollow: bool,
-    /// class="crease": a pointer's inner line (a hand's finger gaps), drawn dark on its fill
-    crease: bool,
 }
 
 fn attr<'a>(el: &'a str, name: &str) -> Option<&'a str> {
@@ -310,8 +308,7 @@ fn parse(svg: &str) -> Vec<Item> {
         let stroke = if attr(el, "stroke") == Some("none") { None } else { Some(attr(el, "stroke-width").and_then(|v| v.parse().ok()).unwrap_or(1.75)) };
         let dash = attr(el, "stroke-dasharray").map(nums).and_then(|v| (v.len() >= 2).then(|| (v[0], v[1])));
         let hollow = attr(el, "fill") == Some("none");
-        let crease = attr(el, "class") == Some("crease");
-        items.push(Item { subs, fill, stroke, dash, hollow, crease });
+        items.push(Item { subs, fill, stroke, dash, hollow });
     }
     items
 }
@@ -334,7 +331,7 @@ fn items(name: &'static str) -> Option<Rc<Vec<Item>>> {
 
 /// The icon's subpaths in its 24-unit box, as a pointer draws them: (points, closed, filled)
 pub(crate) fn subpaths(name: &'static str) -> Vec<(Vec<[f32; 2]>, bool, bool)> {
-    items(name).map(|it| it.iter().filter(|i| !i.crease).flat_map(|i| i.subs.iter().map(move |(v, c)| (v.clone(), *c, *c && !i.hollow))).collect()).unwrap_or_default()
+    items(name).map(|it| it.iter().flat_map(|i| i.subs.iter().map(move |(v, c)| (v.clone(), *c, *c && !i.hollow))).collect()).unwrap_or_default()
 }
 
 /// Paints icon `name` as a pointer: a dark edge `ink` around it, closed shapes filled with
@@ -361,7 +358,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
     };
     // Soft shadow, then the dark edge
     for (off, col, extra) in [(egui::vec2(0.6, 1.0), Color32::from_black_alpha(50), 3.6), (egui::vec2(0.0, 0.0), ink, 2.6)] {
-        for it in items.iter().filter(|i| !i.crease) {
+        for it in items.iter() {
             for (v, closed) in &it.subs {
                 let v: Vec<Pos2> = pts(v, *closed).into_iter().map(|q| q + off).collect();
                 // A tiny closed shape (a dot): a stroke wider than the shape folds into junk, so
@@ -375,7 +372,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
                     fan(p, &v, col);
                 }
                 let st = Stroke::new(w(it) + extra, col);
-                safe_line(p, &v, st);
+                p.add(Shape::line(v.clone(), st));
                 for q in [v.first(), v.last()].into_iter().flatten() {
                     p.circle_filled(*q, st.width / 2.0, col);
                 }
@@ -383,7 +380,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
         }
     }
     // Body
-    for it in items.iter().filter(|i| !i.crease) {
+    for it in items.iter() {
         for (v, closed) in &it.subs {
             let v = pts(v, *closed);
             let bb = egui::Rect::from_points(&v);
@@ -395,125 +392,20 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
                 fan(p, &v, fill);
             } else {
                 let st = Stroke::new(w(it), fill);
-                safe_line(p, &v, st);
+                p.add(Shape::line(v.clone(), st));
                 for q in [v.first(), v.last()].into_iter().flatten() {
                     p.circle_filled(*q, st.width / 2.0, fill);
                 }
             }
         }
     }
-    // Creases on top, in the edge's colour
-    for it in items.iter().filter(|i| i.crease) {
-        for (v, closed) in &it.subs {
-            let v = pts(v, *closed);
-            let st = Stroke::new(w(it) * 0.75, ink);
-            safe_line(p, &v, st);
-            for q in [v.first(), v.last()].into_iter().flatten() {
-                p.circle_filled(*q, st.width / 2.0, ink);
-            }
-        }
-    }
 }
 
-/// A polyline that never spikes: it's split wherever it turns back sharply (a pointed join
-/// there shoots out across the screen), with a round cap at each split
-fn safe_line(p: &egui::Painter, v: &[Pos2], st: Stroke) {
-    let mut run: Vec<Pos2> = Vec::new();
-    for (i, &q) in v.iter().enumerate() {
-        if run.last().is_some_and(|l| (*l - q).length() < 1e-3) {
-            continue;
-        }
-        run.push(q);
-        let sharp = run.len() >= 2 && v.get(i + 1).is_some_and(|&n| {
-            let (a, b) = ((q - run[run.len() - 2]).normalized(), (n - q).normalized());
-            a.dot(b) < -0.3
-        });
-        if sharp {
-            p.add(Shape::line(std::mem::take(&mut run), st));
-            p.circle_filled(q, st.width / 2.0, st.color);
-            run.push(q);
-        }
+/// Fills a (star-shaped) polygon as a fan of triangles from its first point
+fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
+    for i in 1..v.len().saturating_sub(1) {
+        p.add(Shape::convex_polygon(vec![v[0], v[i], v[i + 1]], col, Stroke::NONE));
     }
-    if run.len() >= 2 {
-        p.add(Shape::line(run, st));
-    }
-}
-
-/// Fills a simple polygon (concave ones too, like a hand) by clipping ears; whatever can't be
-/// clipped (an outline folded mid-morph) falls back to a fan from its first point
-pub(crate) fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
-    // A plain mesh (clipping ears leaves near-flat slivers, and smoothing those throws spikes
-    // across the screen), its edge smoothed by a hairline of the same colour
-    fan_mesh(p, v, col);
-    if v.len() > 2 {
-        let mut c = v.to_vec();
-        c.push(v[0]);
-        safe_line(p, &c, Stroke::new(1.0, col));
-    }
-}
-
-/// The same triangles as one plain mesh (no edge smoothing: a mid-morph outline that folds flat
-/// would otherwise shoot out spikes)
-pub(crate) fn fan_mesh(p: &egui::Painter, v: &[Pos2], col: Color32) {
-    let mut m = egui::Mesh::default();
-    for t in ears(v) {
-        let i = m.vertices.len() as u32;
-        for x in t {
-            m.colored_vertex(x, col);
-        }
-        m.add_triangle(i, i + 1, i + 2);
-    }
-    p.add(Shape::mesh(m));
-}
-
-fn ears(v: &[Pos2]) -> Vec<[Pos2; 3]> {
-    let mut out: Vec<[Pos2; 3]> = Vec::new();
-    let mut q: Vec<Pos2> = Vec::with_capacity(v.len());
-    for &x in v {
-        if q.last().map_or(true, |l: &Pos2| (*l - x).length() > 1e-3) {
-            q.push(x);
-        }
-    }
-    while q.len() > 1 && (q[0] - q[q.len() - 1]).length() <= 1e-3 {
-        q.pop();
-    }
-    let n = q.len();
-    if n < 3 {
-        return out;
-    }
-    let cross = |a: Pos2, b: Pos2, c: Pos2| (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
-    let area: f32 = (0..n).map(|i| q[i].x * q[(i + 1) % n].y - q[(i + 1) % n].x * q[i].y).sum();
-    let ccw = area > 0.0;
-    let inside = |t: [Pos2; 3], x: Pos2| {
-        let d = [cross(t[0], t[1], x), cross(t[1], t[2], x), cross(t[2], t[0], x)];
-        if ccw { d.iter().all(|v| *v > 0.0) } else { d.iter().all(|v| *v < 0.0) }
-    };
-    let mut tri = |a: Pos2, b: Pos2, c: Pos2| out.push([a, b, c]);
-    let mut idx: Vec<usize> = (0..n).collect();
-    while idx.len() > 3 {
-        let m = idx.len();
-        let ear = (0..m).find(|&i| {
-            let (a, b, c) = (q[idx[(i + m - 1) % m]], q[idx[i]], q[idx[(i + 1) % m]]);
-            let cr = cross(a, b, c);
-            if cr.abs() < 1e-6 {
-                return true; // a straight run: dropping the middle point loses nothing
-            }
-            (cr > 0.0) == ccw && !idx.iter().any(|&j| j != idx[(i + m - 1) % m] && j != idx[i] && j != idx[(i + 1) % m] && inside([a, b, c], q[j]))
-        });
-        let Some(i) = ear else {
-            for k in 1..m - 1 {
-                tri(q[idx[0]], q[idx[k]], q[idx[k + 1]]);
-            }
-            return out;
-        };
-        let (a, b, c) = (q[idx[(i + m - 1) % m]], q[idx[i]], q[idx[(i + 1) % m]]);
-        if cross(a, b, c).abs() >= 1e-6 {
-            tri(a, b, c);
-        }
-        idx.remove(i);
-    }
-    tri(q[idx[0]], q[idx[1]], q[idx[2]]);
-    out
 }
 
 /// Paints icon `name` centred on `c`, its 24-unit box `px` pixels wide
@@ -572,9 +464,7 @@ pub(crate) fn draw(p: &egui::Painter, name: &'static str, c: Pos2, px: f32, col:
 /// The pack: (name, SVG body on a 24x24 box, stroke 1.75, round caps and joins)
 const PACK: &[(&str, &str)] = &[
     ("cursor", r##"<path d="M5.5 3.5L18.5 10l-5.9 2.1L10 18z"/>"##),
-    // Pointer hands: rounded fingers on a palm, each filled; the small gaps between fingers let
-    // the dark edge show through as the finger lines
-    ("hand", r##"<rect x="7.4" y="5" width="2.3" height="10" rx="1.15"/><rect x="10.5" y="3.5" width="2.3" height="10" rx="1.15"/><rect x="13.6" y="5" width="2.3" height="9" rx="1.15"/><rect x="16.7" y="7.5" width="2.2" height="7" rx="1.1"/><path d="M7.4 11.5H18.9V15a6 6 0 0 1-6 6h-1.4a5.5 5.5 0 0 1-4.3-2.1L3.8 15.6a1.4 1.4 0 0 1 2.1-1.8L7.4 15.2z"/>"##),
+    ("hand", r##"<path d="M8 15V6.5a1.5 1.5 0 0 1 3 0V11M11 11V5a1.5 1.5 0 0 1 3 0v6M14 11V6.5a1.5 1.5 0 0 1 3 0V12M17 12V9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.7-2.3L3.9 15.9a1.5 1.5 0 0 1 2.3-1.9L8 15.5"/>"##),
     // Pointer shapes drawn in place of the native ones (ui/cursor.rs); (12, 12) sits on the pointer
     ("resize-h", r##"<path d="M4 12h16M7.5 8.5L4 12l3.5 3.5M16.5 8.5L20 12l-3.5 3.5"/>"##),
     ("resize-v", r##"<path d="M12 4v16M8.5 7.5L12 4l3.5 3.5M8.5 16.5L12 20l3.5-3.5"/>"##),
@@ -583,7 +473,7 @@ const PACK: &[(&str, &str)] = &[
     ("eraser-ring", r##"<circle cx="12" cy="12" r="7" fill="none"/>"##),
     ("crosshair", r##"<path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21"/><circle cx="12" cy="12" r="1" fill="currentColor"/>"##),
     ("text-cursor", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
-    ("grabbing", r##"<rect x="7.4" y="8" width="2.3" height="5" rx="1.15"/><rect x="10.5" y="7" width="2.3" height="6" rx="1.15"/><rect x="13.6" y="7.5" width="2.3" height="5.5" rx="1.15"/><rect x="16.7" y="9" width="2.2" height="4" rx="1.1"/><path d="M7.4 11.5H18.9V14a5 5 0 0 1-5 5h-1.6a4.5 4.5 0 0 1-3.8-2.1L5.2 14.3a1.4 1.4 0 0 1 2.2-1.7z"/>"##),
+    ("grabbing", r##"<path d="M7 10.5V8a1.5 1.5 0 0 1 3 0v1.5M10 9V7a1.5 1.5 0 0 1 3 0v2M13 9V7.5a1.5 1.5 0 0 1 3 0V10M16 10V9a1.5 1.5 0 0 1 3 0v3.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),
     ("frame", r##"<path d="M7.5 3v18M16.5 3v18M3 7.5h18M3 16.5h18"/>"##),
     ("rectangle", r##"<rect x="4" y="5" width="16" height="14" rx="2"/>"##),
     ("ellipse", r##"<circle cx="12" cy="12" r="8.5"/>"##),
