@@ -570,7 +570,12 @@ impl App {
     }
 
     pub(crate) fn input(&mut self, ctx: &egui::Context, resp: &egui::Response, rect: Rect) {
-        ALT_DOWN.store(ctx.input(|i| i.modifiers.alt), std::sync::atomic::Ordering::Relaxed);
+        // Alt over a gap of an evenly spaced selection belongs to the gap handles (Alt-drag spreads
+        // from the centre), so nothing measures to what's behind it
+        let in_gap = matches!(self.drag, Drag::None)
+            && self.tool == Tool::Select
+            && ctx.input(|i| i.pointer.hover_pos()).is_some_and(|h| self.in_gap_zone(self.view(rect).w(h)));
+        ALT_DOWN.store(ctx.input(|i| i.modifiers.alt) && !in_gap, std::sync::atomic::Ordering::Relaxed);
         CTRL_DOWN.store(ctx.input(|i| i.modifiers.command), std::sync::atomic::Ordering::Relaxed);
         PTR_SPEED.store(ctx.input(|i| i.pointer.velocity().length()).to_bits(), std::sync::atomic::Ordering::Relaxed);
         let (press, pos, hover, scroll_delta, zoom_delta, ctrl, space) = ctx.input(|i| {

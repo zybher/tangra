@@ -62,6 +62,21 @@ impl App {
         Some((run, i))
     }
 
+    /// The point is inside one of the selection's gaps (the space between two neighbours, across
+    /// the part where they face each other), with the handles' slack
+    pub(crate) fn in_gap_zone(&self, w: Pt) -> bool {
+        let Some(run) = self.gap_run() else { return false };
+        let (a, c) = (run.axis, 1 - run.axis);
+        let pad = 5.0 / self.board.camera.zoom.max(0.01);
+        let p = [w.x, w.y];
+        run.items.windows(2).any(|q| {
+            let (r0, r1) = (q[0].1, q[1].1);
+            let (lo, hi) = (r0[c].max(r1[c]), (r0[c] + r0[c + 2]).min(r1[c] + r1[c + 2]));
+            let (lo, hi) = if hi > lo { (lo, hi) } else { (r0[c].min(r1[c]), (r0[c] + r0[c + 2]).max(r1[c] + r1[c + 2])) };
+            p[a] >= r0[a] + r0[a + 2] - pad && p[a] <= r1[a] + pad && p[c] >= lo && p[c] <= hi
+        })
+    }
+
     /// Start a bulk-gap drag; frames' contents are collected so they travel with them
     pub(crate) fn begin_gap_drag(&mut self, run: GapRun, idx: usize, w: Pt) {
         let mut follow = Vec::new();
