@@ -207,7 +207,7 @@ fn flat_outline(bx: [f32; 4], rd: f32) -> Vec<(f32, f32)> {
     out
 }
 
-/// A soft shadow under a convex outline (screen points): stacked faint copies grown and shrunk
+/// A soft shadow under a convex outline (screen points): one mesh fading out across its edge,
 /// around its edge, matching the flat pictures' `Shadow` (offset, blur, darkness)
 pub(crate) fn soft_shadow(p: &egui::Painter, pts: &[Pos2], offset: egui::Vec2, blur: f32, alpha: f32) {
     let mut q: Vec<Pos2> = Vec::new();
@@ -236,19 +236,24 @@ pub(crate) fn soft_shadow(p: &egui::Painter, pts: &[Pos2], offset: egui::Vec2, b
             if v.is_finite() { v } else { (q[i].to_vec2() - c).normalized() }
         })
         .collect();
-    const L: usize = 8;
-    let a = 1.0 - (1.0 - alpha).powf(1.0 / L as f32);
-    let col = Color32::from_black_alpha((a * 255.0).round() as u8);
-    for l in 0..L {
-        let d = blur * ((l as f32 + 0.5) / L as f32 - 0.5);
-        let mut m = Mesh::default();
-        m.colored_vertex(c.to_pos2(), col);
-        for (pt, nn) in q.iter().zip(&normals) {
-            m.colored_vertex(*pt + *nn * d, col);
-        }
-        for i in 0..n as u32 {
-            m.add_triangle(0, 1 + i, 1 + (i + 1) % n as u32);
-        }
-        p.add(egui::Shape::mesh(m));
+    // One mesh: solid inside the edge pulled in by half the blur, fading to clear at the edge
+    // pushed out by half the blur (colours blend between, so no steps and no jagged layers)
+    let col = Color32::from_black_alpha((alpha * 255.0).round() as u8);
+    let half = blur / 2.0;
+    let mut m = Mesh::default();
+    m.colored_vertex(c.to_pos2(), col);
+    for (pt, nn) in q.iter().zip(&normals) {
+        m.colored_vertex(*pt - *nn * half, col);
     }
+    for (pt, nn) in q.iter().zip(&normals) {
+        m.colored_vertex(*pt + *nn * half, Color32::TRANSPARENT);
+    }
+    let n = n as u32;
+    for i in 0..n {
+        let (a, b) = (1 + i, 1 + (i + 1) % n);
+        m.add_triangle(0, a, b);
+        m.add_triangle(a, b, b + n);
+        m.add_triangle(a, b + n, a + n);
+    }
+    p.add(egui::Shape::mesh(m));
 }
