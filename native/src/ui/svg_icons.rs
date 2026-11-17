@@ -572,8 +572,9 @@ pub(crate) fn draw(p: &egui::Painter, name: &'static str, c: Pos2, px: f32, col:
 /// The pack: (name, SVG body on a 24x24 box, stroke 1.75, round caps and joins)
 const PACK: &[(&str, &str)] = &[
     ("cursor", r##"<path d="M5.5 3.5L18.5 10l-5.9 2.1L10 18z"/>"##),
-    // Pointer hands: one closed outline (filled like the arrow), finger gaps as creases
-    ("hand", r##"<path d="M8 15.5V6.5a1.5 1.5 0 0 1 3 0V5a1.5 1.5 0 0 1 3 0V6.5a1.5 1.5 0 0 1 3 0V9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.7-2.3L3.9 15.9a1.5 1.5 0 0 1 2.3-1.9L8 15.5z"/><path class="crease" d="M11 6.5V11M14 6.5V11M17 9.5V12"/>"##),
+    // Pointer hands: rounded fingers on a palm, each filled; the small gaps between fingers let
+    // the dark edge show through as the finger lines
+    ("hand", r##"<rect x="7.4" y="5" width="2.3" height="10" rx="1.15"/><rect x="10.5" y="3.5" width="2.3" height="10" rx="1.15"/><rect x="13.6" y="5" width="2.3" height="9" rx="1.15"/><rect x="16.7" y="7.5" width="2.2" height="7" rx="1.1"/><path d="M7.4 11.5H18.9V15a6 6 0 0 1-6 6h-1.4a5.5 5.5 0 0 1-4.3-2.1L3.8 15.6a1.4 1.4 0 0 1 2.1-1.8L7.4 15.2z"/>"##),
     // Pointer shapes drawn in place of the native ones (ui/cursor.rs); (12, 12) sits on the pointer
     ("resize-h", r##"<path d="M4 12h16M7.5 8.5L4 12l3.5 3.5M16.5 8.5L20 12l-3.5 3.5"/>"##),
     ("resize-v", r##"<path d="M12 4v16M8.5 7.5L12 4l3.5 3.5M8.5 16.5L12 20l3.5-3.5"/>"##),
@@ -582,7 +583,7 @@ const PACK: &[(&str, &str)] = &[
     ("eraser-ring", r##"<circle cx="12" cy="12" r="7" fill="none"/>"##),
     ("crosshair", r##"<path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21"/><circle cx="12" cy="12" r="1" fill="currentColor"/>"##),
     ("text-cursor", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
-    ("grabbing", r##"<path d="M7 11V8a1.5 1.5 0 0 1 3 0V7a1.5 1.5 0 0 1 3 0V7.5a1.5 1.5 0 0 1 3 0V9a1.5 1.5 0 0 1 3 0V12.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11z"/><path class="crease" d="M10 8V9.5M13 7.5V9M16 9V10M7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),
+    ("grabbing", r##"<rect x="7.4" y="8" width="2.3" height="5" rx="1.15"/><rect x="10.5" y="7" width="2.3" height="6" rx="1.15"/><rect x="13.6" y="7.5" width="2.3" height="5.5" rx="1.15"/><rect x="16.7" y="9" width="2.2" height="4" rx="1.1"/><path d="M7.4 11.5H18.9V14a5 5 0 0 1-5 5h-1.6a4.5 4.5 0 0 1-3.8-2.1L5.2 14.3a1.4 1.4 0 0 1 2.2-1.7z"/>"##),
     ("frame", r##"<path d="M7.5 3v18M16.5 3v18M3 7.5h18M3 16.5h18"/>"##),
     ("rectangle", r##"<rect x="4" y="5" width="16" height="14" rx="2"/>"##),
     ("ellipse", r##"<circle cx="12" cy="12" r="8.5"/>"##),

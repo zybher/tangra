@@ -134,7 +134,9 @@ pub(crate) fn draw(p: &egui::Painter, from: &Pose, to: &Pose, at: Pos2, rot: f32
             let rev: f32 = sa.pts.iter().zip(sb.pts.iter().rev()).map(|(x, y)| (*x - *y).length()).sum();
             let tb: Vec<Pos2> = if rev < fwd { sb.pts.iter().rev().copied().collect() } else { sb.pts.clone() };
             let pts = sa.pts.iter().zip(&tb).map(|(x, y)| *x + (*y - *x) * t).collect();
-            let filled = if sa.filled { 1.0 - t } else { 0.0 } + if sb.filled { t } else { 0.0 };
+            // The old fill fades out over the first half and the new one in over the second, so
+            // the folded in-between outline is never filled (it would flash as a white blob)
+            let filled = if sa.filled { (1.0 - 2.0 * t).max(0.0) } else { 0.0 } + if sb.filled { (2.0 * t - 1.0).max(0.0) } else { 0.0 };
             (pts, filled)
         })
         .collect();
