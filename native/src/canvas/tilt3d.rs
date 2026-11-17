@@ -98,7 +98,8 @@ impl Tilt {
 
     /// The tilted picture with rounded corners (`rd`: world units), in screen space: rings
     /// shrinking from the rounded outline to the centre, fine enough to stay perspective-correct
-    pub fn mesh_rounded(&self, bx: [f32; 4], rd: f32, to_screen: impl Fn(f32, f32) -> Pos2, tex: TextureId, tint: Color32) -> Mesh {
+    /// `feather`: width (screen points) of the soft outer edge, one device pixel
+    pub fn mesh_rounded(&self, bx: [f32; 4], rd: f32, feather: f32, to_screen: impl Fn(f32, f32) -> Pos2, tex: TextureId, tint: Color32) -> Mesh {
         if rd <= 0.0 {
             return self.mesh(bx, to_screen, tex, tint);
         }
@@ -129,6 +130,37 @@ impl Tilt {
                 m.indices.extend_from_slice(&[a, c, b, b, c, d]);
             }
         }
+        // Soft outer edge: a strip fading to clear just outside the outline (the mesh itself has
+        // no edge smoothing). Directions skip points sitting on top of each other.
+        let outer: Vec<(Pos2, egui::Pos2)> = (0..n).map(|k| { let v = m.vertices[at(N, k) as usize]; (v.pos, v.uv) }).collect();
+        let c = m.vertices[0].pos;
+        let near = |k: usize, step: isize| {
+            let mut j = k as isize;
+            for _ in 0..n {
+                j = (j + step).rem_euclid(n as isize);
+                if (outer[j as usize].0 - outer[k].0).length() > 0.5 {
+                    return outer[j as usize].0;
+                }
+            }
+            outer[k].0
+        };
+        let base = m.vertices.len() as u32;
+        for k in 0..n as usize {
+            let t = near(k, 1) - near(k, -1);
+            let mut nn = egui::vec2(t.y, -t.x).normalized();
+            if nn.dot(outer[k].0 - c) < 0.0 {
+                nn = -nn;
+            }
+            if !nn.is_finite() {
+                nn = (outer[k].0 - c).normalized();
+            }
+            m.vertices.push(egui::epaint::Vertex { pos: outer[k].0 + nn * feather, uv: outer[k].1, color: Color32::TRANSPARENT });
+        }
+        for k in 0..n {
+            let (a, b) = (at(N, k), at(N, k + 1));
+            let (oa, ob) = (base + k, base + (k + 1) % n);
+            m.indices.extend_from_slice(&[a, b, ob, a, ob, oa]);
+        }
         m
     }
 
@@ -154,7 +186,7 @@ impl Tilt {
 /// straight edges are split too so the tilted mesh stays fine everywhere
 fn flat_outline(bx: [f32; 4], rd: f32) -> Vec<(f32, f32)> {
     use std::f32::consts::{FRAC_PI_2, PI};
-    const ARC: u32 = 8;
+    const ARC: u32 = 24;
     const EDGE: u32 = 12;
     let [x, y, w, h] = bx;
     let r = rd.min(w / 2.0).min(h / 2.0).max(0.0);
@@ -180,11 +212,11 @@ fn flat_outline(bx: [f32; 4], rd: f32) -> Vec<(f32, f32)> {
 pub(crate) fn soft_shadow(p: &egui::Painter, pts: &[Pos2], offset: egui::Vec2, blur: f32, alpha: f32) {
     let mut q: Vec<Pos2> = Vec::new();
     for &pt in pts {
-        if q.last().map_or(true, |l: &Pos2| (*l - pt).length() > 0.25) {
+        if q.last().map_or(true, |l: &Pos2| (*l - pt - offset).length() > 1.0) {
             q.push(pt + offset);
         }
     }
-    if q.len() > 2 && (q[0] - q[q.len() - 1]).length() <= 0.25 {
+    if q.len() > 2 && (q[0] - q[q.len() - 1]).length() <= 1.0 {
         q.pop();
     }
     if q.len() < 3 {
@@ -200,7 +232,8 @@ pub(crate) fn soft_shadow(p: &egui::Painter, pts: &[Pos2], offset: egui::Vec2, b
                 let nn = egui::vec2(d.y, -d.x);
                 if nn.dot(a.lerp(b, 0.5).to_vec2() - c) < 0.0 { -nn } else { nn }
             };
-            (e(q[(i + n - 1) % n], q[i]) + e(q[i], q[(i + 1) % n])).normalized()
+            let v = (e(q[(i + n - 1) % n], q[i]) + e(q[i], q[(i + 1) % n])).normalized();
+            if v.is_finite() { v } else { (q[i].to_vec2() - c).normalized() }
         })
         .collect();
     const L: usize = 8;
@@ -208,7 +241,14 @@ pub(crate) fn soft_shadow(p: &egui::Painter, pts: &[Pos2], offset: egui::Vec2, b
     let col = Color32::from_black_alpha((a * 255.0).round() as u8);
     for l in 0..L {
         let d = blur * ((l as f32 + 0.5) / L as f32 - 0.5);
-        let poly: Vec<Pos2> = q.iter().zip(&normals).map(|(p, nn)| *p + *nn * d).collect();
-        p.add(egui::Shape::convex_polygon(poly, col, egui::Stroke::NONE));
+        let mut m = Mesh::default();
+        m.colored_vertex(c.to_pos2(), col);
+        for (pt, nn) in q.iter().zip(&normals) {
+            m.colored_vertex(*pt + *nn * d, col);
+        }
+        for i in 0..n as u32 {
+            m.add_triangle(0, 1 + i, 1 + (i + 1) % n as u32);
+        }
+        p.add(egui::Shape::mesh(m));
     }
 }

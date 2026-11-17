@@ -190,7 +190,7 @@ impl App {
             let draw_tex = |tex: &egui::TextureHandle, tint: Color32| {
                 if let Some(t) = &tilt {
                     // rounded corners turn with the picture (rd is screen px, the mesh wants world)
-                    p.add(egui::Shape::mesh(t.mesh_rounded([img.x, img.y, img.width, img.height], rd / z.max(1e-6), |x, y| v.s(x, y), tex.id(), tint)));
+                    p.add(egui::Shape::mesh(t.mesh_rounded([img.x, img.y, img.width, img.height], rd / z.max(1e-6), 1.0 / p.ctx().pixels_per_point(), |x, y| v.s(x, y), tex.id(), tint)));
                 } else if let Some(poly) = &cut {
                     p.add(egui::Shape::mesh(super::round_clip::textured_poly(poly, r, tex.id(), tint)));
                 } else if rd > 0.0 {
