@@ -268,9 +268,11 @@ impl App {
         let moving = gw != tw || gh != th;
         ctx.data_mut(|d| d.insert_temp(sid, show && !moving));
         let shape = Rect::from_min_size(tab.min, vec2(gw, gh));
-        let pa = k.min(1.0);
+        let m = ((gw - tab.width()) / (full.x - tab.width()).max(1.0)).clamp(0.0, 1.0);
+        // The rows (scope switch, search, list) fade out before the card closes over them and in
+        // once it has opened enough, so nothing gets cut off by its shrinking edge
+        let pa = k.min(1.0) * ((m - 0.3) / 0.5).clamp(0.0, 1.0).powi(2);
         if k > 0.01 || tk > 0.01 || moving {
-            let m = ((gw - tab.width()) / (full.x - tab.width()).max(1.0)).clamp(0.0, 1.0);
             let rr = 12.0 + (10.0 - 12.0) * m;
             let rnd = Rounding { nw: 0.0, sw: 0.0, ne: rr, se: rr };
             let al = (k + tk).min(1.0);
@@ -300,11 +302,20 @@ impl App {
                     } else {
                         0.0
                     };
-                    if ta > 0.01 {
+                    {
+                        let _ = ta;
                         let p = p.with_clip_rect(shape);
-                        let col = mix(TEXT_DIM, Color32::from_gray(235), h).gamma_multiply(ta);
-                        sidebar_glyph(&p, gc, col);
-                        p.text(pos2(gc.x + 16.0, br.center().y), Align2::LEFT_CENTER, "Outline", FontId::proportional(13.0), col);
+                        // header spots (panel open): title at its left, toggle at its right
+                        let xh: f32 = ui.ctx().data(|d| d.get_temp(egui::Id::new("qd_outline_xh"))).unwrap_or(0.0);
+                        let lerp = |a: f32, b: f32| a + (b - a) * m;
+                        let y = br.center().y;
+                        let glyph = pos2(lerp(gc.x, tab.min.x + width() - 19.0), y);
+                        let title = pos2(lerp(gc.x + 16.0, tab.min.x + 12.0), y);
+                        let tab_col = mix(TEXT_DIM, Color32::from_gray(235), h);
+                        let gcol = mix(TEXT_DIM, Color32::from_gray(235), lerp(h, xh)).gamma_multiply(al);
+                        let tcol = mix(tab_col, Color32::from_gray(230), m).gamma_multiply(al);
+                        sidebar_glyph(&p, glyph, gcol);
+                        p.text(title, Align2::LEFT_CENTER, "Outline", FontId::proportional(lerp(13.0, 12.5)), tcol);
                     }
                 });
             if (k > 0.001 && k < 0.999) || (tk > 0.001 && tk < 0.999) || moving {
@@ -445,13 +456,12 @@ impl App {
                     // Header: title, scope switch, close
                     let (hr, _) = ui.allocate_exact_size(vec2(W - 12.0, 28.0), Sense::hover());
                     let p = ui.painter().clone();
-                    p.text(pos2(hr.min.x + 6.0, hr.center().y), Align2::LEFT_CENTER, "Outline", FontId::proportional(12.5), Color32::from_gray(230));
                     let mut x = hr.max.x - 24.0;
                     let xr = Rect::from_min_size(pos2(x, hr.min.y + 3.0), vec2(22.0, 22.0));
                     let xresp = ui.interact(xr, egui::Id::new("qd_outline_x"), Sense::click()).on_hover_text("Collapse");
                     let (xh, xp) = hover_fx(ctx, &xresp, true);
                     p.rect_filled(xr.expand(1.5 * xh - xp), 6.0, hover_fill(xh, xp));
-                    sidebar_glyph(&p, xr.center(), mix(TEXT_DIM, Color32::from_gray(235), xh));
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_xh"), xh));
                     close |= xresp.clicked();
                     let _ = x;
                     // Scope switch under the title: one shared track, a pill slides to the active half
