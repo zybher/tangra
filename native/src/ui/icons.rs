@@ -25,6 +25,8 @@ pub(crate) fn kind_icon(p: &egui::Painter, k: Kind, ic: Pos2, icol: Color32) {
 /// Same, with drawings shown by the tool that made them (`Stroke::tool_kind`)
 pub(crate) fn kind_icon_named(p: &egui::Painter, k: Kind, tool: Option<&'static str>, ic: Pos2, icol: Color32) {
     let name = match k {
+        // a pen line shows the toolbar's Pen icon (the pencil), not the nib
+        Kind::Stroke if tool == Some("pen") => "pencil",
         Kind::Stroke if tool.is_some() => tool.unwrap_or("pencil"),
         Kind::Group => "frame",
         Kind::Image => "image",

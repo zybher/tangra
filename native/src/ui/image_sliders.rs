@@ -123,7 +123,7 @@ impl App {
                     if live && resp.dragged() {
                         now_drag = Some(i);
                         let v0: f32 = ctx.data(|d| d.get_temp(bid.with(("iv0", f)))).unwrap_or(v);
-                        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+                        let dx = super::scrub_wrap::dx(&ctx);
                         let nv = (v0 + dx * per_px).round().clamp(lo, hi);
                         if nv != v || resp.drag_started() {
                             self.set_image_edit(f, nv, resp.drag_started());

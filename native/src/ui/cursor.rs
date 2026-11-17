@@ -64,7 +64,8 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let ak = anim_k();
     let now = ctx.input(|i| i.time);
     let st = match ctx.data(|d| d.get_temp::<St>(sid)) {
-        Some(s) if ak > 0.0 => {
+        // (a scrub wrapping round the screen jumps straight there: scrub_wrap.rs)
+        Some(s) if ak > 0.0 && (at - s.pos).length() < 400.0 => {
             let pos = s.pos + (at - s.pos) * (1.0 - (-dt * FOLLOW / ak).exp());
             let vx = (pos.x - s.pos.x) / dt;
             let target = MAX_TILT * sh.lean * (vx / TILT_SPEED).tanh();

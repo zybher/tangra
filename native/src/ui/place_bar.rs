@@ -425,7 +425,7 @@ impl App {
                     }
                     if resp.dragged() {
                         let v0: f32 = ctx.data(|d| d.get_temp(bid.with("v0"))).unwrap_or(opacity);
-                        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+                        let dx = super::scrub_wrap::dx(&ctx);
                         scrub = Some((v0 + dx * 0.5).round().clamp(0.0, 100.0));
                     }
                 }
@@ -450,7 +450,7 @@ impl App {
                     }
                     if resp.dragged() {
                         let v0: f32 = ctx.data(|d| d.get_temp(bid.with("c0"))).unwrap_or(corner);
-                        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+                        let dx = super::scrub_wrap::dx(&ctx);
                         cscrub = Some((v0 + dx * 0.5).round().clamp(0.0, 400.0));
                     }
                 }

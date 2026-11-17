@@ -46,6 +46,12 @@ pub struct Stroke {
     /// Loops cut out with the lasso, as fractions of its box (canvas/holes.rs)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub erase_loops: Vec<Vec<[f32; 2]>>,
+    /// Arrows only: head style (canvas/arrow_mesh.rs: 0 line, 1 triangle, 2 reversed, 3 circle, 4 diamond)
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub tip: u8,
+    /// Arrows only: line ends (0 round, 1 square)
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub cap: u8,
 }
 
 fn is_zero(v: &f32) -> bool {
@@ -374,7 +380,7 @@ impl Board {
             font_size: 13.0,
             z_index: self.group_cards.len() as f64 + 1.0,
             clip: false,
-            square: false,
+            square: true,
             layout: 0,
             layout_unit: 0.0,
             corner: None,

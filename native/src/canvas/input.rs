@@ -183,8 +183,9 @@ impl App {
                 };
                 self.shape_anchor = (first, head);
                 let shape = matches!(self.tool, Tool::Rect | Tool::Ellipse);
-                // A shape drawn inside a frame starts as a plain fill, no outline
-                let in_frame = shape && target.is_none() && self.board.group_cards.iter().any(|g| w.x >= g.x && w.x <= g.x + g.width && w.y >= g.y && w.y <= g.y + g.height);
+                // On the board or in a frame a shape takes the tool's style (a plain fill by
+                // default); on a picture it's an annotation, an outline
+                let on_pic = target.is_some();
                 self.active = Some((
                     target,
                     Stroke {
@@ -194,8 +195,8 @@ impl App {
                         width: if hl { self.pen_width * 3.5 } else { self.pen_width },
                         opacity: Some(if hl { 0.35 } else { 1.0 }),
                         created_at: now_ms(),
-                        fill: shape && (in_frame || self.shape_fill > 0),
-                        no_stroke: shape && (in_frame || self.shape_fill == 2),
+                        fill: shape && !on_pic && self.shape_fill > 0,
+                        no_stroke: shape && !on_pic && self.shape_fill == 2,
                         pixelate: false,
                         radius: None,
                         stroke_pos: if shape { 1 } else { 0 },

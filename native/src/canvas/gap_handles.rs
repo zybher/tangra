@@ -90,9 +90,14 @@ impl App {
         let raw = (gap0 + d).max(0.0).round();
         // Lay the row out with gap `g` (returns new [x, y, w, h] per item)
         // Shift: only the grabbed gap changes (everything after it slides), others keep theirs
+        // Alt: the row grows / shrinks evenly out from its centre instead of from its first item
         let one = self.shift;
+        let mid = ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed) && !one;
+        let (first, last) = (items[0].1, items[items.len() - 1].1);
+        let centre = (first[axis] + last[axis] + last[axis + 2]) / 2.0;
+        let sizes: f32 = items.iter().map(|(_, r)| r[axis + 2]).sum();
         let layout = |g: f32| -> Vec<[f32; 4]> {
-            let mut pos = items[0].1[axis];
+            let mut pos = if mid { centre - (sizes + g * (items.len() - 1) as f32) / 2.0 } else { items[0].1[axis] };
             items
                 .iter()
                 .enumerate()
@@ -194,7 +199,8 @@ impl App {
     /// Handles plus the gap number; hovering lights up the gap and shows a resize cursor
     pub(crate) fn paint_gap_handles(&self, p: &egui::Painter, v: View, hover: Option<Pos2>) {
         let dragging = matches!(self.drag, Drag::Gap { .. });
-        let allowed = (dragging || matches!(self.drag, Drag::None)) && !ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed);
+        // Alt hides them (it measures instead), except mid-drag where it spreads from the centre
+        let allowed = dragging || (matches!(self.drag, Drag::None) && !ALT_DOWN.load(std::sync::atomic::Ordering::Relaxed));
         let run = if allowed { self.gap_run() } else { None };
         // Handles fade and grow in when an evenly spaced run is selected
         let show = p.ctx().animate_bool_with_time(egui::Id::new("qd_gap_show"), run.is_some(), 0.12 * anim_k());

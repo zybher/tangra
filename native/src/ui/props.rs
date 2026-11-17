@@ -30,6 +30,9 @@ enum PAct {
     Dist(bool),
     Color(String),
     StrokePos(u8),
+    /// arrow head style / line ends (canvas/arrow_mesh.rs)
+    Tip(u8),
+    Cap(u8),
     Edit(u8, f32, bool),
     Reset(u8),
 }
@@ -87,7 +90,7 @@ fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: 
     }
     if resp.dragged() {
         let v0: f32 = ctx.data(|d| d.get_temp(id.with("v0"))).unwrap_or(val);
-        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+        let dx = super::scrub_wrap::dx(&ctx);
         let nv = (v0 + dx * per_px).round().clamp(lo, hi);
         if nv != val || resp.drag_started() {
             out = Some((nv, resp.drag_started()));
@@ -204,6 +207,7 @@ impl App {
         let mut spos: Option<u8> = None;
         let mut tsize: Option<f32> = None;
         let mut edit: Option<ImageEdit> = None;
+        let mut arrow: Option<(u8, u8)> = None;
         let title = match kind {
             Kind::Group => {
                 if let Some(g) = self.board.group_cards.iter().find(|g| g.id == id) {
@@ -221,6 +225,9 @@ impl App {
                         corner = Some(st.radius.unwrap_or(0.0));
                     }
                     stroke_w = Some(("width", st.width, 0.5, 500.0, 0.2));
+                    if st.tool_kind() == "arrow" {
+                        arrow = Some((st.tip, st.cap));
+                    }
                     if st.closed_len().is_some() {
                         spos = Some(st.stroke_pos);
                     }
@@ -500,6 +507,55 @@ impl App {
                         }
                     }
 
+                    // Arrow: head style and line ends
+                    if let (true, Some((tip, cap))) = (design, arrow) {
+                        head(ui, &mut row, "Arrow", first);
+                        let (r, a) = row(ui, 30.0);
+                        let names = crate::canvas::arrow_mesh::TIPS;
+                        let cw = r.width() / names.len() as f32;
+                        for (j, name) in names.into_iter().enumerate() {
+                            let br = Rect::from_min_size(pos2(r.min.x + j as f32 * cw, r.min.y), vec2(cw, r.height())).shrink2(vec2(1.5, 0.0));
+                            let resp = ui.interact(br, bid.with(("tip", j)), Sense::click()).on_hover_text(name);
+                            let on = j as u8 == tip;
+                            let (hh, pp) = hover_fx(ctx, &resp, !on);
+                            let onk = ease(ctx, bid.with(("tip_on", j)), on);
+                            let p = ui.painter();
+                            p.rect_filled(br, 6.0, hover_fill(hh, pp).gamma_multiply(a));
+                            p.rect_filled(br, 6.0, Color32::from_white_alpha((22.0 * onk * a) as u8));
+                            // the head itself, drawn small
+                            let c = br.center();
+                            let (t0, t1) = (c - vec2(9.0, 0.0), c + vec2(9.0, 0.0));
+                            let gl = [t0, t1, t1 + vec2(-5.5, -3.6), t1, t1 + vec2(-5.5, 3.6)];
+                            let col = mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a);
+                            p.add(crate::canvas::arrow_mesh::arrow(&gl, 1.6, j as u8, cap, col, ctx.pixels_per_point()));
+                            if resp.clicked() && !on {
+                                out.push(PAct::Tip(j as u8));
+                            }
+                        }
+                        gap(ui);
+                        // Round / square ends: a pill slides to the picked one
+                        let (r, a) = row(ui, FH);
+                        let at = ctx.animate_value_with_time(bid.with("cap_k"), cap as f32, 0.2 * anim_k());
+                        let p = ui.painter();
+                        p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                        let half = r.width() / 2.0;
+                        p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * half, r.min.y + 2.0), vec2(half - 4.0, r.height() - 4.0)), 5.0, Color32::from_white_alpha((22.0 * a) as u8));
+                        for (j, name) in ["Round ends", "Square ends"].into_iter().enumerate() {
+                            let br = Rect::from_min_size(pos2(r.min.x + j as f32 * half, r.min.y), vec2(half, r.height()));
+                            let resp = ui.interact(br, bid.with(("cap", j)), Sense::click());
+                            let on = j as u8 == cap;
+                            let (hh, pp) = hover_fx(ctx, &resp, !on);
+                            if !on {
+                                ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
+                            }
+                            let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
+                            ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a));
+                            if resp.clicked() && !on {
+                                out.push(PAct::Cap(j as u8));
+                            }
+                        }
+                    }
+
                     // Text size
                     if let Some(ts) = tsize {
                         head(ui, &mut row, "Text", first);
@@ -565,6 +621,21 @@ impl App {
                     }
                     if let Some(r) = self.rect_of(kind, &id) {
                         self.set_rect(kind, &id, [r[0], r[1], w, h]);
+                    }
+                    dirty = true;
+                }
+                PAct::Tip(v) | PAct::Cap(v) => {
+                    self.snapshot();
+                    let tip = matches!(act, PAct::Tip(_));
+                    let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == Kind::Stroke).map(|s| s.1.clone()).chain(std::iter::once(id.clone())).collect();
+                    let b = &mut self.board;
+                    let strokes = b.world_strokes.iter_mut().chain(b.images.iter_mut().flat_map(|i| i.annotations.strokes.iter_mut()));
+                    for st in strokes.filter(|st| ids.contains(&st.id) && st.tool_kind() == "arrow") {
+                        if tip {
+                            st.tip = v;
+                        } else {
+                            st.cap = v;
+                        }
                     }
                     dirty = true;
                 }

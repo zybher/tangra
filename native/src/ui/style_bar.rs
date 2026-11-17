@@ -480,7 +480,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     }
                     if resp.dragged() {
                         let v0: f32 = ctx.data(|d| d.get_temp(id.with("v0"))).unwrap_or(val);
-                        let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
+                        let dx = super::scrub_wrap::dx(&ctx);
                         scrubbed.push((key, (v0 + dx * per_px).round().clamp(lo, hi)));
                     }
                 }

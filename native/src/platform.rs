@@ -24,6 +24,8 @@ extern "system" {
     fn IsIconic(hwnd: isize) -> i32;
     fn GetAsyncKeyState(vk: i32) -> i16;
     fn GetCursorPos(p: *mut [i32; 2]) -> i32;
+    fn SetCursorPos(x: i32, y: i32) -> i32;
+    fn GetSystemMetrics(index: i32) -> i32;
     fn ScreenToClient(hwnd: isize, p: *mut [i32; 2]) -> i32;
 }
 
@@ -101,6 +103,24 @@ pub fn cursor_client() -> Option<(f32, f32)> {
         }
     }
     Some((p[0] as f32, p[1] as f32))
+}
+
+/// Cursor in screen pixels
+pub fn cursor_screen() -> Option<(i32, i32)> {
+    let mut p = [0i32; 2];
+    (unsafe { GetCursorPos(&mut p) } != 0).then_some((p[0], p[1]))
+}
+
+pub fn set_cursor_screen(x: i32, y: i32) {
+    unsafe {
+        SetCursorPos(x, y);
+    }
+}
+
+/// Left edge and width of the whole desktop (every monitor), screen pixels
+pub fn desktop_x() -> (i32, i32) {
+    // SM_XVIRTUALSCREEN, SM_CXVIRTUALSCREEN
+    unsafe { (GetSystemMetrics(76), GetSystemMetrics(78)) }
 }
 
 fn hwnd() -> isize {

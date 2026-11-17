@@ -495,8 +495,9 @@ impl App {
             tool_sub: None,
             hand_drag: false,
             frame_size: 0,
-            shape_fill: 0,
-            frame_square: false,
+            // new shapes are a plain fill, frames sharp-cornered (shapes on a picture stay outlines)
+            shape_fill: 2,
+            frame_square: true,
             text_size: 16.0,
             text_style: 0,
             tool_sub_since: 0.0,

@@ -460,6 +460,33 @@ impl App {
                 }
                 None => paint_stroke(p, s, |q| v.s(q.x, q.y), s.width * z),
             }
+            // While it's being drawn a shape shows the selection outline, an arrow a handle at
+            // each end (where it starts and where it will point); a pen line stays plain
+            let img = target.as_ref().and_then(|id| b.images.iter().find(|i| &i.id == id));
+            let map = |q: &Pt| match img {
+                Some(i) => {
+                    let (sx, sy) = i.scale();
+                    v.s(i.x + q.x * sx, i.y + q.y * sy)
+                }
+                None => v.s(q.x, q.y),
+            };
+            let a = ease(p.ctx(), egui::Id::new("qd_draw_hl"), true);
+            let kind = s.tool_kind();
+            if kind == "arrow" {
+                for q in [&s.points[0], &s.points[1]] {
+                    let c = map(q);
+                    p.circle_filled(c, 5.0 * a, blue());
+                    p.circle_stroke(c, 5.0 * a, EStroke::new(1.5_f32 * a, Color32::WHITE));
+                }
+            } else if kind == "rectangle" || kind == "ellipse" {
+                let pts: Vec<Pos2> = s.points.iter().map(map).collect();
+                let r = Rect::from_points(&pts).shrink(0.5);
+                let round = super::geometry::outline_round(s).map_or(2.0, |r| r * z);
+                p.rect_stroke(r, round, EStroke::new(2.0_f32, blue().gamma_multiply(a)));
+            }
+        } else {
+            // so the next drawing fades its highlight in again
+            ease(p.ctx(), egui::Id::new("qd_draw_hl"), false);
         }
 
         // Hover outline (Select tool, idle): thin, no handles; fades between objects

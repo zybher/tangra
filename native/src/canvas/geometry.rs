@@ -153,17 +153,11 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
         p.add(Shape::closed_line(line, EStroke::new(width, col)));
         return;
     }
-    // Arrow (shaft, then both wings out of the tip): separate round-capped segments,
-    // a single polyline doubling back on itself tears apart at high zoom
+    // Arrow: one mesh whose pieces never overlap, so it stays one shape when see-through
+    // (arrow_mesh.rs, with its head style and line ends)
     if pts.len() == 5 && s.points[1].x == s.points[3].x && s.points[1].y == s.points[3].y {
-        let st = EStroke::new(width, col);
-        for (u, v) in [(pts[0], pts[1]), (pts[1], pts[2]), (pts[1], pts[4])] {
-            p.line_segment([u, v], st);
-            if o >= 0.99 {
-                p.circle_filled(u, width / 2.0, col);
-                p.circle_filled(v, width / 2.0, col);
-            }
-        }
+        let _ = o;
+        p.add(super::arrow_mesh::arrow(&pts, width, s.tip, s.cap, col, ctx.pixels_per_point()));
         return;
     }
     // Pen / highlighter: one smooth mesh (round caps, no seams, even when see-through)
