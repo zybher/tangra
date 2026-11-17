@@ -50,6 +50,17 @@ pub(crate) fn bar_side(ctx: &egui::Context, bid: egui::Id, fr: Rect, h: f32, rec
     top_ok
 }
 
+/// No room for the bar above or below its object (zoomed in until it fills the view): the bar
+/// docks at the top of the canvas instead, and its dropdowns always open down from there
+/// (`drop_fit`), so it sits in one predictable spot rather than squashed against an edge
+pub(crate) fn bar_dock(ctx: &egui::Context, bid: egui::Id, fr: Rect, h: f32, rect: Rect) -> bool {
+    let top_ok = fr.min.y - 32.0 - h >= rect.min.y + 50.0;
+    let bottom_ok = fr.max.y + 32.0 + h <= rect.max.y - 70.0;
+    let dock = !top_ok && !bottom_ok;
+    ctx.data_mut(|d| d.insert_temp(bid.with("dock"), dock));
+    dock
+}
+
 /// Where a bar is heading (before its glide), and whether it may move to the object's other side
 pub(crate) fn publish_target(ctx: &egui::Context, bid: egui::Id, target: Rect, can_flip: bool) {
     ctx.data_mut(|d| d.insert_temp(bid.with("target"), (target, can_flip)));
@@ -71,6 +82,9 @@ pub(crate) const WIDE: f32 = 1.15;
 
 pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, rect: Rect, w: f32) -> (usize, f32, bool) {
     let ph1 = n as f32 * PITCH + 8.0;
+    if ctx.data(|d| d.get_temp::<bool>(bid.with("dock"))).unwrap_or(false) {
+        return (1, ph1, false);
+    }
     let Some(obj) = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("qd_edit_obj"))) else {
         return (1, ph1, opens_up(ctx, bar, ph1, rect));
     };

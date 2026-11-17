@@ -291,8 +291,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let w = pad * 2.0 + segs.iter().enumerate().map(|(i, sg)| seg_ws(i, sg)).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
         // The bar keeps its side (above if there's room, else below); the size pills never push
         // it: a pill that would land on the bar's side folds into the other pill instead
-        let on_top = super::drop_anim::bar_side(&ctx, bid, fr, h, rect);
-        let cy = if on_top { fr.min.y - 32.0 - h / 2.0 } else { fr.max.y + 32.0 + h / 2.0 };
+        let dock = super::drop_anim::bar_dock(&ctx, bid, fr, h, rect);
+        let on_top = dock || super::drop_anim::bar_side(&ctx, bid, fr, h, rect);
+        let cy = if dock { rect.min.y + 16.0 + h / 2.0 } else if on_top { fr.min.y - 32.0 - h / 2.0 } else { fr.max.y + 32.0 + h / 2.0 };
         let nr = ctx.cumulative_pass_nr();
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_bar_side"), (on_top, nr)));
         let cy = cy.clamp(rect.min.y + h / 2.0 + 8.0, rect.max.y - h / 2.0 - 70.0);
@@ -302,7 +303,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let w0 = pad * 2.0 + segs.iter().map(seg_w).sum::<f32>() + dv * (segs.len() as f32 - 1.0);
         let cx0 = super::bar_morph::edge_cx(fr.center().x, rect.min.x, super::bar_morph::wall_hi(&ctx, rect.max.x, cy - h / 2.0, cy + h / 2.0), w0);
         let cx = cx0;
-        super::drop_anim::publish_target(&ctx, bid, Rect::from_center_size(pos2(cx, cy), vec2(w, h)), true);
+        super::drop_anim::publish_target(&ctx, bid, Rect::from_center_size(pos2(cx, cy), vec2(w, h)), !dock);
         let inview = cx0 >= fr.min.x && cx0 <= fr.max.x && fr.max.y > rect.min.y && fr.min.y < rect.max.y;
         // A right-click menu puts the bar away too (same exit), since both share the top layer
         // and the bar would draw over the menu
