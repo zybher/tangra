@@ -124,6 +124,7 @@ impl App {
         s.reflatten();
         paint_stroke(p, &s, |q| v.s(q.x, q.y), s.width * v.cam.zoom);
         let last = d.knots.len().checked_sub(1);
-        super::path_edit::paint_knots(p, v, &d.knots, if near_first { Some(0) } else { last });
+        let held = if d.drag { if d.closing { Some((0, 0)) } else { last.map(|j| (j, 2)) } } else { None };
+        super::path_edit::paint_knots(p, v, &d.knots, if near_first { Some(0) } else { last }, held, "pen_draft");
     }
 }

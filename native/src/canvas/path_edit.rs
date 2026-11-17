@@ -184,29 +184,62 @@ impl App {
         let Some(s) = self.board.world_strokes.iter().find(|s| s.id == e.id) else { return };
         let pts = super::path_mesh::flatten(s, &|q: Pt| v.s(q.x, q.y));
         p.add(Shape::line(pts, EStroke::new(1.5_f32, blue())));
-        paint_knots(p, v, &s.knots, e.sel);
+        paint_knots(p, v, &s.knots, e.sel, e.drag, &e.id);
     }
 }
 
-/// Points as small squares (the picked one filled), handles as dots on thin lines
-pub(crate) fn paint_knots(p: &egui::Painter, v: View, knots: &[Knot], sel: Option<usize>) {
+/// Points as small squares (the picked one filled), handles as dots on thin lines. They scale
+/// in when shown, and grow a little under the pointer / while held, eased like every hover
+/// (`ease`, as `hover_fx`); the picked point's fill fades to blue. `key` keeps each path's
+/// animations apart.
+pub(crate) fn paint_knots(p: &egui::Painter, v: View, knots: &[Knot], sel: Option<usize>, held: Option<(usize, u8)>, key: &str) {
+    let ctx = p.ctx();
     let scr = |q: Pt| v.s(q.x, q.y);
-    for k in knots {
+    let hover = ctx.pointer_hover_pos().filter(|q| p.clip_rect().contains(*q) && !ui_blocks(ctx, *q));
+    // the one thing under the pointer: points first, then handles (as path_edit_input picks)
+    let under = hover.and_then(|q| {
+        if let Some(j) = knots.iter().position(|k| scr(k.p).distance(q) < GRAB_PX) {
+            return Some((j, 0u8));
+        }
+        knots.iter().enumerate().find_map(|(j, k)| [(1u8, k.i), (2, k.o)].into_iter().find(|(_, h)| *h != k.p && scr(*h).distance(q) < GRAB_PX).map(|(h, _)| (j, h)))
+    });
+    let id = egui::Id::new(("qd_knot", key));
+    // scale in when they first show (ease's time and curve, restarted after a gap)
+    let (now, fr) = (ctx.input(|i| i.time), ctx.cumulative_pass_nr());
+    let (last, t0) = ctx.data(|d| d.get_temp::<(u64, f64)>(id.with("in"))).unwrap_or((0, now));
+    let t0 = if last + 1 < fr { now } else { t0 };
+    ctx.data_mut(|d| d.insert_temp(id.with("in"), (fr, t0)));
+    let x = ((now - t0) as f32 / (0.22 * anim_k()).max(1e-3)).clamp(0.0, 1.0);
+    if x < 1.0 {
+        ctx.request_repaint();
+    }
+    let shown = egui::emath::easing::cubic_out(x);
+    // hover / held grow, as hover_fx's two eases
+    let fx = |j: usize, h: u8| {
+        let hov = ease(ctx, id.with((j, h, "hov")), under == Some((j, h)) || held == Some((j, h)));
+        let prs = ease(ctx, id.with((j, h, "prs")), held == Some((j, h)));
+        (hov, prs)
+    };
+    for (j, k) in knots.iter().enumerate() {
         let c = scr(k.p);
-        for h in [k.i, k.o] {
-            if h != k.p {
-                let hc = scr(h);
-                p.line_segment([c, hc], EStroke::new(1.0_f32, blue()));
-                p.circle_filled(hc, 3.5, Color32::WHITE);
-                p.circle_stroke(hc, 3.5, EStroke::new(1.5_f32, blue()));
+        for (h, pt) in [(1u8, k.i), (2, k.o)] {
+            if pt != k.p {
+                let hc = c + (scr(pt) - c) * shown;
+                let (hov, prs) = fx(j, h);
+                let r = (3.5 + 1.5 * hov - 0.5 * prs) * shown;
+                p.line_segment([c, hc], EStroke::new(1.0_f32, blue().gamma_multiply(0.6 + 0.4 * hov)));
+                p.circle_filled(hc, r, mix(Color32::WHITE, blue(), prs));
+                p.circle_stroke(hc, r, EStroke::new(1.5_f32, mix(blue(), Color32::WHITE, prs)));
             }
         }
     }
     for (j, k) in knots.iter().enumerate() {
-        let r = Rect::from_center_size(scr(k.p), vec2(8.0, 8.0));
-        let on = sel == Some(j);
-        p.rect_filled(r, 1.5, if on { blue() } else { Color32::WHITE });
-        p.rect_stroke(r, 1.5, EStroke::new(1.5_f32, if on { Color32::WHITE } else { blue() }));
+        let (hov, prs) = fx(j, 0);
+        let on = ease(ctx, id.with((j, "on")), sel == Some(j));
+        let size = (8.0 + 3.0 * hov - 1.0 * prs) * shown;
+        let r = Rect::from_center_size(scr(k.p), vec2(size, size));
+        p.rect_filled(r, 1.5, mix(Color32::WHITE, blue(), on));
+        p.rect_stroke(r, 1.5, EStroke::new(1.5_f32, mix(blue(), Color32::WHITE, on)));
     }
 }
 
