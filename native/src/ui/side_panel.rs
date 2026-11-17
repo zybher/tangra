@@ -23,7 +23,7 @@ impl App {
                 // Chevron flips from up to down as the menu opens
                 let c = r.center();
                 let d = 3.0 * (1.0 - 2.0 * t);
-                let st = EStroke::new(1.4_f32, mix(TEXT_DIM, Color32::WHITE, h.max(t)));
+                let st = EStroke::new(1.4_f32, mix(txt_dim(), hi(), h.max(t)));
                 p.line_segment([pos2(c.x - 5.0, c.y + d), pos2(c.x, c.y - d)], st);
                 p.line_segment([pos2(c.x, c.y - d), pos2(c.x + 5.0, c.y + d)], st);
                 if resp.on_hover_text("Canvas colour and shortcuts").clicked() {
@@ -50,7 +50,7 @@ impl App {
         let ap_k = ctx.animate_bool_with_time_and_easing(egui::Id::new("qd_ap_k"), ap_open, 0.45 * anim_k(), egui::emath::easing::cubic_in_out);
         let am_k = ctx.animate_bool_with_time_and_easing(egui::Id::new("qd_am_k"), am_open, 0.45 * anim_k(), egui::emath::easing::cubic_in_out);
         let au_h = (1.0 - grad_row / 28.0) * (56.0 + ap_k * 66.0 + am_k * 34.0);
-        let H: f32 = 176.0 + au_h + ex_k * 56.0 + grad_row * (1.0 + gr_k * 66.0 / 28.0) + can_k * 66.0 + acc_k * 66.0 + pat_k * 64.0;
+        let H: f32 = 176.0 + au_h + ex_k * 84.0 + grad_row * (1.0 + gr_k * 66.0 / 28.0) + can_k * 66.0 + acc_k * 66.0 + pat_k * 64.0;
         let rise = (1.0 - t) * 10.0;
         let pop = Rect::from_min_size(pos2(btn.max.x - W, btn.min.y - 8.0 - H + rise), vec2(W, H));
         if toggle {
@@ -90,10 +90,10 @@ impl App {
                         let resp = ui.interact(row, egui::Id::new(id), Sense::click());
                         let (h, pr) = hover_fx(ctx, &resp, true);
                         p.rect_filled(row, 6.0, hover_fill(h, pr).gamma_multiply(t));
-                        p.text(pos2(lx, y), Align2::LEFT_CENTER, label, FontId::proportional(12.0), mix(TEXT_DIM, TEXT, h).gamma_multiply(t));
+                        p.text(pos2(lx, y), Align2::LEFT_CENTER, label, FontId::proportional(12.0), mix(txt_dim(), txt(), h).gamma_multiply(t));
                         let c = pos2(rx - 3.0, y);
                         let d = 2.5 * (1.0 - 2.0 * k);
-                        let st = EStroke::new(1.3_f32, mix(TEXT_FAINT, TEXT, h).gamma_multiply(t));
+                        let st = EStroke::new(1.3_f32, mix(txt_faint(), txt(), h).gamma_multiply(t));
                         p.line_segment([pos2(c.x - 4.0, c.y - d), pos2(c.x, c.y + d)], st);
                         p.line_segment([pos2(c.x, c.y + d), pos2(c.x + 4.0, c.y - d)], st);
                         (resp.clicked(), h)
@@ -164,7 +164,7 @@ impl App {
                             p.rect_filled(Rect::from_min_size(tl.min, vec2(tl.width(), 6.0)), Rounding { nw: 5.0, ne: 5.0, sw: 0.0, se: 0.0 }, shade(base, -10).gamma_multiply(a));
                             let bar_r = Rect::from_center_size(pos2(tl.center().x, tl.max.y - 6.0), vec2(tl.width() * 0.55, 4.0));
                             p.rect_filled(bar_r, 2.0, shade(base, 0x14).gamma_multiply(a));
-                            p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(mix(border(), TEXT_FAINT, 0.55), TEXT_DIM, h), blue(), on).gamma_multiply(a)));
+                            p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(mix(border(), txt_faint(), 0.55), txt_dim(), h), blue(), on).gamma_multiply(a)));
                             if resp.on_hover_text(*name).clicked() {
                                 THEME.store(i, std::sync::atomic::Ordering::Relaxed);
                                 retint(ctx);
@@ -190,7 +190,7 @@ impl App {
                         }
                         // Same as Pattern: name the current choice (the gradients are too subtle for a bar)
                         let gname = if on { GRAD_DIRS[cur_d % GRAD_DIRS.len()] } else { "Off" };
-                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_grad"), pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, gname, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, gh).gamma_multiply(tg));
+                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_grad"), pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, gname, FontId::proportional(11.0), mix(txt_faint(), txt(), gh).gamma_multiply(tg));
                         if gr_k > 0.001 {
                             for i in 0..=GRAD_DIRS.len() {
                                 let tp = (gr_k * 2.2 - i as f32 * 0.15).clamp(0.0, 1.0).min((ot * 2.0 - 0.3 - i as f32 * 0.08).clamp(0.0, 1.0));
@@ -207,13 +207,13 @@ impl App {
                                 let tl = tile.shrink(pr);
                                 if i == 0 {
                                     p.rect_filled(tl, 5.0, bg().gamma_multiply(a));
-                                    p.line_segment([tl.left_bottom() + vec2(6.0, -6.0), tl.right_top() + vec2(-6.0, 6.0)], EStroke::new(1.2_f32, TEXT_FAINT.gamma_multiply(a)));
+                                    p.line_segment([tl.left_bottom() + vec2(6.0, -6.0), tl.right_top() + vec2(-6.0, 6.0)], EStroke::new(1.2_f32, txt_faint().gamma_multiply(a)));
                                 } else {
                                     p.rect_filled(tl, 5.0, bg().gamma_multiply(a));
                                     let gi = tl.shrink(4.0);
                                     fill_rounded_top(&p, gi, 0.0, |q| gradient_dir_at(q, gi, i - 1).gamma_multiply(a));
                                 }
-                                p.rect_stroke(tl, 5.0, EStroke::new(1.0 + o * 0.6, mix(mix(mix(border(), TEXT_FAINT, 0.55), TEXT_DIM, h), blue(), o).gamma_multiply(a)));
+                                p.rect_stroke(tl, 5.0, EStroke::new(1.0 + o * 0.6, mix(mix(mix(border(), txt_faint(), 0.55), txt_dim(), h), blue(), o).gamma_multiply(a)));
                                 let name = if i == 0 { "No gradient" } else { GRAD_DIRS[i - 1] };
                                 if resp.on_hover_text(name).clicked() {
                                     if i == 0 {
@@ -239,7 +239,7 @@ impl App {
                         if clk {
                             ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_ap_open"), !ap_open));
                         }
-                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_pal"), pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, AURA_PALETTES[cur_p].0, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, gh).gamma_multiply(tg));
+                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_pal"), pos2(rx - 14.0, gy + dg), Align2::RIGHT_CENTER, AURA_PALETTES[cur_p].0, FontId::proportional(11.0), mix(txt_faint(), txt(), gh).gamma_multiply(tg));
                         if ap_k > 0.001 {
                             for (i, (name, cols)) in AURA_PALETTES.iter().enumerate() {
                                 let tp = (ap_k * 2.2 - i as f32 * 0.15).clamp(0.0, 1.0).min((ot * 2.0 - 0.3 - i as f32 * 0.08).clamp(0.0, 1.0));
@@ -258,7 +258,7 @@ impl App {
                                 glow(&sp, tl.left_bottom(), 16.0, rgb32(cols[0]).gamma_multiply(0.8 * a));
                                 glow(&sp, tl.center_top(), 15.0, rgb32(cols[1]).gamma_multiply(0.8 * a));
                                 glow(&sp, tl.right_bottom(), 16.0, rgb32(cols[2]).gamma_multiply(0.8 * a));
-                                p.rect_stroke(tl, 5.0, EStroke::new(1.0 + o * 0.6, mix(mix(mix(border(), TEXT_FAINT, 0.55), TEXT_DIM, h), blue(), o).gamma_multiply(a)));
+                                p.rect_stroke(tl, 5.0, EStroke::new(1.0 + o * 0.6, mix(mix(mix(border(), txt_faint(), 0.55), txt_dim(), h), blue(), o).gamma_multiply(a)));
                                 if resp.on_hover_text(*name).clicked() {
                                     AURA_PAL.store(i, std::sync::atomic::Ordering::Relaxed);
                                     self.settings.aura_palette = i as u8;
@@ -272,7 +272,7 @@ impl App {
                         if clk {
                             ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_am_open"), !am_open));
                         }
-                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_mot"), pos2(rx - 14.0, my + dg), Align2::RIGHT_CENTER, AURA_MOTIONS[cur_m].0, FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, mh).gamma_multiply(tg));
+                        super::micro::swap_text(&p, egui::Id::new("qd_sp_name_mot"), pos2(rx - 14.0, my + dg), Align2::RIGHT_CENTER, AURA_MOTIONS[cur_m].0, FontId::proportional(11.0), mix(txt_faint(), txt(), mh).gamma_multiply(tg));
                         if am_k > 0.001 {
                             let now = ctx.input(|i| i.time) as f32;
                             for (i, (name, speed, sway, breathe)) in AURA_MOTIONS.iter().enumerate() {
@@ -292,8 +292,8 @@ impl App {
                                 let tt = now * speed * 1.6;
                                 let c = tl.center() + vec2(6.0 * sway * (tt + i as f32).sin(), 4.0 * sway * (tt * 1.3 + i as f32).cos());
                                 let rr = 3.5 * (1.0 + breathe * 2.0 * (now * 2.0).sin());
-                                p.circle_filled(c, rr, mix(TEXT_DIM, TEXT, h.max(o)).gamma_multiply(a));
-                                p.rect_stroke(tl, 5.0, EStroke::new(1.0 + o * 0.6, mix(mix(mix(border(), TEXT_FAINT, 0.55), TEXT_DIM, h), blue(), o).gamma_multiply(a)));
+                                p.circle_filled(c, rr, mix(txt_dim(), txt(), h.max(o)).gamma_multiply(a));
+                                p.rect_stroke(tl, 5.0, EStroke::new(1.0 + o * 0.6, mix(mix(mix(border(), txt_faint(), 0.55), txt_dim(), h), blue(), o).gamma_multiply(a)));
                                 if resp.on_hover_text(*name).clicked() {
                                     AURA_MOT.store(i, std::sync::atomic::Ordering::Relaxed);
                                     self.settings.aura_motion = i as u8;
@@ -328,7 +328,7 @@ impl App {
                             let tl = tile.shrink(pr);
                             p.rect_filled(tl, 5.0, bg().gamma_multiply(a));
                             p.rect_filled(tl.shrink(4.0), 3.0, col.gamma_multiply(a * (0.75 + 0.25 * h.max(on))));
-                            p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(border(), TEXT_DIM, h), col, on).gamma_multiply(a)));
+                            p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(border(), txt_dim(), h), col, on).gamma_multiply(a)));
                             if resp.on_hover_text(*name).clicked() {
                                 ACCENT.store(*rgb, std::sync::atomic::Ordering::Relaxed);
                                 self.settings.accent = *rgb;
@@ -345,7 +345,7 @@ impl App {
                     if clk {
                         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_pat_open"), !pat_open));
                     }
-                    super::micro::swap_text(&p, egui::Id::new("qd_sp_name_pat"), pos2(rx - 14.0, py + d4), Align2::RIGHT_CENTER, PATTERNS[pi], FontId::proportional(11.0), mix(TEXT_FAINT, TEXT, ph).gamma_multiply(t));
+                    super::micro::swap_text(&p, egui::Id::new("qd_sp_name_pat"), pos2(rx - 14.0, py + d4), Align2::RIGHT_CENTER, PATTERNS[pi], FontId::proportional(11.0), mix(txt_faint(), txt(), ph).gamma_multiply(t));
                     if pat_k > 0.001 {
                         for i in 0..PATTERNS.len() {
                             let tp = (pat_k * 2.2 - i as f32 * 0.15).clamp(0.0, 1.0).min((ot * 2.0 - 0.3 - i as f32 * 0.08).clamp(0.0, 1.0));
@@ -360,8 +360,8 @@ impl App {
                             let on = spring(ctx, egui::Id::new(("qd_pat_on", i)), i == pi, 18.0);
                             let tl = tile.shrink(pr);
                             p.rect_filled(tl, 5.0, bg().gamma_multiply(a));
-                            p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(border(), TEXT_DIM, h), blue(), on).gamma_multiply(a)));
-                            draw_pattern(&p, tl.center(), i as u8, mix(TEXT_DIM, TEXT, h.max(on)).gamma_multiply(a), 1.4);
+                            p.rect_stroke(tl, 5.0, EStroke::new(1.0 + on * 0.6, mix(mix(border(), txt_dim(), h), blue(), on).gamma_multiply(a)));
+                            draw_pattern(&p, tl.center(), i as u8, mix(txt_dim(), txt(), h.max(on)).gamma_multiply(a), 1.4);
                             if resp.on_hover_text(PATTERNS[i]).clicked() {
                                 self.settings.pattern = i as u8;
                                 save_settings(&self.settings);
@@ -370,7 +370,7 @@ impl App {
                         // Strength slider
                         let ty = py + 62.0 + (1.0 - pat_k) * 10.0;
                         let t = t * ((pat_k - 0.3) / 0.7).clamp(0.0, 1.0);
-                        p.text(pos2(lx, ty), Align2::LEFT_CENTER, "Opacity", FontId::proportional(11.0), TEXT_DIM.gamma_multiply(t));
+                        p.text(pos2(lx, ty), Align2::LEFT_CENTER, "Opacity", FontId::proportional(11.0), txt_dim().gamma_multiply(t));
                         let track = Rect::from_min_max(pos2(lx + 56.0, ty - 9.0), pos2(rx - 44.0, ty + 9.0));
                         let resp = ui.interact(track, egui::Id::new("qd_dots"), Sense::click_and_drag());
                         if let (true, Some(pp)) = (resp.dragged() || resp.clicked(), resp.interact_pointer_pos()) {
@@ -387,7 +387,7 @@ impl App {
                         p.rect_filled(line, 2.0, border().gamma_multiply(t));
                         p.rect_filled(Rect::from_min_max(line.min, pos2(line.min.x + line.width() * f, line.max.y)), 2.0, blue().gamma_multiply(t));
                         p.circle_filled(pos2(track.min.x + track.width() * f, ty), 6.0 + h, Color32::WHITE.gamma_multiply(t));
-                        p.text(pos2(rx - 14.0, ty), Align2::RIGHT_CENTER, format!("{:.0}", shown), FontId::proportional(11.0), TEXT_FAINT.gamma_multiply(t));
+                        p.text(pos2(rx - 14.0, ty), Align2::RIGHT_CENTER, format!("{:.0}", shown), FontId::proportional(11.0), txt_faint().gamma_multiply(t));
                     }
                     let ty0 = py + 64.0 * pat_k;
                     let t = t_all;
@@ -398,7 +398,7 @@ impl App {
                         let resp = ui.interact(row, egui::Id::new(id), Sense::click());
                         let (h, pr) = hover_fx(ctx, &resp, true);
                         p.rect_filled(row, 6.0, hover_fill(h, pr).gamma_multiply(t));
-                        p.text(pos2(lx, y), Align2::LEFT_CENTER, label, FontId::proportional(12.0), mix(TEXT_DIM, TEXT, h).gamma_multiply(t));
+                        p.text(pos2(lx, y), Align2::LEFT_CENTER, label, FontId::proportional(12.0), mix(txt_dim(), txt(), h).gamma_multiply(t));
                         let k = ease(ctx, egui::Id::new((id, "k")), on);
                         let sw = Rect::from_min_size(pos2(rx - 44.0, y - 8.0), vec2(30.0, 16.0));
                         p.rect_filled(sw, 8.0, mix(border(), blue(), k).gamma_multiply(t));
@@ -415,10 +415,19 @@ impl App {
                     }
                     let r0 = (ex_k * 2.0).clamp(0.0, 1.0).min((ot * 2.0 - 0.3).clamp(0.0, 1.0));
                     let r1 = (ex_k * 2.0 - 0.3).clamp(0.0, 1.0).min((ot * 2.0 - 0.38).clamp(0.0, 1.0));
+                    let r2 = (ex_k * 2.0 - 0.6).clamp(0.0, 1.0).min((ot * 2.0 - 0.46).clamp(0.0, 1.0));
                     let y1 = ey + 28.0 + (1.0 - r0) * 10.0;
                     if r0 > 0.01 && switch(ui, y1 + d1, "Rounded corners", self.settings.round_corners, "qd_sw_round", e1 * r0) {
                         self.settings.round_corners = !self.settings.round_corners;
                         self.corners_dirty = true;
+                        save_settings(&self.settings);
+                    }
+
+                    // Light mode (theme.rs): the whole UI cross-fades to light surfaces and dark ink
+                    let y2 = ey + 84.0 + (1.0 - r2) * 10.0;
+                    if r2 > 0.01 && switch(ui, y2 + d1, "Light mode", !self.settings.dark_theme, "qd_sw_light", e1 * r2) {
+                        self.settings.dark_theme = !self.settings.dark_theme;
+                        LIGHT.store(!self.settings.dark_theme, std::sync::atomic::Ordering::Relaxed);
                         save_settings(&self.settings);
                     }
 
@@ -430,7 +439,7 @@ impl App {
                         let resp = ui.interact(row, egui::Id::new("qd_sw_anim"), Sense::click());
                         let (h, pr) = hover_fx(ctx, &resp, true);
                         p.rect_filled(row, 6.0, hover_fill(h, pr).gamma_multiply(t));
-                        p.text(pos2(lx, ay), Align2::LEFT_CENTER, "Animations", FontId::proportional(12.0), mix(TEXT_DIM, TEXT, h).gamma_multiply(t));
+                        p.text(pos2(lx, ay), Align2::LEFT_CENTER, "Animations", FontId::proportional(12.0), mix(txt_dim(), txt(), h).gamma_multiply(t));
                         let names = ["Full", "Subtle", "Off"];
                         p.text(pos2(rx - 14.0, ay), Align2::RIGHT_CENTER, names[self.settings.anim.min(2) as usize], FontId::proportional(12.0), mix(blue(), Color32::WHITE, h * 0.4).gamma_multiply(t));
                         if resp.clicked() {
@@ -441,15 +450,15 @@ impl App {
                     }
 
                     // Divider + shortcuts entry
-                    let dy = ey + 18.0 + 56.0 * ex_k + d0;
+                    let dy = ey + 18.0 + 84.0 * ex_k + d0;
                     let t = t * e0;
                     p.line_segment([pos2(pop.min.x + 1.0, dy), pos2(pop.max.x - 1.0, dy)], EStroke::new(1.0_f32, border().gamma_multiply(t)));
                     let row = Rect::from_min_max(pos2(pop.min.x + 6.0, dy + 5.0), pos2(pop.max.x - 6.0, pop.max.y - 6.0));
                     let resp = ui.interact(row, egui::Id::new("qd_theme_keys"), Sense::click());
                     let (h, pr) = hover_fx(ctx, &resp, true);
                     p.rect_filled(row, 6.0, hover_fill(h, pr).gamma_multiply(t));
-                    p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, "Keyboard shortcuts", FontId::proportional(12.5), TEXT.gamma_multiply(t));
-                    p.text(pos2(row.max.x - 8.0, row.center().y), Align2::RIGHT_CENTER, "›", FontId::proportional(14.0), mix(TEXT_FAINT, TEXT, h).gamma_multiply(t));
+                    p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, "Keyboard shortcuts", FontId::proportional(12.5), txt().gamma_multiply(t));
+                    p.text(pos2(row.max.x - 8.0, row.center().y), Align2::RIGHT_CENTER, "›", FontId::proportional(14.0), mix(txt_faint(), txt(), h).gamma_multiply(t));
                     if resp.clicked() {
                         self.panel_open = false;
                         self.shortcuts_open = true;

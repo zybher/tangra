@@ -117,16 +117,16 @@ impl App {
                     if resp.hovered() {
                         hover_row = Some(i);
                     }
-                    wave_tile(p, r, wm, mix(popup(), Color32::from_gray(90), 0.35), t);
+                    wave_tile(p, r, wm, mix(popup(), gray_ui(90), 0.35), t);
                     let fsz = 12.0 * (1.0 + 0.14 * wm);
                     let hl = wm;
-                    p.text(pos2(r.min.x + 10.0, r.center().y), Align2::LEFT_CENTER, title(*c), FontId::proportional(fsz), mix(TEXT_DIM, TEXT, hl).gamma_multiply(t));
-                    p.text(pos2(r.max.x - 10.0, r.center().y), Align2::RIGHT_CENTER, "›", FontId::proportional(14.0), mix(TEXT_FAINT, TEXT, hl).gamma_multiply(t));
+                    p.text(pos2(r.min.x + 10.0, r.center().y), Align2::LEFT_CENTER, title(*c), FontId::proportional(fsz), mix(txt_dim(), txt(), hl).gamma_multiply(t));
+                    p.text(pos2(r.max.x - 10.0, r.center().y), Align2::RIGHT_CENTER, "›", FontId::proportional(14.0), mix(txt_faint(), txt(), hl).gamma_multiply(t));
                     if *c == 'c' {
                         p.circle_filled(pos2(r.max.x - 28.0, r.center().y), 6.0, pen_col.gamma_multiply(t));
-                        p.circle_stroke(pos2(r.max.x - 28.0, r.center().y), 6.0, EStroke::new(1.0_f32, Color32::from_white_alpha((60.0 * t) as u8)));
+                        p.circle_stroke(pos2(r.max.x - 28.0, r.center().y), 6.0, EStroke::new(1.0_f32, wa((60.0 * t) as u8)));
                     } else {
-                        p.text(pos2(r.max.x - 24.0, r.center().y), Align2::RIGHT_CENTER, value(*c), FontId::proportional(11.5), mix(TEXT_FAINT, TEXT_DIM, hl).gamma_multiply(t));
+                        p.text(pos2(r.max.x - 24.0, r.center().y), Align2::RIGHT_CENTER, value(*c), FontId::proportional(11.5), mix(txt_faint(), txt_dim(), hl).gamma_multiply(t));
                     }
                 }
             });
@@ -254,7 +254,7 @@ impl App {
                             let a = st * sp;
                             p.rect_filled(sq.translate(vec2(0.0, 1.5 + 2.0 * m)), round, Color32::from_black_alpha(((50.0 + 40.0 * m) * a) as u8));
                             p.rect_filled(sq, round, col.gamma_multiply(a));
-                            p.rect_stroke(sq, round, EStroke::new(1.0_f32, Color32::from_white_alpha((40.0 + 50.0 * m) as u8).gamma_multiply(a)));
+                            p.rect_stroke(sq, round, EStroke::new(1.0_f32, wa((40.0 + 50.0 * m) as u8).gamma_multiply(a)));
                             if on > 0.01 {
                                 p.rect_stroke(sq.expand(3.0), round + 3.0, EStroke::new(2.0_f32, Color32::WHITE.gamma_multiply(a * on)));
                             }
@@ -289,7 +289,7 @@ impl App {
                             }
                         }
                         p.add(egui::Shape::mesh(m));
-                        p.rect_stroke(bar, rr, EStroke::new(1.0_f32, Color32::from_white_alpha((35.0 * st) as u8)));
+                        p.rect_stroke(bar, rr, EStroke::new(1.0_f32, wa((35.0 * st) as u8)));
                         let resp = ui.interact(bar.expand(4.0), egui::Id::new("qd_tm_hue"), Sense::click_and_drag());
                         let (hv, _) = hover_fx(ctx, &resp, true);
                         let ch = egui::ecolor::Hsva::from(hex(&self.pen_color));
@@ -314,9 +314,9 @@ impl App {
                             let resp = ui.interact(r, egui::Id::new(("qd_tm_item", c, i)), Sense::click());
                             let (_, pr) = hover_fx(ctx, &resp, true);
                             let on = sub_pinned[i];
-                            wave_tile(p, r, wm, mix(mix(popup(), Color32::from_gray(90), 0.35), blue(), on), st);
+                            wave_tile(p, r, wm, mix(mix(popup(), gray_ui(90), 0.35), blue(), on), st);
                             p.rect_filled(r, 8.0, hover_fill(0.0, pr).gamma_multiply(st));
-                            let tc = mix(mix(TEXT_DIM, TEXT, wm), Color32::WHITE, on).gamma_multiply(st);
+                            let tc = mix(mix(txt_dim(), txt(), wm), Color32::WHITE, on).gamma_multiply(st);
                             if c == 'w' {
                                 let lw = WIDTHS[i].1.min(10.0);
                                 p.line_segment([pos2(r.min.x + 10.0, r.center().y), pos2(r.min.x + 50.0, r.center().y)], EStroke::new(lw, tc));

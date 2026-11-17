@@ -400,16 +400,16 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
                     // Open: a soft neutral highlight, so the swatch colour is the only colour here
                     let lq = ctx.animate_bool_with_time(bid.with(("liquid", 1)), on, 0.5 * anim_k());
-                    pb.rect_filled(tr(r), 8.0 * sc, Color32::from_white_alpha((22.0 * lq * ca) as u8));
+                    pb.rect_filled(tr(r), 8.0 * sc, wa((22.0 * lq * ca) as u8));
                     let _ = hh;
-                    let col = if color.is_empty() || color.eq_ignore_ascii_case("none") { TEXT_DIM } else { hex(&color) };
+                    let col = if color.is_empty() || color.eq_ignore_ascii_case("none") { txt_dim() } else { hex(&color) };
                     if color.eq_ignore_ascii_case("none") {
                         // No fill: an empty swatch with a red slash
                         p.line_segment([r.center() + vec2(-4.9, 4.9), r.center() + vec2(4.9, -4.9)], EStroke::new(1.5_f32, hex("#ef4444").gamma_multiply(ca)));
                     } else {
                         p.circle_filled(r.center(), 7.0, col.gamma_multiply(ca));
                     }
-                    p.circle_stroke(r.center(), 7.0, EStroke::new(1.0_f32, Color32::from_white_alpha((60.0 * ca) as u8)));
+                    p.circle_stroke(r.center(), 7.0, EStroke::new(1.0_f32, wa((60.0 * ca) as u8)));
                     if resp.hovered() {
                         tip = Some((r.center().x, "Colour"));
                     }
@@ -451,7 +451,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         }
                     }
                     let ic = pos2(r.min.x + 14.0, cyy);
-                    let st = EStroke::new(1.3_f32, if icon == 3 { mix(TEXT_DIM, Color32::WHITE, hh) } else { mix(TEXT_DIM, TEXT, hh) }.gamma_multiply(ca));
+                    let st = EStroke::new(1.3_f32, if icon == 3 { mix(txt_dim(), crate::theme::hi(), hh) } else { mix(txt_dim(), txt(), hh) }.gamma_multiply(ca));
                     match icon {
                         0 => {
                             crate::ui::svg_icons::draw(&p, "corner-radius", ic, 16.5, st.color);
@@ -474,7 +474,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     };
                     ne.draw(&p, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
-                    zoom_text(&p, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
+                    zoom_text(&p, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(txt_dim(), crate::theme::txt(), hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(id.with("v0"), val));
                     }
@@ -498,7 +498,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 3.0);
                     }
                     let hh = hh.max(lq);
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca);
                     let ic = Rect::from_center_size(pos2(r.min.x + 14.0, cyy), vec2(12.0, 9.0));
                     p.rect_stroke(ic, 1.5, EStroke::new(1.2_f32, gc));
                     p.line_segment([ic.left_bottom() + vec2(2.5, -2.5), ic.right_top() + vec2(-2.5, 2.5)], EStroke::new(1.0_f32, gc));
@@ -524,7 +524,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 5.0);
                     }
                     let hh = hh.max(lq);
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca);
                     stroke_pos_icon(&p, pos2(r.min.x + 14.0, cyy), 1.0, gc, stroke_pos);
                     let cv = pos2(r.max.x - 10.0, cyy);
                     crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
@@ -549,7 +549,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 4.0);
                     }
                     let hh = hh.max(lq);
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca);
                     super::icons::align(&p, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
                     let cv = pos2(r.max.x - 10.0, cyy);
                     crate::ui::svg_icons::draw(&p, "chevron-down", cv, 12.0, gc);
@@ -575,7 +575,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                     }
                     let hh = hh.max(lq);
                     let ic = pos2(r.min.x + 14.0, cyy);
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca);
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca);
                     for (dx, dy) in [(-3.5, -3.5), (3.5, -3.5), (-3.5, 3.5), (3.5, 3.5)] {
                         p.rect_filled(Rect::from_center_size(ic + vec2(dx, dy), vec2(5.0, 5.0)), 1.0, gc);
                     }
@@ -702,7 +702,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let mut p = pk.clone();
                 p.multiply_opacity(k1 * rk);
                 let resp = ui.interact(rr, bid.with(("sw", i)), Sense::click());
-                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let k = 1.0 + 0.14 * wm;
                 let dot = pos2(rr.min.x + 16.0, rr.center().y);
                 let (name, on) = if i < PEN_COLORS.len() {
@@ -712,7 +712,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 } else if i == PEN_COLORS.len() + 1 {
                     // an empty ring with a slash
                     let r = 6.0 * k;
-                    p.circle_stroke(dot, r, EStroke::new(1.5_f32, TEXT_DIM));
+                    p.circle_stroke(dot, r, EStroke::new(1.5_f32, txt_dim()));
                     p.line_segment([dot + vec2(-r, r) * 0.7, dot + vec2(r, -r) * 0.7], EStroke::new(1.5_f32, hex("#ef4444")));
                     ("No fill".to_string(), if is_group { color.eq_ignore_ascii_case("none") } else { shape_fill == Some(false) })
                 } else {
@@ -729,7 +729,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 if ok > 0.01 {
                     p.circle_stroke(dot, (6.0 + 3.0 * ok) * k, EStroke::new(1.2_f32, Color32::WHITE.gamma_multiply(ok)));
                 }
-                p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, name, FontId::proportional(12.0 * k), mix(mix(TEXT_DIM, TEXT, wm), TEXT, ok));
+                p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, name, FontId::proportional(12.0 * k), mix(mix(txt_dim(), txt(), wm), txt(), ok));
                 if pop == 1 && resp.clicked() {
                     if i < PEN_COLORS.len() {
                         let c = PEN_COLORS[i];
@@ -827,10 +827,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let mut p = pk.clone();
                 p.multiply_opacity(k2 * rk);
                 let resp = ui.interact(rr, bid.with(("ar", i)), Sense::click());
-                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let on = if i == 4 { layout == 0 } else { layout as i32 - 1 == i as i32 };
                 let ok = ease(&ctx, bid.with(("ar_on", i)), on);
-                p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * (1.0 + 0.14 * wm)), mix(mix(TEXT_DIM, TEXT, wm), blue(), ok));
+                p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * (1.0 + 0.14 * wm)), mix(mix(txt_dim(), txt(), wm), blue(), ok));
                 if pop == 2 && resp.clicked() {
                     acts.push(Act::FrameLayout(if i == 4 { 255 } else { i as u8 }));
                     set_pop = 0;
@@ -868,13 +868,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let mut p = pk.clone();
                 p.multiply_opacity(k3 * rk);
                 let resp = ui.interact(rr, bid.with(("asp", i)), Sense::click());
-                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let on = (cur - rt).abs() < 0.01;
                 // little shape preview of the ratio
                 let k = 1.0 + 0.14 * wm;
                 let sz = if *rt >= 1.0 { vec2(14.0, 14.0 / rt) } else { vec2(14.0 * rt, 14.0) } * k;
                 let ok = ease(&ctx, bid.with(("asp_on", i)), on);
-                let col = mix(mix(TEXT_DIM, TEXT, wm), blue(), ok);
+                let col = mix(mix(txt_dim(), txt(), wm), blue(), ok);
                 p.rect_stroke(Rect::from_center_size(pos2(rr.min.x + 16.0, rr.center().y), sz), 1.5, EStroke::new(1.2_f32, col));
                 p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
                 if pop == 3 && resp.clicked() {
@@ -926,9 +926,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 let mut p = pk.clone();
                 p.multiply_opacity(k4 * rk);
                 let resp = ui.interact(rr, bid.with(("aln", i)), Sense::click());
-                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let k = 1.0 + 0.14 * wm;
-                let col = mix(TEXT_DIM, TEXT, wm);
+                let col = mix(txt_dim(), txt(), wm);
                 let ic = pos2(rr.min.x + 16.0, rr.center().y);
                 match al {
                     Some(a) => super::icons::align(&p, ic, 15.0 * k, col, match a {
@@ -983,10 +983,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 p.multiply_opacity(k5 * rk);
                 let resp = ui.interact(rr, bid.with(("spos", i)), Sense::click());
                 let cur = *v == stroke_pos;
-                wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+                wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let k = 1.0 + 0.14 * wm;
                 let ok = ease(&ctx, bid.with(("spos_on", i)), cur);
-                let col = mix(mix(TEXT_DIM, TEXT, wm), blue(), ok);
+                let col = mix(mix(txt_dim(), txt(), wm), blue(), ok);
                 stroke_pos_icon(&p, pos2(rr.min.x + 16.0, rr.center().y), k, col, *v);
                 p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
                 if pop == 5 && resp.clicked() {
@@ -1046,7 +1046,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             if let Some((tx, text)) = ctx.data(|d| d.get_temp::<(f32, String)>(bid.with("tipv"))) {
                 // Slides from button to button instead of jumping (snaps in when it was hidden)
                 let tx = super::micro::glide(&ctx, bid.with("tipx"), tx, tk < 0.05);
-                let gl = p.layout_no_wrap(text, FontId::proportional(11.5), TEXT.gamma_multiply(tk));
+                let gl = p.layout_no_wrap(text, FontId::proportional(11.5), txt().gamma_multiply(tk));
                 let tr = Rect::from_center_size(pos2(tx, bar.min.y - 18.0 + (1.0 - tk) * 4.0), gl.size() + vec2(16.0, 8.0));
                 glass(&p, tr, 6.0, tk);
                 p.rect_stroke(tr, 6.0, EStroke::new(1.0_f32, border().gamma_multiply(tk)));

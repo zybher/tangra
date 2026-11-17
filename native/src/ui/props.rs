@@ -75,9 +75,9 @@ fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: 
     }
     let cy = r.center().y;
     ne.draw(&p, Some(r), pos2(r.max.x - 8.0, cy), 12.0);
-    let lc = if liquid { mix(TEXT_DIM, Color32::WHITE, hl) } else { mix(TEXT_DIM, TEXT, hl * 0.5) };
+    let lc = if liquid { mix(txt_dim(), crate::theme::hi(), hl) } else { mix(txt_dim(), txt(), hl * 0.5) };
     p.text(pos2(lx, cy), Align2::LEFT_CENTER, label, FontId::proportional(11.0), lc.gamma_multiply(a));
-    let vc = if liquid { mix(TEXT, Color32::WHITE, hl) } else { mix(Color32::from_gray(200), TEXT, hl.max(ne.e)) };
+    let vc = if liquid { mix(txt(), crate::theme::hi(), hl) } else { mix(gray_ui(200), txt(), hl.max(ne.e)) };
     // Counts to a new value (follows the pointer exactly while scrubbed)
     let shown = super::micro::glide(&ctx, id.with("num"), val, resp.dragged());
     if shown != val {
@@ -108,11 +108,11 @@ fn halves(r: Rect) -> (Rect, Rect) {
 /// Small text button (section header links such as "Reset")
 fn link(ui: &mut egui::Ui, id: egui::Id, right: Pos2, text: &str, a: f32) -> bool {
     let p = ui.painter().clone();
-    let g = p.layout_no_wrap(text.to_string(), FontId::proportional(11.0), TEXT_DIM);
+    let g = p.layout_no_wrap(text.to_string(), FontId::proportional(11.0), txt_dim());
     let r = Rect::from_min_size(pos2(right.x - g.size().x, right.y - g.size().y / 2.0), g.size());
     let resp = ui.interact(r.expand(3.0), id, Sense::click());
     let (hh, _) = hover_fx(ui.ctx(), &resp, true);
-    p.text(pos2(r.max.x, right.y), Align2::RIGHT_CENTER, text, FontId::proportional(11.0), mix(TEXT_DIM, blue(), hh).gamma_multiply(a));
+    p.text(pos2(r.max.x, right.y), Align2::RIGHT_CENTER, text, FontId::proportional(11.0), mix(txt_dim(), blue(), hh).gamma_multiply(a));
     resp.clicked()
 }
 
@@ -153,7 +153,7 @@ impl App {
 
         // Card size: the hint's when empty; else slim and the content's height (measured last pass)
         let max_h = (canvas.height() - 2.0 * EDGE - 70.0).max(120.0);
-        let hint_w = ctx.fonts(|f| f.layout_no_wrap(HINT.to_string(), FontId::proportional(11.5), TEXT_DIM).size().x);
+        let hint_w = ctx.fonts(|f| f.layout_no_wrap(HINT.to_string(), FontId::proportional(11.5), txt_dim()).size().x);
         let (tw, th) = if has {
             let ch: f32 = ctx.data(|d| d.get_temp(bid.with("ch"))).unwrap_or(240.0);
             (CARD_W.max(hint_w + 2.0 * PAD + 8.0), (ch + 2.0 * PAD).min(max_h))
@@ -183,7 +183,7 @@ impl App {
             p.rect_stroke(card, 10.0, EStroke::new(1.0_f32, border()));
             let ha = 1.0 - ca;
             if ha > 0.01 {
-                p.with_clip_rect(card).text(card.center(), Align2::CENTER_CENTER, HINT, FontId::proportional(11.5), TEXT_DIM.gamma_multiply(ha));
+                p.with_clip_rect(card).text(card.center(), Align2::CENTER_CENTER, HINT, FontId::proportional(11.5), txt_dim().gamma_multiply(ha));
             }
         };
         let Some((kind, id)) = shown else {
@@ -282,7 +282,7 @@ impl App {
                             ui.painter().line_segment([pos2(r.min.x, r.center().y + 2.0), pos2(r.max.x, r.center().y + 2.0)], EStroke::new(1.0_f32, border().gamma_multiply(a)));
                         }
                         let (r, a) = row(ui, 24.0);
-                        ui.painter().text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, name, FontId::proportional(11.5), Color32::from_gray(225).gamma_multiply(a));
+                        ui.painter().text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, name, FontId::proportional(11.5), gray_ui(225).gamma_multiply(a));
                         (r, a)
                     };
                     let gap = |ui: &mut egui::Ui| ui.add_space(GAP);
@@ -294,7 +294,7 @@ impl App {
                         let p = ui.painter();
                         p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
                         let half = r.width() / 2.0;
-                        p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * half, r.min.y + 2.0), vec2(half - 4.0, r.height() - 4.0)), 5.0, Color32::from_white_alpha((22.0 * a) as u8));
+                        p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * half, r.min.y + 2.0), vec2(half - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a) as u8));
                         for (j, name) in ["Design", "Animate"].into_iter().enumerate() {
                             let br = Rect::from_min_size(pos2(r.min.x + j as f32 * half, r.min.y), vec2(half, r.height()));
                             let resp = ui.interact(br, bid.with(("tab", j)), Sense::click());
@@ -304,7 +304,7 @@ impl App {
                                 ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
                             }
                             let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
-                            ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.5), mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a));
+                            ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.5), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
                             if resp.clicked() && !on {
                                 ctx.data_mut(|d| {
                                     d.insert_temp(bid.with("tab"), j as u8);
@@ -318,7 +318,7 @@ impl App {
                     // Title: what's selected
                     let (r, a) = row(ui, 22.0);
                     let label = if n_sel > 1 { format!("{title}  ·  {n_sel} selected") } else { title.to_string() };
-                    ui.painter().text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), Color32::from_gray(235).gamma_multiply(a));
+                    ui.painter().text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), gray_ui(235).gamma_multiply(a));
                     let mut first = false;
 
                     // Animate: a placeholder (prototype-style interactions come later)
@@ -328,12 +328,12 @@ impl App {
                             let (r, a) = row(ui, FH);
                             let p = ui.painter();
                             p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-                            p.text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, k, FontId::proportional(11.0), TEXT_DIM.gamma_multiply(a * 0.7));
-                            p.text(pos2(r.max.x - 8.0, r.center().y), Align2::RIGHT_CENTER, v, FontId::proportional(12.0), Color32::from_gray(200).gamma_multiply(a * 0.6));
+                            p.text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, k, FontId::proportional(11.0), txt_dim().gamma_multiply(a * 0.7));
+                            p.text(pos2(r.max.x - 8.0, r.center().y), Align2::RIGHT_CENTER, v, FontId::proportional(12.0), gray_ui(200).gamma_multiply(a * 0.6));
                             gap(ui);
                         }
                         let (r, a) = row(ui, 22.0);
-                        ui.painter().text(r.center(), Align2::CENTER_CENTER, "Coming soon", FontId::proportional(11.0), TEXT_DIM.gamma_multiply(a));
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, "Coming soon", FontId::proportional(11.0), txt_dim().gamma_multiply(a));
                     }
                     let design = tab == 0;
 
@@ -374,7 +374,7 @@ impl App {
                             let lk = ease(ctx, bid.with("lock_k"), lock);
                             let p = ui.painter();
                             p.rect_filled(lr, 6.0, hover_fill(hh, pp).gamma_multiply(a));
-                            super::svg_icons::draw(p, "link", lr.center(), 15.0, mix(mix(TEXT_DIM, TEXT, hh * 0.5), blue(), lk).gamma_multiply(a));
+                            super::svg_icons::draw(p, "link", lr.center(), 15.0, mix(mix(txt_dim(), txt(), hh * 0.5), blue(), lk).gamma_multiply(a));
                             if resp.clicked() {
                                 ctx.data_mut(|d| d.insert_temp(lock_id, !lock));
                             }
@@ -405,7 +405,7 @@ impl App {
                             let (hh, pp) = hover_fx(ctx, &resp, true);
                             let p = ui.painter();
                             p.rect_filled(br, 6.0, hover_fill(hh, pp).gamma_multiply(a));
-                            let col = mix(TEXT_DIM, TEXT, hh).gamma_multiply(a);
+                            let col = mix(txt_dim(), txt(), hh).gamma_multiply(a);
                             if code < 6 {
                                 super::icons::align(p, br.center(), 15.0, col, code);
                             } else {
@@ -457,11 +457,11 @@ impl App {
                             let rad = 7.5 * (1.0 + 0.18 * hk);
                             let p = ui.painter();
                             if c == "none" {
-                                p.circle_stroke(cc, rad, EStroke::new(1.0_f32, Color32::from_white_alpha((90.0 * a) as u8)));
+                                p.circle_stroke(cc, rad, EStroke::new(1.0_f32, wa((90.0 * a) as u8)));
                                 p.line_segment([cc + vec2(-rad * 0.7, rad * 0.7), cc + vec2(rad * 0.7, -rad * 0.7)], EStroke::new(1.5_f32, hex("#ef4444").gamma_multiply(a)));
                             } else {
                                 p.circle_filled(cc, rad, hex(c).gamma_multiply(a));
-                                p.circle_stroke(cc, rad, EStroke::new(1.0_f32, Color32::from_white_alpha((50.0 * a) as u8)));
+                                p.circle_stroke(cc, rad, EStroke::new(1.0_f32, wa((50.0 * a) as u8)));
                             }
                             if col.eq_ignore_ascii_case(c) {
                                 p.circle_stroke(cc, rad + 3.0, EStroke::new(1.3_f32, Color32::WHITE.gamma_multiply(a)));
@@ -489,7 +489,7 @@ impl App {
                             let p = ui.painter();
                             p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
                             let third = r.width() / 3.0;
-                            p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * third, r.min.y + 2.0), vec2(third - 4.0, r.height() - 4.0)), 5.0, Color32::from_white_alpha((22.0 * a) as u8));
+                            p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * third, r.min.y + 2.0), vec2(third - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a) as u8));
                             for (j, (name, val)) in opts.into_iter().enumerate() {
                                 let br = Rect::from_min_size(pos2(r.min.x + j as f32 * third, r.min.y), vec2(third, r.height()));
                                 let resp = ui.interact(br, bid.with(("spos", j)), Sense::click());
@@ -499,7 +499,7 @@ impl App {
                                     ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
                                 }
                                 let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
-                                ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a));
+                                ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
                                 if resp.clicked() && !on {
                                     out.push(PAct::StrokePos(val));
                                 }
@@ -521,12 +521,12 @@ impl App {
                             let onk = ease(ctx, bid.with(("tip_on", j)), on);
                             let p = ui.painter();
                             p.rect_filled(br, 6.0, hover_fill(hh, pp).gamma_multiply(a));
-                            p.rect_filled(br, 6.0, Color32::from_white_alpha((22.0 * onk * a) as u8));
+                            p.rect_filled(br, 6.0, wa((22.0 * onk * a) as u8));
                             // the head itself, drawn small
                             let c = br.center();
                             let (t0, t1) = (c - vec2(9.0, 0.0), c + vec2(9.0, 0.0));
                             let gl = [t0, t1, t1 + vec2(-5.5, -3.6), t1, t1 + vec2(-5.5, 3.6)];
-                            let col = mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a);
+                            let col = mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a);
                             p.add(crate::canvas::arrow_mesh::arrow(&gl, 1.6, j as u8, cap, col, ctx.pixels_per_point()));
                             if resp.clicked() && !on {
                                 out.push(PAct::Tip(j as u8));
@@ -539,7 +539,7 @@ impl App {
                         let p = ui.painter();
                         p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
                         let half = r.width() / 2.0;
-                        p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * half, r.min.y + 2.0), vec2(half - 4.0, r.height() - 4.0)), 5.0, Color32::from_white_alpha((22.0 * a) as u8));
+                        p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * half, r.min.y + 2.0), vec2(half - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a) as u8));
                         for (j, name) in ["Round ends", "Square ends"].into_iter().enumerate() {
                             let br = Rect::from_min_size(pos2(r.min.x + j as f32 * half, r.min.y), vec2(half, r.height()));
                             let resp = ui.interact(br, bid.with(("cap", j)), Sense::click());
@@ -549,7 +549,7 @@ impl App {
                                 ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
                             }
                             let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
-                            ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a));
+                            ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
                             if resp.clicked() && !on {
                                 out.push(PAct::Cap(j as u8));
                             }

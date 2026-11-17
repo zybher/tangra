@@ -56,9 +56,9 @@ impl App {
             let mut p = pk.clone();
             p.multiply_opacity(k4 * rk);
             let resp = ui.interact(rr, bid.with(("row", i)), if live { Sense::click() } else { Sense::hover() });
-            wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
+            wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
             let k = 1.0 + 0.14 * wm;
-            let col = mix(TEXT_DIM, TEXT, wm);
+            let col = mix(txt_dim(), txt(), wm);
             let ic = pos2(rr.min.x + 16.0, rr.center().y);
             match al {
                 Some(a) => super::icons::align(&p, ic, 15.0 * k, col, match a {

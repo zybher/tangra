@@ -26,15 +26,15 @@ pub(crate) fn color_panel(ui: &mut egui::Ui, id: egui::Id, c: &mut Color32, k: f
     // Header: title + a drawn close cross
     ui.set_opacity(base * part(0.0));
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Custom").font(semibold(13.0)).color(TEXT));
+        ui.label(egui::RichText::new("Custom").font(semibold(13.0)).color(txt()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let (xr, xresp) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::click());
             let hv = ease(ui.ctx(), xresp.id, xresp.hovered());
             if hv > 0.01 {
-                ui.painter().rect_filled(xr, 5.0, Color32::from_white_alpha((20.0 * hv) as u8));
+                ui.painter().rect_filled(xr, 5.0, wa((20.0 * hv) as u8));
             }
             let (cc, d) = (xr.center(), 4.0);
-            let st = EStroke::new(1.5_f32, mix(TEXT_DIM, TEXT, hv));
+            let st = EStroke::new(1.5_f32, mix(txt_dim(), txt(), hv));
             ui.painter().line_segment([cc + vec2(-d, -d), cc + vec2(d, d)], st);
             ui.painter().line_segment([cc + vec2(-d, d), cc + vec2(d, -d)], st);
             if xresp.clicked() {
@@ -122,7 +122,7 @@ pub(crate) fn color_panel(ui: &mut egui::Ui, id: egui::Id, c: &mut Color32, k: f
     let hid = id.with("hex");
     let mut txt: String = ui.data(|d| d.get_temp(hid)).unwrap_or_else(|| cur.clone());
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Hex").color(TEXT_DIM));
+        ui.label(egui::RichText::new("Hex").color(txt_dim()));
         // Square corners, like the colour square and hue strip; typed in place like a rename
         // (gliding caret and selection, inline_text.rs)
         let (fr, fresp) = ui.allocate_exact_size(vec2(W - 40.0, 22.0), Sense::click());

@@ -26,7 +26,7 @@ impl App {
         let (h, pr) = hover_fx(ctx, &min_resp, true);
         painter.rect_filled(min_r, 0.0, hover_fill(h, pr));
         let mc = min_r.center();
-        painter.line_segment([pos2(mc.x - 5.0, cy), pos2(mc.x + 5.0, cy)], EStroke::new(1.2_f32, mix(TEXT_DIM, Color32::WHITE, h)));
+        painter.line_segment([pos2(mc.x - 5.0, cy), pos2(mc.x + 5.0, cy)], EStroke::new(1.2_f32, mix(txt_dim(), hi(), h)));
         if min_resp.clicked() {
             ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
         }
@@ -37,10 +37,10 @@ impl App {
         let (h, pr) = hover_fx(ctx, &max_resp, true);
         painter.rect_filled(max_r, 0.0, hover_fill(h, pr));
         let xc = max_r.center();
-        let ic = EStroke::new(1.1_f32, mix(TEXT_DIM, Color32::WHITE, h));
+        let ic = EStroke::new(1.1_f32, mix(txt_dim(), hi(), h));
         if is_max {
             painter.rect_stroke(Rect::from_center_size(pos2(xc.x + 1.5, cy - 1.5), vec2(8.0, 8.0)), 0.0, ic);
-            painter.rect_filled(Rect::from_center_size(pos2(xc.x - 1.5, cy + 1.5), vec2(8.0, 8.0)), 0.0, mix(chrome(), Color32::from_gray(66), h));
+            painter.rect_filled(Rect::from_center_size(pos2(xc.x - 1.5, cy + 1.5), vec2(8.0, 8.0)), 0.0, mix(chrome(), gray_ui(66), h));
             painter.rect_stroke(Rect::from_center_size(pos2(xc.x - 1.5, cy + 1.5), vec2(8.0, 8.0)), 0.0, ic);
         } else {
             painter.rect_stroke(Rect::from_center_size(pos2(xc.x, cy), vec2(10.0, 10.0)), 0.0, ic);
@@ -55,7 +55,7 @@ impl App {
         let (h, pr) = hover_fx(ctx, &cls_resp, true);
         painter.rect_filled(cls_r, 0.0, DANGER.gamma_multiply(h * (1.0 - pr * 0.25)));
         let cc = cls_r.center();
-        let ic = EStroke::new(1.2_f32, mix(TEXT_DIM, Color32::WHITE, h));
+        let ic = EStroke::new(1.2_f32, mix(txt_dim(), hi(), h));
         painter.line_segment([pos2(cc.x - 4.5, cy - 4.5), pos2(cc.x + 4.5, cy + 4.5)], ic);
         painter.line_segment([pos2(cc.x + 4.5, cy - 4.5), pos2(cc.x - 4.5, cy + 4.5)], ic);
         if cls_resp.clicked() {
@@ -122,12 +122,12 @@ impl App {
             if !is_active {
                 // Same gap below the title as above it
                 let hover_r = Rect::from_min_max(tab_r.min, pos2(tab_r.max.x, cy * 2.0 - tab_r.min.y));
-                painter.rect_filled(hover_r, Rounding::same(7.0), Color32::from_white_alpha((tab_h_t * 14.0 + tab_p_t * 12.0) as u8));
+                painter.rect_filled(hover_r, Rounding::same(7.0), wa((tab_h_t * 14.0 + tab_p_t * 12.0) as u8));
             }
 
 
             // Title text (optically centered on cy)
-            let title_col = mix(mix(TEXT_DIM, TEXT, tab_h_t), Color32::WHITE, act_k);
+            let title_col = mix(mix(txt_dim(), txt(), tab_h_t), hi(), act_k);
             let max_title_chars = ((tab_w - 44.0) / 7.2).max(1.0) as usize;
             let display_title = if name.chars().count() > max_title_chars {
                 let mut s: String = name.chars().take(max_title_chars.saturating_sub(1)).collect();
@@ -151,9 +151,9 @@ impl App {
                 let x_r = Rect::from_center_size(x_center, vec2(18.0, 18.0));
                 let x_resp = ui.allocate_rect(x_r, if self.boards.len() > 1 { Sense::click() } else { Sense::hover() });
                 let (xh, xp) = hover_fx(ctx, &x_resp, true);
-                painter.circle_filled(x_center, (8.0 - xp) * x_k, Color32::from_white_alpha((xh * 30.0 * x_k) as u8));
-                let x_col = mix(mix(TEXT_FAINT, TEXT_DIM, tab_h_t), TEXT_DIM, act_k);
-                let x_col = mix(x_col, Color32::WHITE, xh).gamma_multiply(x_k);
+                painter.circle_filled(x_center, (8.0 - xp) * x_k, wa((xh * 30.0 * x_k) as u8));
+                let x_col = mix(mix(txt_faint(), txt_dim(), tab_h_t), txt_dim(), act_k);
+                let x_col = mix(x_col, hi(), xh).gamma_multiply(x_k);
                 let a = 3.5 * (0.6 + 0.4 * x_k);
                 painter.line_segment([pos2(x_center.x - a, x_center.y - a), pos2(x_center.x + a, x_center.y + a)], EStroke::new(1.1_f32, x_col));
                 painter.line_segment([pos2(x_center.x + a, x_center.y - a), pos2(x_center.x - a, x_center.y + a)], EStroke::new(1.1_f32, x_col));
@@ -189,7 +189,7 @@ impl App {
         let plus_resp = ui.allocate_rect(plus_r, Sense::click());
         let (ph, pp) = hover_fx(ctx, &plus_resp, true);
         painter.circle_filled(plus_center, 12.0 - pp * 1.5, hover_fill(ph, pp));
-        let p_col = mix(TEXT_DIM, Color32::WHITE, ph);
+        let p_col = mix(txt_dim(), hi(), ph);
         painter.line_segment([pos2(plus_center.x - 4.5, plus_center.y), pos2(plus_center.x + 4.5, plus_center.y)], EStroke::new(1.3_f32, p_col));
         painter.line_segment([pos2(plus_center.x, plus_center.y - 4.5), pos2(plus_center.x, plus_center.y + 4.5)], EStroke::new(1.3_f32, p_col));
         if plus_resp.clicked() {

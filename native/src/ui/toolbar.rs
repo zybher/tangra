@@ -104,7 +104,7 @@ impl App {
                 // a soft lifted tile behind the swelling button; stays as the base the
                 // liquid fills when it's picked
                 p.rect_filled(r.translate(vec2(0.0, 3.0 * m)), 10.0, Color32::from_black_alpha((60.0 * m) as u8));
-                p.rect_filled(r, 10.0, mix(frame_bg(), Color32::from_gray(90), 0.22).gamma_multiply(m));
+                p.rect_filled(r, 10.0, mix(frame_bg(), gray_ui(90), 0.22).gamma_multiply(m));
             }
             p.rect_filled(r, 8.0 + 2.0 * m, hover_fill(hv, pr));
             let lq = ui.ctx().animate_bool_with_time(resp.id.with("liquid"), tool.is_some() && tool == Some(self.tool), 0.5 * anim_k());
@@ -114,7 +114,7 @@ impl App {
             } else if lq > 0.001 {
                 liquid_fill(&p, r, 8.0 + 2.0 * m, lq, ui.input(|i| i.time) as f32 + k as f32);
             }
-            paint_icon(&p, icon, r.center(), (1.0 + 0.25 * m) * (1.0 - pr * 0.1), mix(TEXT_DIM, Color32::WHITE, hv.max(on)));
+            paint_icon(&p, icon, r.center(), (1.0 + 0.25 * m) * (1.0 - pr * 0.1), mix(txt_dim(), hi(), hv.max(on)));
             let menu_kind = match (tool, icon) {
                 (Some(Tool::Frame), _) => Some(1u8),
                 (Some(Tool::Rect | Tool::Ellipse), _) => Some(2),
@@ -126,7 +126,7 @@ impl App {
             if let Some(k) = menu_kind {
                 // Tiny corner tick: this button has options on right-click
                 let c = r.right_bottom() - vec2(6.0, 6.0);
-                let mc = mix(TEXT_FAINT, Color32::WHITE, hv.max(on)).gamma_multiply(0.8);
+                let mc = mix(txt_faint(), hi(), hv.max(on)).gamma_multiply(0.8);
                 p.line_segment([c + vec2(-3.0, 0.0), c], EStroke::new(1.0_f32, mc));
                 p.line_segment([c + vec2(0.0, -3.0), c], EStroke::new(1.0_f32, mc));
                 if resp.secondary_clicked() {
@@ -198,7 +198,7 @@ impl App {
         let (uh, up) = bar_fx(&ctx, &undo_resp, can_undo);
         p.rect_filled(undo_r, Rounding { nw: 6.0, sw: 6.0, ne: 0.0, se: 0.0 }, hover_fill(uh, up));
         let uc = undo_r.center();
-        let u_col = mix(TEXT_FAINT.gamma_multiply(0.6), mix(TEXT_DIM, Color32::WHITE, uh), ease(&ctx, undo_resp.id.with("can"), can_undo));
+        let u_col = mix(txt_faint().gamma_multiply(0.6), mix(txt_dim(), hi(), uh), ease(&ctx, undo_resp.id.with("can"), can_undo));
         // Draw crisp curved undo arrow
         p.line_segment([pos2(uc.x - 4.5, uc.y), pos2(uc.x - 1.5, uc.y - 3.0)], EStroke::new(1.3_f32, u_col));
         p.line_segment([pos2(uc.x - 4.5, uc.y), pos2(uc.x - 1.5, uc.y + 3.0)], EStroke::new(1.3_f32, u_col));
@@ -217,7 +217,7 @@ impl App {
         let (rh, rp) = bar_fx(&ctx, &redo_resp, can_redo);
         p.rect_filled(redo_r, Rounding::ZERO, hover_fill(rh, rp));
         let rc = redo_r.center();
-        let r_col = mix(TEXT_FAINT.gamma_multiply(0.6), mix(TEXT_DIM, Color32::WHITE, rh), ease(&ctx, redo_resp.id.with("can"), can_redo));
+        let r_col = mix(txt_faint().gamma_multiply(0.6), mix(txt_dim(), hi(), rh), ease(&ctx, redo_resp.id.with("can"), can_redo));
         // Draw crisp curved redo arrow
         p.line_segment([pos2(rc.x + 4.5, rc.y), pos2(rc.x + 1.5, rc.y - 3.0)], EStroke::new(1.3_f32, r_col));
         p.line_segment([pos2(rc.x + 4.5, rc.y), pos2(rc.x + 1.5, rc.y + 3.0)], EStroke::new(1.3_f32, r_col));
@@ -239,7 +239,7 @@ impl App {
         let zoom_resp = ui.allocate_rect(zoom_r, Sense::click());
         let (zh, zp) = bar_fx(&ctx, &zoom_resp, true);
         p.rect_filled(zoom_r, Rounding::same(4.0), hover_fill(zh, zp));
-        let z_col = mix(TEXT_DIM, Color32::WHITE, zh);
+        let z_col = mix(txt_dim(), hi(), zh);
         // Digits roll to the new zoom like the size pills (theme.rs)
         let zf = FontId::proportional(11.5);
         let zs = p.layout_no_wrap(zoom_text.clone(), zf.clone(), z_col).size();
@@ -256,7 +256,7 @@ impl App {
         let (fh, fp) = bar_fx(&ctx, &fit_resp, true);
         p.rect_filled(fit_r, Rounding::same(4.0), hover_fill(fh, fp));
         let fc = fit_r.center();
-        let f_col = mix(TEXT_DIM, Color32::WHITE, fh);
+        let f_col = mix(txt_dim(), hi(), fh);
         let s = 4.0_f32;
         let l = 2.0_f32;
         let st = EStroke::new(1.2_f32, f_col);

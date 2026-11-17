@@ -45,7 +45,7 @@ pub(crate) fn choice_row(ui: &mut egui::Ui, choices: &[(&str, f32)], current: f3
 pub(crate) fn choice_row_k(ui: &mut egui::Ui, choices: &[(&str, f32)], current: f32, tol: f32, show: f32) -> Option<f32> {
     // One segmented control, inset like every other menu row
     let mut picked = None;
-    let ws: Vec<f32> = choices.iter().map(|c| ui.painter().layout_no_wrap(c.0.to_string(), FontId::proportional(11.5), TEXT).size().x + 16.0).map(|w| w.max(30.0)).collect();
+    let ws: Vec<f32> = choices.iter().map(|c| ui.painter().layout_no_wrap(c.0.to_string(), FontId::proportional(11.5), txt()).size().x + 16.0).map(|w| w.max(30.0)).collect();
     let total: f32 = ws.iter().sum::<f32>() + 4.0;
     let (row, _) = ui.allocate_exact_size(vec2(total + MENU_INSET * 2.0, 26.0 * show), Sense::hover());
     let (a, dy) = cm_anim(ui, row.min.y);
@@ -53,7 +53,7 @@ pub(crate) fn choice_row_k(ui: &mut egui::Ui, choices: &[(&str, f32)], current: 
     let row_d = Rect::from_min_size(row.min, vec2(row.width(), 26.0)).translate(vec2(0.0, dy - 13.0 * (1.0 - show)));
     let track = Rect::from_min_size(pos2(row_d.min.x + MENU_INSET, row_d.min.y + 1.0), vec2(total, 24.0));
     let p = ui.painter().clone().with_clip_rect(ui.ctx().screen_rect());
-    p.rect_filled(track, 6.0, Color32::from_gray(26).gamma_multiply(a));
+    p.rect_filled(track, 6.0, gray_ui(26).gamma_multiply(a));
     let mut sx = track.min.x + 2.0;
     for (i, &(label, val)) in choices.iter().enumerate() {
         let seg = Rect::from_min_size(pos2(sx, track.min.y), vec2(ws[i], track.height())).shrink(2.0);
@@ -62,8 +62,8 @@ pub(crate) fn choice_row_k(ui: &mut egui::Ui, choices: &[(&str, f32)], current: 
         let (h, pr) = hover_fx(ui.ctx(), &resp, true);
         let on = ease(ui.ctx(), ui.id().with(("seg_on", row.min.y as i32, i)), (current - val).abs() < tol);
         let sg = seg.expand(1.5 * h - pr);
-        p.rect_filled(sg, 4.0, mix(mix(Color32::from_gray(26), Color32::from_gray(62), h), blue(), on).gamma_multiply(a));
-        let col = mix(mix(TEXT_DIM, TEXT, h), Color32::WHITE, on).gamma_multiply(a);
+        p.rect_filled(sg, 4.0, mix(mix(gray_ui(26), gray_ui(62), h), blue(), on).gamma_multiply(a));
+        let col = mix(mix(txt_dim(), txt(), h), Color32::WHITE, on).gamma_multiply(a);
         p.text(sg.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.5 * (1.0 + 0.08 * h)), col);
         if resp.clicked() {
             picked = Some(val);
@@ -84,11 +84,11 @@ pub(crate) fn scrub_item(ui: &mut egui::Ui, label: &str, value: f32, per_px: f32
     let p = ui.painter().clone().with_clip_rect(ui.ctx().screen_rect());
     let r = rect.translate(vec2(0.0, dy));
     let tile = Rect::from_min_max(pos2(r.min.x + 6.0 * m, r.min.y + 1.0), pos2(r.max.x + 2.0 * m, r.max.y - 1.0));
-    wave_tile(&p, tile, m, mix(popup(), Color32::from_gray(90), 0.35), a);
+    wave_tile(&p, tile, m, mix(popup(), gray_ui(90), 0.35), a);
     if pr > 0.01 {
         p.rect_filled(tile, 8.0, Color32::from_black_alpha((40.0 * pr * a) as u8));
     }
-    let col = mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m).gamma_multiply(a);
+    let col = mix(txt_dim(), txt(), 0.6 + 0.4 * m).gamma_multiply(a);
     let lg = p.layout_no_wrap(label.to_owned(), FontId::proportional(13.0), col);
     p.galley(pos2(tile.min.x + 10.0, tile.center().y - lg.size().y / 2.0), lg, col);
     // Corner glyph + value on the right, like the bars
@@ -124,7 +124,7 @@ pub(crate) fn radio_item(ui: &mut egui::Ui, label: &str, shortcut: &str, on: boo
     // The ring fills in (and empties) instead of swapping
     let k = ease(ui.ctx(), ui.id().with(("radio_on", label)), on);
     if k < 1.0 {
-        ui.painter().circle_stroke(c, 3.0, EStroke::new(1.0_f32, Color32::from_gray(110).gamma_multiply(a * (1.0 - k))));
+        ui.painter().circle_stroke(c, 3.0, EStroke::new(1.0_f32, gray_ui(110).gamma_multiply(a * (1.0 - k))));
     }
     if k > 0.0 {
         ui.painter().circle_filled(c, 3.5 * (0.4 + 0.6 * k), blue().gamma_multiply(a * k));
@@ -140,7 +140,7 @@ pub(crate) fn check_item(ui: &mut egui::Ui, label: &str, on: bool) -> bool {
     // The box fills and the tick draws itself in (and back out) instead of swapping
     let k = ease(ui.ctx(), ui.id().with(("check_on", label)), on);
     if k < 1.0 {
-        p.rect_stroke(r, 3.0, EStroke::new(1.2_f32, TEXT_DIM.gamma_multiply(a * (1.0 - k))));
+        p.rect_stroke(r, 3.0, EStroke::new(1.2_f32, txt_dim().gamma_multiply(a * (1.0 - k))));
     }
     if k > 0.0 {
         p.rect_filled(r, 3.0, blue().gamma_multiply(a * k));
@@ -162,8 +162,8 @@ pub(crate) fn item(ui: &mut egui::Ui, label: &str, shortcut: &str, enabled: bool
 /// A menu row with the toolbar-style wave: rows near the pointer lift into a tile that
 /// slides right. Returns (clicked, where the row's left edge is drawn, alpha).
 pub(crate) fn item_ex(ui: &mut egui::Ui, label: &str, shortcut: &str, enabled: bool) -> (bool, Pos2, f32) {
-    let probe = ui.painter().layout_no_wrap(label.to_owned(), FontId::proportional(13.0), TEXT);
-    let sw = if shortcut.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(shortcut.to_owned(), FontId::proportional(11.5), TEXT_FAINT).size().x + 28.0 };
+    let probe = ui.painter().layout_no_wrap(label.to_owned(), FontId::proportional(13.0), txt());
+    let sw = if shortcut.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(shortcut.to_owned(), FontId::proportional(11.5), txt_faint()).size().x + 28.0 };
     let need = probe.size().x + sw + 30.0;
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().max(need), 26.0), sense);
@@ -173,15 +173,15 @@ pub(crate) fn item_ex(ui: &mut egui::Ui, label: &str, shortcut: &str, enabled: b
     let p = ui.painter().clone().with_clip_rect(ui.ctx().screen_rect());
     let r = rect.translate(vec2(0.0, dy));
     let tile = Rect::from_min_max(pos2(r.min.x + 6.0 * m, r.min.y + 1.0), pos2(r.max.x + 2.0 * m, r.max.y - 1.0));
-    wave_tile(&p, tile, m, mix(popup(), Color32::from_gray(90), 0.35), a);
+    wave_tile(&p, tile, m, mix(popup(), gray_ui(90), 0.35), a);
     if pr > 0.01 {
         p.rect_filled(tile, 8.0, Color32::from_black_alpha((40.0 * pr * a) as u8));
     }
-    let col = if enabled { mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m) } else { TEXT_FAINT }.gamma_multiply(a);
+    let col = if enabled { mix(txt_dim(), txt(), 0.6 + 0.4 * m) } else { txt_faint() }.gamma_multiply(a);
     let lg = p.layout_no_wrap(label.to_owned(), FontId::proportional(13.0), col);
     p.galley(pos2(tile.min.x + 10.0, tile.center().y - lg.size().y / 2.0), lg, col);
     if !shortcut.is_empty() {
-        let sc = mix(TEXT_FAINT, TEXT_DIM, m).gamma_multiply(a);
+        let sc = mix(txt_faint(), txt_dim(), m).gamma_multiply(a);
         p.text(pos2(tile.max.x - 10.0, tile.center().y), Align2::RIGHT_CENTER, shortcut, FontId::proportional(11.5), sc);
     }
     let clicked = resp.clicked();
@@ -336,7 +336,7 @@ pub(crate) fn header(ui: &mut egui::Ui, text: &str) {
         Align2::LEFT_BOTTOM,
         text.trim_start(),
         FontId::proportional(10.0),
-        TEXT_FAINT.gamma_multiply(a),
+        txt_faint().gamma_multiply(a),
     );
 }
 
@@ -364,7 +364,7 @@ pub(crate) fn swatches(ui: &mut egui::Ui, colors: &[&str], current: &str) -> Opt
         let round = rad * (1.0 - 0.6 * m * m);
         p.rect_filled(sq.translate(vec2(0.0, 1.0 + 1.5 * m)), round, Color32::from_black_alpha(((40.0 + 50.0 * m) * a) as u8));
         p.rect_filled(sq, round, hex(c).gamma_multiply(a));
-        p.rect_stroke(sq, round, EStroke::new(1.0_f32, Color32::from_white_alpha((35.0 + 40.0 * m) as u8).gamma_multiply(a)));
+        p.rect_stroke(sq, round, EStroke::new(1.0_f32, wa((35.0 + 40.0 * m) as u8).gamma_multiply(a)));
         if on > 0.01 {
             p.rect_stroke(sq.expand(2.5), round + 2.5, EStroke::new(1.5_f32, Color32::WHITE.gamma_multiply(a * on)));
         }

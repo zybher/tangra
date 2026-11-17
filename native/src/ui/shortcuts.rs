@@ -54,14 +54,14 @@ impl App {
                 glass(&p, r, 12.0, a);
                 p.rect_stroke(r, 12.0, EStroke::new(1.0_f32, border().gamma_multiply(a)));
                 let a0 = stagger(ot, 0).min(t);
-                p.text(pos2(r.min.x + 20.0 + (1.0 - a0) * -18.0, r.min.y + 26.0), Align2::LEFT_CENTER, "Keyboard shortcuts", FontId::proportional(14.5), TEXT.gamma_multiply(a0));
+                p.text(pos2(r.min.x + 20.0 + (1.0 - a0) * -18.0, r.min.y + 26.0), Align2::LEFT_CENTER, "Keyboard shortcuts", FontId::proportional(14.5), txt().gamma_multiply(a0));
                 // Close (x)
                 let xr = Rect::from_center_size(pos2(r.max.x - 24.0, r.min.y + 26.0), vec2(24.0, 24.0));
                 let xresp = ui.interact(xr, egui::Id::new("qd_keys_x"), Sense::click());
                 let (xh, xp) = hover_fx(ctx, &xresp, true);
                 p.rect_filled(xr, 6.0, hover_fill(xh, xp).gamma_multiply(a));
                 let c = xr.center();
-                let xs = EStroke::new(1.2_f32, mix(TEXT_DIM, Color32::WHITE, xh).gamma_multiply(a));
+                let xs = EStroke::new(1.2_f32, mix(txt_dim(), hi(), xh).gamma_multiply(a));
                 p.line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], xs);
                 p.line_segment([c + vec2(4.0, -4.0), c + vec2(-4.0, 4.0)], xs);
                 if xresp.clicked() {
@@ -79,7 +79,7 @@ impl App {
                     let (h, pr) = hover_fx(ctx, &resp, true);
                     let rec = self.recording == Some(which);
                     p.rect_filled(row, 8.0, hover_fill(h, pr).gamma_multiply(a));
-                    p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), TEXT_DIM.gamma_multiply(a));
+                    p.text(pos2(row.min.x + 8.0, row.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), txt_dim().gamma_multiply(a));
                     // The key badges and "Press keys…" crossfade (and the blue eases in) instead of swapping (#72)
                     let rk = ease(ctx, egui::Id::new(("qd_keys_rec", which)), rec);
                     let combo_caps: Vec<String> = combo
@@ -97,12 +97,12 @@ impl App {
                         let a = a * k;
                         let mut x = row.max.x - 8.0;
                         for cap in caps.iter().rev() {
-                            let g = p.layout_no_wrap(cap.clone(), FontId::proportional(11.5), (if recording { blue() } else { TEXT }).gamma_multiply(a));
+                            let g = p.layout_no_wrap(cap.clone(), FontId::proportional(11.5), (if recording { blue() } else { txt() }).gamma_multiply(a));
                             let cw = g.size().x + 14.0;
                             let kr = Rect::from_min_size(pos2(x - cw, row.center().y - 11.0), vec2(cw, 22.0));
                             p.rect_filled(kr, 5.0, frame_bg().gamma_multiply(a));
                             p.rect_stroke(kr, 5.0, EStroke::new(1.0_f32, (if recording { blue().gamma_multiply(0.4 + 0.6 * pulse) } else { border() }).gamma_multiply(a)));
-                            p.galley(pos2(kr.min.x + 7.0, kr.center().y - g.size().y / 2.0), g, TEXT.gamma_multiply(a));
+                            p.galley(pos2(kr.min.x + 7.0, kr.center().y - g.size().y / 2.0), g, txt().gamma_multiply(a));
                             x = kr.min.x - 4.0;
                         }
                     };
@@ -132,7 +132,7 @@ impl App {
                 let ik = ease(ctx, egui::Id::new("qd_keys_ins_k"), self.hk_error.is_empty() && self.recording.is_some());
                 let hp = pos2(r.min.x + 20.0, r.max.y - 22.0);
                 if ik > 0.01 {
-                    p.text(hp, Align2::LEFT_CENTER, "Hold Ctrl, Alt or Shift and press a key · Esc cancels", FontId::proportional(11.0), TEXT_FAINT.gamma_multiply(a * hint_k * ik));
+                    p.text(hp, Align2::LEFT_CENTER, "Hold Ctrl, Alt or Shift and press a key · Esc cancels", FontId::proportional(11.0), txt_faint().gamma_multiply(a * hint_k * ik));
                 }
                 if ek > 0.01 {
                     p.text(hp, Align2::LEFT_CENTER, err, FontId::proportional(11.0), rgba(248, 113, 113, 255).gamma_multiply(a * hint_k * ek));

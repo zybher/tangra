@@ -138,7 +138,7 @@ pub(crate) fn paint(ctx: &egui::Context) {
         let r = 9.5 * (0.7 + 0.3 * bk) * (1.0 - (1.0 - PRESS_SCALE) * press);
         p.circle_filled(c + vec2(0.0, 1.0), r + 1.0, Color32::from_black_alpha((50.0 * bk) as u8));
         p.circle_filled(c, r, ink.gamma_multiply(0.92 * bk));
-        p.circle_stroke(c, r, egui::Stroke::new(1.0, Color32::from_white_alpha((40.0 * bk) as u8)));
+        p.circle_stroke(c, r, egui::Stroke::new(1.0, wa((40.0 * bk) as u8)));
         crate::ui::svg_icons::draw(&p, name, c, r * 1.25, Color32::WHITE.gamma_multiply(bk));
     }
 }

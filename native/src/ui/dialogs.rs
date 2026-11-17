@@ -14,7 +14,7 @@ impl App {
             EditTarget::Group(id) => self.board.group_cards.iter().find(|g| &g.id == id).map(|g| {
                 // Same size, weight and spot as the drawn title (which is selected, so accent)
                 let size = FRAME_TITLE_PX;
-                let col = TEXT;
+                let col = txt();
                 let row = ctx.fonts(|f| f.row_height(&semibold(size)));
                 let bw = g.border.unwrap_or(1.0) * z;
                 (v.s(g.x, g.y) + vec2(5.0, -5.0 - row - bw / 2.0), size, col, 0)
@@ -127,13 +127,13 @@ impl App {
                 p.rect_stroke(r, 12.0, EStroke::new(1.0_f32, border().gamma_multiply(t)));
                 // Title + close
                 let a0 = stagger(ot, 0).min(t);
-                p.text(pos2(r.min.x + 20.0 - (1.0 - a0) * 18.0, r.min.y + 26.0), Align2::LEFT_CENTER, title, FontId::proportional(14.5), TEXT.gamma_multiply(a0));
+                p.text(pos2(r.min.x + 20.0 - (1.0 - a0) * 18.0, r.min.y + 26.0), Align2::LEFT_CENTER, title, FontId::proportional(14.5), txt().gamma_multiply(a0));
                 let xr = Rect::from_center_size(pos2(r.max.x - 24.0, r.min.y + 26.0), vec2(24.0, 24.0));
                 let xresp = ui.interact(xr, egui::Id::new("qd_prompt_x"), Sense::click());
                 let (xh, xp) = hover_fx(ctx, &xresp, true);
                 p.rect_filled(xr, 6.0, hover_fill(xh, xp).gamma_multiply(a0));
                 let c = xr.center();
-                let xs = EStroke::new(1.2_f32, mix(TEXT_DIM, Color32::WHITE, xh).gamma_multiply(a0));
+                let xs = EStroke::new(1.2_f32, mix(txt_dim(), hi(), xh).gamma_multiply(a0));
                 p.line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], xs);
                 p.line_segment([c + vec2(4.0, -4.0), c + vec2(-4.0, 4.0)], xs);
                 cancel |= xresp.clicked();
@@ -154,7 +154,7 @@ impl App {
                         let tr = fr.shrink2(vec2(10.0, 7.0));
                         let font = FontId::proportional(13.0);
                         if text.is_empty() {
-                            p.text(tr.left_center(), Align2::LEFT_CENTER, "Board name", font.clone(), TEXT_FAINT.gamma_multiply(a1));
+                            p.text(tr.left_center(), Align2::LEFT_CENTER, "Board name", font.clone(), txt_faint().gamma_multiply(a1));
                         }
                         ui.multiply_opacity(a1);
                         if live {
@@ -162,7 +162,7 @@ impl App {
                             let on: bool = ctx.data(|d| d.get_temp(son)).unwrap_or(false);
                             let enter = ui.input(|i| i.key_pressed(Key::Enter));
                             let ring = super::inline_text::Ring::Fixed(fr, 8.0);
-                            let res = super::inline_text::edit(ui, id, tr, text, font, TEXT, !on, ring);
+                            let res = super::inline_text::edit(ui, id, tr, text, font, txt(), !on, ring);
                             ctx.data_mut(|d| d.insert_temp(son, res.is_none()));
                             match res {
                                 Some(true) if enter => ok = !danger,
@@ -171,7 +171,7 @@ impl App {
                                 _ => {}
                             }
                         } else {
-                            p.text(tr.left_center(), Align2::LEFT_CENTER, text.as_str(), font, TEXT.gamma_multiply(a1));
+                            p.text(tr.left_center(), Align2::LEFT_CENTER, text.as_str(), font, txt().gamma_multiply(a1));
                         }
                         ui.multiply_opacity(1.0 / a1.max(0.01));
                     }
@@ -179,10 +179,10 @@ impl App {
                         let g = p.layout(
                             format!("Delete \"{}\"?\nAll its images go too. This cannot be undone.", board_name),
                             FontId::proportional(12.5),
-                            TEXT_DIM.gamma_multiply(a1),
+                            txt_dim().gamma_multiply(a1),
                             w - 40.0,
                         );
-                        p.galley(pos2(r.min.x + 20.0, r.min.y + 58.0 + dy1), g, TEXT_DIM.gamma_multiply(a1));
+                        p.galley(pos2(r.min.x + 20.0, r.min.y + 58.0 + dy1), g, txt_dim().gamma_multiply(a1));
                     }
                 }
 
@@ -202,7 +202,7 @@ impl App {
                     } else {
                         p.rect_filled(br, 8.0, hover_fill(hh, pp).gamma_multiply(a2));
                         p.rect_stroke(br, 8.0, EStroke::new(1.0_f32, border().gamma_multiply(a2)));
-                        p.text(br.center(), Align2::CENTER_CENTER, label, FontId::proportional(12.5), mix(TEXT_DIM, TEXT, hh).gamma_multiply(a2));
+                        p.text(br.center(), Align2::CENTER_CENTER, label, FontId::proportional(12.5), mix(txt_dim(), txt(), hh).gamma_multiply(a2));
                     }
                     (resp.clicked(), br.min.x)
                 };

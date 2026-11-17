@@ -64,15 +64,15 @@ pub(crate) fn shade(base: [u8; 3], d: i16) -> Color32 {
 }
 /// The tab bar / window chrome behind the tabs
 pub(crate) fn chrome() -> Color32 {
-    shade(theme_rgb(), -10)
+    tone(-10, -12)
 }
 /// The canvas (and the active tab, which is joined to it)
 pub(crate) fn bg() -> Color32 {
-    shade(theme_rgb(), -5)
+    tone(-5, -5)
 }
 /// Floating bars: toolbar, outline, style bar
 pub(crate) fn frame_bg() -> Color32 {
-    shade(theme_rgb(), 2)
+    tone(2, 14)
 }
 // ---- One palette for the whole UI ----
 /// Accent presets: (name, rgb)
@@ -102,21 +102,80 @@ pub(crate) fn accent_target() -> [u8; 3] {
     [(v >> 16) as u8, (v >> 8) as u8, v as u8]
 }
 /// Floating surfaces: menus, dialogs, pills, toasts.
-pub(crate) const TEXT: Color32 = Color32::from_rgb(236, 236, 236);
-pub(crate) const TEXT_DIM: Color32 = Color32::from_rgb(165, 165, 165);
-pub(crate) const TEXT_FAINT: Color32 = Color32::from_rgb(115, 115, 115);
+pub(crate) fn txt() -> Color32 {
+    gray_ui(236)
+}
+pub(crate) fn txt_dim() -> Color32 {
+    gray_ui(165)
+}
+pub(crate) fn txt_faint() -> Color32 {
+    gray_ui(115)
+}
+/// The strongest ink (hovered / active text and icons): white in dark mode, near-black in light
+pub(crate) fn hi() -> Color32 {
+    gray_ui(255)
+}
+
+// ---- Light mode (Settings > Extras) ----
+// One switch: the theme's surfaces swap to a light version of the same tint, and every
+// neutral grey / white wash in the UI turns over (light text becomes dark, white hover
+// washes become dark ones). Both cross-fade with the app's usual ease. The accent, pen
+// colours and what's on the board stay as they are.
+pub(crate) static LIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static LIGHT_K: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// How light the UI is right now (0 dark .. 1 light, eased)
+pub(crate) fn lk() -> f32 {
+    f32::from_bits(LIGHT_K.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Run every frame: eases toward the picked mode and re-tints egui's own widgets meanwhile
+pub(crate) fn tick_light(ctx: &egui::Context) {
+    let k = ease(ctx, egui::Id::new("qd_light_k"), LIGHT.load(std::sync::atomic::Ordering::Relaxed));
+    if (k - lk()).abs() > 1e-4 {
+        LIGHT_K.store(k.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        retint(ctx);
+    }
+}
+
+/// The theme's tint as a light surface: a near-white that leans the same way
+fn light_base([r, g, b]: [u8; 3]) -> [u8; 3] {
+    let avg = (r as f32 + g as f32 + b as f32) / 3.0;
+    let f = |v: u8| (238.0 + (v as f32 - avg) * 1.2).round().clamp(0.0, 255.0) as u8;
+    [f(r), f(g), f(b)]
+}
+
+/// A surface tone: `dark` / `light` are steps from the theme's dark / light base
+fn tone(dark: i16, light: i16) -> Color32 {
+    let base = theme_rgb();
+    let (d, l) = (shade(base, dark), shade(light_base(base), light));
+    let k = lk();
+    if k <= 0.0 { d } else if k >= 1.0 { l } else { mix(d, l, k) }
+}
+
+/// A neutral grey of the dark UI, turned over in light mode (236 text -> 19)
+pub(crate) fn gray_ui(v: u8) -> Color32 {
+    let k = lk();
+    Color32::from_gray((v as f32 + (255.0 - 2.0 * v as f32) * k).round().clamp(0.0, 255.0) as u8)
+}
+
+/// A white wash of the dark UI (hover fills, tracks); a dark wash in light mode
+pub(crate) fn wa(a: u8) -> Color32 {
+    let k = lk();
+    if k <= 0.0 { Color32::from_white_alpha(a) } else { mix(Color32::from_white_alpha(a), Color32::from_black_alpha(a), k) }
+}
 pub(crate) const DANGER: Color32 = Color32::from_rgb(232, 17, 35);
 
 // Opaque on purpose: translucent white is blended in linear light here, so a
 // faint alpha comes out several times brighter than it looks on paper, and an
 // edge that lands on one pixel row instead of two turns into a pale line.
 pub(crate) fn border() -> Color32 {
-    shade(theme_rgb(), 0x12)
+    tone(0x12, -26)
 }
 
 /// Floating surfaces that open (menus, dialogs, toasts): the bar tone, a hair lighter
 pub(crate) fn popup() -> Color32 {
-    shade(theme_rgb(), 5)
+    tone(5, 16)
 }
 
 /// Soft round glow: a bell-shaped falloff built from many rings, so no edges show
@@ -311,7 +370,8 @@ pub(crate) fn retint(ctx: &egui::Context) {
     v.window_stroke = EStroke::new(1.0_f32, border());
     v.widgets.noninteractive.bg_stroke = EStroke::new(1.0_f32, border());
     let [r, g, b] = theme_rgb();
-    v.extreme_bg_color = Color32::from_rgb(r.saturating_sub(1), g.saturating_sub(1), b.saturating_sub(1));
+    v.extreme_bg_color = mix(Color32::from_rgb(r.saturating_sub(1), g.saturating_sub(1), b.saturating_sub(1)), bg(), lk());
+    v.override_text_color = Some(txt());
     ctx.set_style(st);
 }
 

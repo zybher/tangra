@@ -98,8 +98,8 @@ impl App {
                     let mut e = ed.clone();
                     let v = *e.field(f);
                     let resp = ui.interact(rr, bid.with(("islider", f)), if live { Sense::click_and_drag() } else { Sense::hover() });
-                    wave_tile(&p, rr, wm, mix(popup(), Color32::from_gray(90), 0.35), 1.0);
-                    let col = mix(TEXT_DIM, TEXT, wm);
+                    wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
+                    let col = mix(txt_dim(), txt(), wm);
                     p.text(pos2(rr.min.x + 12.0, rr.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0 * k), col);
                     // Double-click to type it (num_edit.rs)
                     let ne = super::num_edit::NumEdit::run(&ctx, &resp, live, v, lo, hi);
@@ -108,8 +108,8 @@ impl App {
                     }
                     // The value brightens/dims as it leaves or returns to 0, instead of switching
                     let nz = ease(&ctx, bid.with(("inz", f)), v != 0.0);
-                    let vcol = mix(TEXT_FAINT, mix(TEXT_DIM, TEXT, 0.6 + 0.4 * wm), nz);
-                    let vcol = mix(vcol, TEXT, ne.e);
+                    let vcol = mix(txt_faint(), mix(txt_dim(), txt(), 0.6 + 0.4 * wm), nz);
+                    let vcol = mix(vcol, txt(), ne.e);
                     let vr = pos2(rr.max.x - 12.0, rr.center().y);
                     ne.draw(&p, None, vr, 12.0 * k);
                     let txt = ne.text.clone().unwrap_or_else(|| format!("{}", v.round() as i32));
@@ -141,7 +141,7 @@ impl App {
                 glass(&p, br, br.width() / 2.0, 1.0);
                 p.circle_filled(br.center(), br.width() / 2.0, hover_fill(hh, pp));
                 p.circle_stroke(br.center(), br.width() / 2.0, EStroke::new(1.0_f32, border()));
-                super::icons::reset(&p, br.center(), 14.0, mix(TEXT_DIM, Color32::WHITE, hh));
+                super::icons::reset(&p, br.center(), 14.0, mix(txt_dim(), hi(), hh));
                 if live && rs_on && resp.clicked() {
                     match rs_which {
                         0 => self.reset_morph_start(&ctx, img, &[0, 1, 2, 3, 4], &ed),

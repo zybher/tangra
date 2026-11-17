@@ -60,11 +60,11 @@ impl App {
             let img = self.board.images.iter().find(|i| &i.id == image);
             let sx = img.map_or(1.0, |i| i.scale().0);
             let l = img.and_then(|i| i.annotations.texts.iter().find(|l| &l.id == label));
-            header(ui, "   TEXT ON IMAGE");
+            header(ui, "   txt() ON IMAGE");
             if item(ui, "Edit text", "Double-click", true) {
                 acts.push(Act::Activate);
             }
-            header(ui, "   TEXT SIZE");
+            header(ui, "   txt() SIZE");
             let cur_sz = l.map_or(16.0, |t| (if t.font_size > 0.0 { t.font_size } else { 16.0 }) * sx);
             if let Some(sz) = choice_row(ui, &[("S", 12.0), ("M", 16.0), ("L", 24.0), ("XL", 36.0), ("XXL", 56.0)], cur_sz, 1.5) {
                 acts.push(Act::TextFontSize(sz));
@@ -116,7 +116,7 @@ impl App {
                     acts.push(Act::Activate);
                 }
                 ui.add_space(0.0);
-                header(ui, "   TEXT SIZE");
+                header(ui, "   txt() SIZE");
                 let current_sz = match &self.sel {
                     Some((Kind::Note, id)) => self.board.sticky_notes.iter().find(|n| &n.id == id).map(|n| if n.font_size > 0.0 { n.font_size } else { 13.5 }),
                     _ => None,

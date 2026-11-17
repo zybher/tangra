@@ -311,9 +311,9 @@ impl App {
                         let y = br.center().y;
                         let glyph = pos2(lerp(gc.x, tab.min.x + width() - 19.0), y);
                         let title = pos2(lerp(gc.x + 16.0, tab.min.x + 12.0), y);
-                        let tab_col = mix(TEXT_DIM, Color32::from_gray(235), h);
-                        let gcol = mix(TEXT_DIM, Color32::from_gray(235), lerp(h, xh)).gamma_multiply(al);
-                        let tcol = mix(tab_col, Color32::from_gray(230), m).gamma_multiply(al);
+                        let tab_col = mix(txt_dim(), gray_ui(235), h);
+                        let gcol = mix(txt_dim(), gray_ui(235), lerp(h, xh)).gamma_multiply(al);
+                        let tcol = mix(tab_col, gray_ui(230), m).gamma_multiply(al);
                         sidebar_glyph(&p, glyph, gcol);
                         p.text(title, Align2::LEFT_CENTER, "Outline", FontId::proportional(lerp(13.0, 12.5)), tcol);
                     }
@@ -485,7 +485,7 @@ impl App {
                     };
                     let half = tr.width() / 2.0;
                     let pill = Rect::from_min_size(pos2(tr.min.x + 2.0 + bk * half, tr.min.y + 2.0), vec2(half - 4.0 + 0.0, tr.height() - 4.0));
-                    p.rect_filled(pill, 5.5, Color32::from_white_alpha(22));
+                    p.rect_filled(pill, 5.5, wa(22));
                     for (i, (label, on_board)) in [("This frame", false), ("Whole board", true)].into_iter().enumerate() {
                         let r = Rect::from_min_size(pos2(tr.min.x + i as f32 * half, tr.min.y), vec2(half, tr.height()));
                         let resp = ui.interact(r, egui::Id::new(("qd_outline_scope", label)), Sense::click());
@@ -495,7 +495,7 @@ impl App {
                             p.rect_filled(r.shrink(2.0), 5.5, hover_fill(sh * 0.6, sp));
                         }
                         let onk = if on_board { bk } else { 1.0 - bk };
-                        p.text(r.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), mix(TEXT_DIM, Color32::from_gray(235), onk.max(sh * 0.5)));
+                        p.text(r.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), mix(txt_dim(), gray_ui(235), onk.max(sh * 0.5)));
                         if resp.clicked() {
                             scope = Some(on_board);
                         }
@@ -516,17 +516,17 @@ impl App {
                     }
                     // Magnifier
                     let mc = p.round_pos_to_pixels(pos2(sr.min.x + 14.0, sr.center().y - 0.5));
-                    let ms = EStroke::new(1.2_f32, TEXT_DIM);
+                    let ms = EStroke::new(1.2_f32, txt_dim());
                     p.circle_stroke(mc, 4.0, ms);
                     p.line_segment([mc + vec2(2.9, 2.9), mc + vec2(5.6, 5.6)], ms);
                     // Typed in place like a rename: gliding caret and selection (inline_text.rs)
                     let tr = Rect::from_min_max(pos2(sr.min.x + 30.0, sr.min.y), pos2(sr.max.x - 24.0, sr.max.y));
                     let sfont = FontId::proportional(11.5);
                     if query.is_empty() {
-                        p.text(tr.left_center(), Align2::LEFT_CENTER, "Search layers", sfont.clone(), TEXT_FAINT);
+                        p.text(tr.left_center(), Align2::LEFT_CENTER, "Search layers", sfont.clone(), txt_faint());
                     }
                     if on {
-                        match super::inline_text::edit(ui, te_id, tr, &mut query, sfont, TEXT, false, super::inline_text::Ring::Fixed(sr, 7.0)) {
+                        match super::inline_text::edit(ui, te_id, tr, &mut query, sfont, txt(), false, super::inline_text::Ring::Fixed(sr, 7.0)) {
                             Some(false) => {
                                 query.clear();
                                 ctx.data_mut(|d| d.insert_temp(son, false));
@@ -540,10 +540,10 @@ impl App {
                             ctx.set_cursor_icon(egui::CursorIcon::Text);
                         }
                         if !sresp.clicked() {
-                            p.with_clip_rect(tr.expand2(vec2(2.0, 4.0))).text(tr.left_center(), Align2::LEFT_CENTER, query.as_str(), sfont.clone(), TEXT);
+                            p.with_clip_rect(tr.expand2(vec2(2.0, 4.0))).text(tr.left_center(), Align2::LEFT_CENTER, query.as_str(), sfont.clone(), txt());
                         } else {
                             ctx.data_mut(|d| d.insert_temp(son, true));
-                            super::inline_text::edit(ui, te_id, tr, &mut query, sfont, TEXT, true, super::inline_text::Ring::Fixed(sr, 7.0));
+                            super::inline_text::edit(ui, te_id, tr, &mut query, sfont, txt(), true, super::inline_text::Ring::Fixed(sr, 7.0));
                         }
                     }
                     if !query.is_empty() {
@@ -552,7 +552,7 @@ impl App {
                         let (ch, cp) = hover_fx(ctx, &cresp, true);
                         p.rect_filled(cr, 5.0, hover_fill(ch, cp));
                         let c = p.round_pos_to_pixels(cr.center());
-                        let cs = EStroke::new(1.2_f32, mix(TEXT_DIM, Color32::from_gray(235), ch));
+                        let cs = EStroke::new(1.2_f32, mix(txt_dim(), gray_ui(235), ch));
                         p.line_segment([c + vec2(-3.0, -3.0), c + vec2(3.0, 3.0)], cs);
                         p.line_segment([c + vec2(3.0, -3.0), c + vec2(-3.0, 3.0)], cs);
                         if cresp.clicked() {
@@ -618,7 +618,7 @@ impl App {
                             // (the tile fades as the selection eases in, instead of cutting out)
                             let skl = ease(ctx, egui::Id::new(("qd_outline_selk", &s.1)), self.selected.contains(s));
                             if skl < 0.99 {
-                                wave_tile(&ui.painter().with_clip_rect(ui.clip_rect()), r, m, mix(popup(), Color32::from_gray(90), 0.35), e * (1.0 - skl));
+                                wave_tile(&ui.painter().with_clip_rect(ui.clip_rect()), r, m, mix(popup(), gray_ui(90), 0.35), e * (1.0 - skl));
                             }
                             laid.push((r, m, e, resp));
                         }
@@ -706,7 +706,7 @@ impl App {
                             let folded = fold.contains(&s.1);
                             if has {
                                 let c = pos2(x0 + 5.0, cy);
-                                let st = EStroke::new(1.3_f32, TEXT_DIM);
+                                let st = EStroke::new(1.3_f32, txt_dim());
                                 // The arrow turns between right (folded) and down instead of flipping
                                 let open = ease(&ctx, egui::Id::new(("qd_ol_fold", s.1.as_str())), !folded);
                                 let (sn, cs) = (open * std::f32::consts::FRAC_PI_2).sin_cos();
@@ -717,12 +717,12 @@ impl App {
                             }
                             // Kind icon
                             let ic = pos2(x0 + 24.0, cy);
-                            let icol = mix(Color32::from_gray(140), blue(), sk);
+                            let icol = mix(gray_ui(140), blue(), sk);
                             super::icons::kind_icon_named(&p, s.0, self.stroke_tool(s), ic, icol);
                             let name = self.outline_name(s);
                             // Hidden (or inside a hidden frame) rows fade
                             let dim = 1.0 - 0.6 * ease(ctx, egui::Id::new(("qd_ol_dim", &s.1)), hid_all.contains(&s.1));
-                            let tc = mix(mix(TEXT_DIM, TEXT, 0.6 + 0.4 * m), Color32::WHITE, sk).gamma_multiply(dim);
+                            let tc = mix(mix(txt_dim(), txt(), 0.6 + 0.4 * m), hi(), sk).gamma_multiply(dim);
                             // Eye + lock on the right: shown on hover, or always while switched on;
                             // they fade in and the name makes room smoothly
                             let own_h = self.board.hidden.contains(&s.1);
@@ -737,7 +737,7 @@ impl App {
                             let on_lock = show_ic && ptr.is_some_and(|q| (q.x - lock_c.x).abs() < 9.0);
                             if ick > 0.01 {
                                 let (oe, ol) = (ease(ctx, resp.id.with("over_eye"), on_eye), ease(ctx, resp.id.with("over_lock"), on_lock));
-                                let ic = |on: bool, over: f32| mix(Color32::from_gray(if on { 205 } else { 150 }), Color32::from_gray(240), over).gamma_multiply(ick);
+                                let ic = |on: bool, over: f32| mix(gray_ui(if on { 205 } else { 150 }), gray_ui(240), over).gamma_multiply(ick);
                                 let locked_eff = own_l || (lock_all.contains(&s.1) && !hid_all.contains(&s.1));
                                 super::icons::lock(&p, lock_c, 15.0, ic(locked_eff, ol), locked_eff);
                                 super::icons::eye(&p, eye_c, 15.0, ic(own_h, oe), own_h);
@@ -785,7 +785,7 @@ impl App {
                             }
                             // Folded child count fades in as the arrow turns
                             if fold_k > 0.01 {
-                                p.text(pos2(r.max.x - 8.0 - icon_w, cy), Align2::RIGHT_CENTER, tree.kids[i].len().to_string(), FontId::proportional(10.5), Color32::from_gray(110).gamma_multiply(fold_k));
+                                p.text(pos2(r.max.x - 8.0 - icon_w, cy), Align2::RIGHT_CENTER, tree.kids[i].len().to_string(), FontId::proportional(10.5), gray_ui(110).gamma_multiply(fold_k));
                             }
                             if resp.hovered() {
                                 hov = Some(s.clone());

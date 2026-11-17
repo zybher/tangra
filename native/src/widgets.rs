@@ -345,7 +345,7 @@ pub(crate) fn wave_tile(p: &egui::Painter, r: Rect, m: f32, fill: Color32, a: f3
 }
 
 pub(crate) fn hover_fill(h: f32, p: f32) -> Color32 {
-    Color32::from_white_alpha((h * 18.0 + p * 20.0) as u8)
+    wa((h * 18.0 + p * 20.0) as u8)
 }
 /// Frame size presets: label, width, height
 pub(crate) const FRAME_SIZES: [(&str, f32, f32); 6] = [("Free", 380.0, 280.0), ("16:9", 480.0, 270.0), ("9:16", 270.0, 480.0), ("1:1", 360.0, 360.0), ("4:3", 400.0, 300.0), ("3:4", 300.0, 400.0)];

@@ -367,7 +367,7 @@ impl App {
             pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
             // Align greys out (and back) smoothly when an auto-layout frame takes over placement
             let en_k = ease(&ctx, bid.with(("en", i)), enabled);
-            let col = mix(TEXT_DIM, TEXT, hh).gamma_multiply(ca * (0.35 + 0.65 * en_k));
+            let col = mix(txt_dim(), txt(), hh).gamma_multiply(ca * (0.35 + 0.65 * en_k));
             match *s {
                 Seg::AlignPop => {
                     align_btn = r;
@@ -379,7 +379,7 @@ impl App {
                     } else if lq > 0.001 {
                         liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 4.0);
                     }
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh.max(lq)).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
+                    let gc = mix(txt_dim(), hi(), hh.max(lq)).gamma_multiply(ca * if enabled { 1.0 } else { 0.35 });
                     super::icons::align(&pl, pos2(r.min.x + 14.0, cyy), 15.0, gc, 0);
                     let cv = pos2(r.max.x - 10.0, cyy);
                     crate::ui::svg_icons::draw(&pl, "chevron-down", cv, 12.0, gc);
@@ -408,7 +408,7 @@ impl App {
                         ctx.request_repaint();
                     }
                     let hh = hh.max(lq);
-                    super::icons::opacity(&pl, pos2(r.min.x + 14.0, cyy), 14.0, mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca));
+                    super::icons::opacity(&pl, pos2(r.min.x + 14.0, cyy), 14.0, mix(txt_dim(), hi(), hh).gamma_multiply(ca));
                     // Double-click to type it (num_edit.rs)
                     let ne = super::num_edit::NumEdit::run(&ctx, &resp, true, opacity, 0.0, 100.0);
                     if let Some(v) = ne.apply {
@@ -419,7 +419,7 @@ impl App {
                     let shown = super::micro::glide(&ctx, bid.with("op_num"), opacity, resp.dragged());
                     let txt = ne.text.clone().unwrap_or_else(|| format!("{}%", shown.round() as i32));
                     // On the scaled layer so it zooms smoothly (a growing font size re-snaps its glyphs)
-                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
+                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(txt_dim(), crate::theme::txt(), hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("v0"), opacity));
                     }
@@ -444,7 +444,7 @@ impl App {
                     ne.draw(&pl, Some(r), pos2(r.max.x - 9.0, cyy), 12.0);
                     let shown = super::micro::glide(&ctx, bid.with("cr_num"), corner, resp.dragged());
                     let txt = ne.text.clone().unwrap_or_else(|| format!("{}", shown.round() as i32));
-                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(TEXT_DIM, TEXT, hh.max(0.6).max(ne.e)).gamma_multiply(ca));
+                    zoom_text(&pl, tv, sc, pos2(r.max.x - 9.0, cyy), Align2::RIGHT_CENTER, txt, 12.0, mix(txt_dim(), crate::theme::txt(), hh.max(0.6).max(ne.e)).gamma_multiply(ca));
                     if resp.drag_started() {
                         ctx.data_mut(|d| d.insert_temp(bid.with("c0"), corner));
                     }
@@ -465,7 +465,7 @@ impl App {
                     } else if lq > 0.001 {
                         liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + kind as f32);
                     }
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh.max(lq)).gamma_multiply(ca);
+                    let gc = mix(txt_dim(), hi(), hh.max(lq)).gamma_multiply(ca);
                     if kind == 2 {
                         super::icons::adjust(&pl, pos2(r.center().x, cyy), 16.0, gc);
                     } else {
@@ -479,7 +479,7 @@ impl App {
                     }
                 }
                 Seg::Restore => {
-                    let gc = mix(TEXT_DIM, Color32::WHITE, hh).gamma_multiply(ca * rest_k);
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca * rest_k);
                     super::icons::restore_cuts(&pl, pos2(r.center().x, cyy), 16.0 * rest_k, gc);
                     if resp.hovered() && pop == 0 {
                         tip = Some((r.center().x, "Restore cut areas"));
@@ -547,7 +547,7 @@ impl App {
             if let Some((tx, text)) = ctx.data(|d| d.get_temp::<(f32, String)>(bid.with("tipv"))) {
                 // Slides from button to button instead of jumping (snaps in when it was hidden)
                 let tx = super::micro::glide(&ctx, bid.with("tipx"), tx, tk < 0.05);
-                let gl = p.layout_no_wrap(text, FontId::proportional(11.5), TEXT.gamma_multiply(tk));
+                let gl = p.layout_no_wrap(text, FontId::proportional(11.5), txt().gamma_multiply(tk));
                 let tr = Rect::from_center_size(pos2(tx, bar.min.y - 18.0 + (1.0 - tk) * 4.0), gl.size() + vec2(16.0, 8.0));
                 glass(&p, tr, 6.0, tk);
                 p.rect_stroke(tr, 6.0, EStroke::new(1.0_f32, border().gamma_multiply(tk)));

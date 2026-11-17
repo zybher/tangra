@@ -6,7 +6,8 @@ use crate::*;
 /// Paints the grid of pattern marks over the canvas
 pub(crate) fn paint_grid(p: &egui::Painter, rect: Rect, v: View, pattern: u8, dots: f32, now: f64) {
     let z = v.cam.zoom;
-    let dot = rgba(255, 255, 255, (dots.clamp(0.0, 100.0) * 0.26) as u8);
+    // white dots on a dark canvas, dark ones in light mode (theme.rs)
+    let dot = wa((dots.clamp(0.0, 100.0) * 0.26) as u8);
     if dot.a() == 0 {
         return;
     }

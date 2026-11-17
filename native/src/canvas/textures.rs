@@ -46,7 +46,7 @@ impl App {
         let width = s.width * v.cam.zoom;
         let Some(tex) = self.mosaics.get(&img.asset_file_name) else {
             // Not ready yet (a moment after the first swipe): cover it plainly
-            p.add(Shape::line(pts, EStroke::new(width, Color32::from_gray(70))));
+            p.add(Shape::line(pts, EStroke::new(width, gray_ui(70))));
             return;
         };
         let r = Rect::from_min_max(v.s(img.x, img.y), v.s(img.x + img.width, img.y + img.height));

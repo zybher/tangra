@@ -93,14 +93,14 @@ impl App {
             let custom = !c.color.is_empty() && !c.color.eq_ignore_ascii_case("#1e293b");
             let (fill_color, stroke_color, title_color) = if c.color.eq_ignore_ascii_case("none") {
                 // No fill: only the outline (and title) show (the panel's grey gone clear, so it fades)
-                (Color32::from_rgba_unmultiplied(36, 36, 36, 0), Color32::from_white_alpha(48), FRAME_TITLE_COL)
+                (Color32::from_rgba_unmultiplied(36, 36, 36, 0), wa(48), FRAME_TITLE_COL)
             } else if custom {
                 let [cr, cg, cb] = hex_rgb(&c.color);
                 // The frame is the colour picked; the title keeps the neutral grey
                 let c = rgba(cr, cg, cb, 255);
                 (c, mix(c, Color32::BLACK, 0.25), FRAME_TITLE_COL)
             } else {
-                (panel, Color32::from_white_alpha(48), FRAME_TITLE_COL)
+                (panel, wa(48), FRAME_TITLE_COL)
             };
             // Looks glide to new values (canvas/presence.rs, audit #18, #22-24)
             use super::presence::{gcol, gf};
@@ -246,7 +246,7 @@ impl App {
             } else {
                 p.rect_filled(r, rd, rgba(30, 41, 59, 255));
                 let msg = if self.missing.contains(&img.asset_file_name) { "Image file missing" } else { "Loading…" };
-                p.text(r.center(), Align2::CENTER_CENTER, msg, FontId::proportional(12.0), TEXT_FAINT);
+                p.text(r.center(), Align2::CENTER_CENTER, msg, FontId::proportional(12.0), txt_faint());
             }
             }
             let (sx, sy) = img.scale();
@@ -322,7 +322,7 @@ impl App {
             if let Some(f) = font(11.0 * z) {
                 let domain = if l.domain.is_empty() { "LINK" } else { &l.domain };
                 cp.text(v.s(l.x + 14.0, l.y + 14.0), Align2::LEFT_TOP, domain, f.clone(), rgba(56, 189, 248, 255));
-                cp.text(v.s(l.x + 14.0, l.y + 62.0), Align2::LEFT_TOP, &l.url, f.clone(), TEXT_FAINT);
+                cp.text(v.s(l.x + 14.0, l.y + 62.0), Align2::LEFT_TOP, &l.url, f.clone(), txt_faint());
                 if !l.notes.is_empty() {
                     cp.text(v.s(l.x + 14.0, l.y + 84.0), Align2::LEFT_TOP, &l.notes, f, rgba(148, 163, 184, 255));
                 }
@@ -742,7 +742,7 @@ impl App {
                 let (name, dot, dot_col) = pill;
                 let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new(("qd_pill_layer", which)));
                 let lp = ctx.layer_painter(layer).with_clip_rect(rect);
-                let galley = lp.layout_no_wrap(format!("{name}   ·   Esc to finish"), FontId::proportional(12.0), TEXT.gamma_multiply(a));
+                let galley = lp.layout_no_wrap(format!("{name}   ·   Esc to finish"), FontId::proportional(12.0), txt().gamma_multiply(a));
                 let w = galley.size().x + if *dot { 44.0 } else { 28.0 };
                 let c = pos2(rect.center().x, rect.min.y + 26.0);
                 let r = Rect::from_center_size(c, vec2(w * sx, 28.0 * sy));
@@ -829,7 +829,7 @@ impl App {
                 };
                 // Colours ease on/off instead of switching instantly
                 let on = ease(&ctx, egui::Id::new(("qd_keys_on", i)), lit);
-                let (kc, nc) = (mix(TEXT_DIM, blue(), on), mix(TEXT_FAINT, TEXT, on));
+                let (kc, nc) = (mix(txt_dim(), blue(), on), mix(txt_faint(), txt(), on));
                 p.text(pos2(rect.min.x + 16.0 + 2.0 * on, y + 8.0), Align2::LEFT_CENTER, key, FontId::proportional(11.0), kc);
                 p.text(pos2(rect.min.x + 40.0 + 2.0 * on, y + 8.0), Align2::LEFT_CENTER, name, FontId::proportional(11.5), nc);
                 y += 16.0;
@@ -858,8 +858,8 @@ impl App {
             for (i, (label, value, lit)) in rows.into_iter().enumerate() {
                 let a = egui::emath::easing::cubic_out((st * 1.7 - i as f32 * 0.09).clamp(0.0, 1.0));
                 let dx = -(1.0 - a) * 14.0;
-                p.text(pos2(rect.min.x + 16.0 + dx, y + 8.0), Align2::LEFT_CENTER, label, FontId::proportional(11.0), TEXT_FAINT.gamma_multiply(a));
-                p.text(pos2(rect.min.x + 72.0 + dx, y + 8.0), Align2::LEFT_CENTER, value, FontId::proportional(11.5), if lit { blue() } else { TEXT_DIM }.gamma_multiply(a));
+                p.text(pos2(rect.min.x + 16.0 + dx, y + 8.0), Align2::LEFT_CENTER, label, FontId::proportional(11.0), txt_faint().gamma_multiply(a));
+                p.text(pos2(rect.min.x + 72.0 + dx, y + 8.0), Align2::LEFT_CENTER, value, FontId::proportional(11.5), if lit { blue() } else { txt_dim() }.gamma_multiply(a));
                 y += 16.0;
             }
         }
@@ -872,7 +872,7 @@ impl App {
                 let msg = &clip_name(msg, 40);
                 let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new(("qd_toast_layer", which)));
                 let lp = ctx.layer_painter(layer).with_clip_rect(rect);
-                let galley = lp.layout_no_wrap(msg.to_string(), FontId::proportional(12.5), TEXT.gamma_multiply(a));
+                let galley = lp.layout_no_wrap(msg.to_string(), FontId::proportional(12.5), txt().gamma_multiply(a));
                 let size = galley.size() + vec2(28.0, 14.0);
                 let c = pos2(rect.center().x, rect.max.y - 84.0);
                 let r = Rect::from_center_size(c, size * vec2(sx, sy));

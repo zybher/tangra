@@ -407,6 +407,7 @@ impl App {
         AURA_PAL.store(settings.aura_palette as usize, std::sync::atomic::Ordering::Relaxed);
         AURA_MOT.store(settings.aura_motion as usize, std::sync::atomic::Ordering::Relaxed);
         ANIM.store(settings.anim, std::sync::atomic::Ordering::Relaxed);
+        LIGHT.store(!settings.dark_theme, std::sync::atomic::Ordering::Relaxed);
         if settings.outline_width > 0.0 {
             ui::outline::set_width(settings.outline_width);
         }
@@ -677,6 +678,7 @@ impl eframe::App for App {
         self.tick_glides(ctx);
         self.tick_presence(ctx);
         theme_glide::tick(ctx);
+        tick_light(ctx);
         self.stamp_parents();
         if matches!(self.drag, Drag::None) {
             let mut auto = Vec::new();
@@ -987,15 +989,15 @@ fn setup_style(ctx: &egui::Context) {
     v.extreme_bg_color = Color32::from_rgb(24, 24, 24);
     v.selection.bg_fill = blue();
     v.selection.stroke = EStroke::new(1.0_f32, Color32::from_rgb(147, 197, 253));
-    v.override_text_color = Some(TEXT);
+    v.override_text_color = Some(txt());
     v.widgets.noninteractive.bg_stroke = EStroke::new(1.0_f32, border());
-    v.widgets.inactive.bg_fill = Color32::from_gray(52);
-    v.widgets.inactive.weak_bg_fill = Color32::from_gray(52);
-    v.widgets.hovered.bg_fill = Color32::from_gray(66);
-    v.widgets.hovered.weak_bg_fill = Color32::from_gray(66);
+    v.widgets.inactive.bg_fill = gray_ui(52);
+    v.widgets.inactive.weak_bg_fill = gray_ui(52);
+    v.widgets.hovered.bg_fill = gray_ui(66);
+    v.widgets.hovered.weak_bg_fill = gray_ui(66);
     v.widgets.hovered.bg_stroke = EStroke::NONE;
-    v.widgets.active.bg_fill = Color32::from_gray(80);
-    v.widgets.active.weak_bg_fill = Color32::from_gray(80);
+    v.widgets.active.bg_fill = gray_ui(80);
+    v.widgets.active.weak_bg_fill = gray_ui(80);
     for w in [
         &mut v.widgets.noninteractive,
         &mut v.widgets.inactive,
