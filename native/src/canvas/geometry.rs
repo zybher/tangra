@@ -81,6 +81,20 @@ pub(crate) fn label_hit(l: &Label, p: Pt, pad: f32) -> bool {
 }
 
 pub(crate) fn paint_stroke(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, width: f32) {
+    // Off screen: nothing to build (zoomed in on a big board most lines are, audit #24).
+    // Points plus curve handles hold the whole line; the pad covers its width and joins
+    let mut lo = Pos2::new(f32::MAX, f32::MAX);
+    let mut hi = Pos2::new(f32::MIN, f32::MIN);
+    let mut grow = |q: Pt| {
+        let m = map(q);
+        lo = lo.min(m);
+        hi = hi.max(m);
+    };
+    s.points.iter().for_each(|q| grow(*q));
+    s.knots.iter().for_each(|k| [k.p, k.i, k.o].into_iter().for_each(&mut grow));
+    if lo.x <= hi.x && !Rect::from_min_max(lo, hi).expand(width * 2.0 + 8.0).intersects(p.clip_rect()) {
+        return;
+    }
     // rubbed-out spots / lasso cuts are cut out of whatever it paints (canvas/holes.rs)
     let holes = match super::holes::stroke_box(s) {
         Some(bx) if !s.erase.is_empty() || !s.erase_loops.is_empty() => super::holes::screen(&s.erase, &s.erase_loops, bx, &map),
