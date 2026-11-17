@@ -114,6 +114,21 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
     // stroke position slides between inside / centre / outside
     let spk = gf(ctx, gid.with("sp"), stroke_inset(s.stroke_pos, 2.0));
     let inset = |w: f32| spk * w / 2.0;
+    // Pen path: any shape, so its own fill (path_mesh.rs) and a plain line with sharp joins
+    if !s.knots.is_empty() {
+        let n = pts.len();
+        if s.closed && n > 3 {
+            if fk > 0.001 {
+                p.add(super::path_mesh::fill(&pts[..n - 1], fill_col));
+            }
+            if sk > 0.001 {
+                p.add(Shape::closed_line(offset_closed(&pts[..n - 1], inset(width)), EStroke::new(width, col)));
+            }
+        } else {
+            p.add(super::stroke_mesh::stroke_mesh(&pts, width, col));
+        }
+        return;
+    }
     // Rectangle with rounded corners
     if let (Some(rad), Some(4)) = (s.radius.filter(|r| *r > 0.0), s.closed_len()) {
         let rr = Rect::from_points(&pts[..4]);

@@ -7,6 +7,7 @@ impl App {
         for (tool, label, key) in [
             (Tool::Select, "Select / move", "V"),
             (Tool::Pen, "Pen", "P"),
+            (Tool::Pencil, "Pencil", "Shift+P"),
             (Tool::Highlighter, "Highlighter", "H"),
             (Tool::Pixelate, "Pixelate", "B"),
             (Tool::Eraser, "Eraser", "E"),

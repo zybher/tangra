@@ -139,6 +139,7 @@ impl App {
                     "ellipse" => "Ellipse",
                     "arrow" => "Arrow",
                     "highlighter" => "Highlight",
+                    "pen" => "Path",
                     _ => "Drawing",
                 };
                 format!("{name} {}", n.max(1))

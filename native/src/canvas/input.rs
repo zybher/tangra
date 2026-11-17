@@ -41,7 +41,7 @@ impl App {
             } else if i.key_pressed(Key::V) {
                 Some(Tool::Select)
             } else if i.key_pressed(Key::P) {
-                Some(Tool::Pen)
+                Some(if m.shift { Tool::Pencil } else { Tool::Pen })
             } else if i.key_pressed(Key::B) {
                 Some(Tool::Pixelate)
             } else if i.key_pressed(Key::H) {
@@ -146,7 +146,7 @@ impl App {
         if redo {
             self.redo();
         }
-        if del && !self.lasso_cut() {
+        if del && !self.lasso_cut() && !self.path_delete_knot() {
             self.delete_selected();
         }
         if let Some(t) = tool {
@@ -158,7 +158,9 @@ impl App {
             self.tool = t;
         }
         if esc {
-            if self.lasso.take().is_some() {
+            if self.path_edit.take().is_some() {
+                // First Esc just leaves point editing (the path stays selected)
+            } else if self.lasso.take().is_some() {
                 // First Esc just drops the loop
             } else if self.tool != Tool::Select {
                 self.tool = Tool::Select;
@@ -171,7 +173,7 @@ impl App {
     pub(crate) fn begin_drag(&mut self, w: Pt, shift_or_ctrl: bool) {
         let zoom = self.board.camera.zoom;
         match self.tool {
-            Tool::Pen | Tool::Highlighter | Tool::Rect | Tool::Ellipse | Tool::Arrow => {
+            Tool::Pencil | Tool::Highlighter | Tool::Rect | Tool::Ellipse | Tool::Arrow => {
                 let hl = self.tool == Tool::Highlighter;
                 let head = 10.0 + self.pen_width * 4.0;
                 let (target, first, head) = match self.image_at(w) {
@@ -252,7 +254,7 @@ impl App {
                 self.drag = Drag::Erase;
             }
             Tool::Lasso => self.begin_lasso(w),
-            Tool::Text => {}
+            Tool::Text | Tool::Pen => {}
             Tool::Select => {
                 if let Some((run, i)) = self.gap_handle_at(w) {
                     self.begin_gap_drag(run, i, w);
@@ -668,7 +670,8 @@ impl App {
         } else if resp.hovered() {
             // The crosshair carries the tool's toolbar icon (ui/cursor.rs)
             let badge = match self.tool {
-                Tool::Pen => Some("pencil"),
+                Tool::Pen => Some("pen"),
+                Tool::Pencil => Some("pencil"),
                 Tool::Highlighter => Some("highlighter"),
                 Tool::Pixelate => Some("pixelate"),
                 Tool::Rect => Some("rectangle"),
@@ -686,7 +689,7 @@ impl App {
                 crate::ui::cursor::set_pose(ctx, "eraser-ring", 31.0);
             }
             ctx.set_cursor_icon(match self.tool {
-                Tool::Pen | Tool::Highlighter | Tool::Pixelate | Tool::Rect | Tool::Ellipse | Tool::Arrow | Tool::Frame | Tool::Lasso => egui::CursorIcon::Crosshair,
+                Tool::Pen | Tool::Pencil | Tool::Highlighter | Tool::Pixelate | Tool::Rect | Tool::Ellipse | Tool::Arrow | Tool::Frame | Tool::Lasso => egui::CursorIcon::Crosshair,
                 Tool::Text => egui::CursorIcon::Text,
                 Tool::Eraser => egui::CursorIcon::None,
                 Tool::Select => egui::CursorIcon::Default,
@@ -710,6 +713,9 @@ impl App {
         }
         let swallow = ctx.data(|d| d.get_temp::<bool>(sid)).unwrap_or(false);
         let space = space || swallow;
+        // Placing a pen path / dragging a path's points takes the pointer (pen.rs, path_edit.rs)
+        let pen = self.pen_input(ctx, resp, rect, space);
+        let space = space || pen || self.path_edit_input(ctx, resp, rect, space);
         if !space {
             if resp.drag_started_by(PointerButton::Primary) {
                 if let Some(p) = press.or(pos).filter(|p| !ui_blocks(ctx, *p)) {

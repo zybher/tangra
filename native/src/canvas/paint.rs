@@ -553,6 +553,9 @@ impl App {
 
         // Selection outlines
         for (k, id) in &self.selected {
+            if self.path_edit.as_ref().is_some_and(|e| &e.id == id) {
+                continue;
+            }
             if let Some([x, y, w, h]) = self.rect_of(*k, id) {
                 // Centred half a pixel in: covers the object's own edge, so no dark sliver shows
                 let r = item_rect(x, y, w, h).shrink(0.5);
@@ -649,6 +652,8 @@ impl App {
             }
         }
 
+        self.paint_path_edit(p, v);
+        self.paint_pen(p, v, hover);
         self.paint_snap(p, v, hover);
         self.paint_gap_handles(p, v, hover);
         self.paint_multi_handles(p, v, hover);
@@ -703,7 +708,8 @@ impl App {
         // Active tool pill (top-center)
         let tool = match self.tool {
             Tool::Select => None,
-            Tool::Pen => Some("Pen"),
+            Tool::Pen => Some("Pen  ·  click points, drag to curve, Enter to finish"),
+            Tool::Pencil => Some("Pencil"),
             Tool::Highlighter => Some("Highlighter"),
             Tool::Pixelate => Some("Pixelate  ·  swipe over an image"),
             Tool::Text => Some("Text  ·  click to place"),
@@ -789,13 +795,14 @@ impl App {
 
         // Hotkey list, bottom-left above the status bar; the active tool is lit
         {
-            let keys: [(&str, &str, Option<Tool>); 12] = [
+            let keys: [(&str, &str, Option<Tool>); 13] = [
                 ("V", "Select", Some(Tool::Select)),
                 ("F", "Frame", Some(Tool::Frame)),
                 ("R", "Rectangle", Some(Tool::Rect)),
                 ("O", "Ellipse", Some(Tool::Ellipse)),
                 ("A", "Arrow", Some(Tool::Arrow)),
                 ("P", "Pen", Some(Tool::Pen)),
+                ("⇧P", "Pencil", Some(Tool::Pencil)),
                 ("H", "Highlighter", Some(Tool::Highlighter)),
                 ("B", "Blur", Some(Tool::Pixelate)),
                 ("T", "Text", Some(Tool::Text)),

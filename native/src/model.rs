@@ -52,7 +52,40 @@ pub struct Stroke {
     /// Arrows only: line ends (0 round, 1 square)
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub cap: u8,
+    /// Pen paths (and shapes turned into one to edit their points): the points with their
+    /// curve handles. `points` is always this path flattened (`reflatten`), so drawing,
+    /// hit-testing, the eraser and moving / resizing work on paths with no extra code
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub knots: Vec<Knot>,
+    /// Pen paths only: the last point joins back to the first
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub closed: bool,
 }
+
+/// One point of a pen path: where it is and its two curve handles (`i` toward the point
+/// before, `o` toward the one after; a handle on the point itself = a sharp corner that side)
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Knot {
+    pub p: Pt,
+    pub i: Pt,
+    pub o: Pt,
+}
+
+impl Knot {
+    pub fn corner(p: Pt) -> Self {
+        Knot { p, i: p, o: p }
+    }
+}
+
+/// Point `t` (0..1) along the curve a -> b -> c -> d
+pub fn cubic(a: Pt, b: Pt, c: Pt, d: Pt, t: f32) -> Pt {
+    let u = 1.0 - t;
+    let (w0, w1, w2, w3) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+    Pt { x: a.x * w0 + b.x * w1 + c.x * w2 + d.x * w3, y: a.y * w0 + b.y * w1 + c.y * w2 + d.y * w3 }
+}
+
+/// Samples per path segment when flattened
+pub const SEG_STEPS: usize = 24;
 
 fn is_zero(v: &f32) -> bool {
     *v == 0.0
@@ -78,17 +111,99 @@ impl Stroke {
             None
         }
     }
-    /// Which tool made it: "rectangle", "ellipse", "arrow", "highlighter" or "pen" (also the
+    /// Which tool made it: "rectangle", "ellipse", "arrow", "highlighter", "pencil" or "pen" (a pen path) (also the
     /// toolbar icon's name)
     pub fn tool_kind(&self) -> &'static str {
+        if !self.knots.is_empty() {
+            return "pen";
+        }
         let n = self.points.len();
         match self.closed_len() {
             Some(4) => "rectangle",
             Some(_) => "ellipse",
             None if n == 5 && self.points[1].x == self.points[3].x && self.points[1].y == self.points[3].y => "arrow",
             None if self.opacity.unwrap_or(1.0) < 0.5 => "highlighter",
-            None => "pen",
+            None => "pencil",
         }
+    }
+    /// Segment `j` of a path: its two ends and the handles between them
+    pub fn segment(&self, j: usize) -> (Pt, Pt, Pt, Pt) {
+        let (a, b) = (self.knots[j], self.knots[(j + 1) % self.knots.len()]);
+        (a.p, a.o, b.i, b.p)
+    }
+    pub fn segments(&self) -> usize {
+        let n = self.knots.len();
+        if n < 2 {
+            0
+        } else if self.closed {
+            n
+        } else {
+            n - 1
+        }
+    }
+    /// Rebuilds `points` from the knots (a closed path ends on its first point, so it reads as
+    /// a closed shape everywhere)
+    pub fn reflatten(&mut self) {
+        let mut pts = Vec::new();
+        for j in 0..self.segments() {
+            let (a, b, c, d) = self.segment(j);
+            for s in 0..SEG_STEPS {
+                pts.push(cubic(a, b, c, d, s as f32 / SEG_STEPS as f32));
+            }
+        }
+        match (self.closed, self.knots.first(), self.knots.last()) {
+            (true, Some(f), _) => pts.push(f.p),
+            (false, _, Some(l)) => pts.push(l.p),
+            _ => {}
+        }
+        self.points = pts;
+    }
+    /// A rectangle or ellipse becomes a closed path that looks the same, so its points can be
+    /// edited (false for anything else: arrows, pencil lines)
+    pub fn to_path(&mut self) -> bool {
+        if !self.knots.is_empty() {
+            return true;
+        }
+        let Some(n) = self.closed_len() else { return false };
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for q in &self.points[..n] {
+            (x0, y0, x1, y1) = (x0.min(q.x), y0.min(q.y), x1.max(q.x), y1.max(q.y));
+        }
+        let (w, h) = (x1 - x0, y1 - y0);
+        let pt = |x: f32, y: f32| Pt { x, y };
+        let kn = |p: Pt, i: Pt, o: Pt| Knot { p, i, o };
+        // handle length that makes a quarter curve a circle's
+        const K: f32 = 0.5523;
+        self.knots = if n == 4 {
+            let r = self.radius.unwrap_or(0.0).clamp(0.0, w.min(h) / 2.0);
+            if r <= 0.0 {
+                vec![Knot::corner(pt(x0, y0)), Knot::corner(pt(x1, y0)), Knot::corner(pt(x1, y1)), Knot::corner(pt(x0, y1))]
+            } else {
+                let k = K * r;
+                vec![
+                    kn(pt(x0 + r, y0), pt(x0 + r - k, y0), pt(x0 + r, y0)),
+                    kn(pt(x1 - r, y0), pt(x1 - r, y0), pt(x1 - r + k, y0)),
+                    kn(pt(x1, y0 + r), pt(x1, y0 + r - k), pt(x1, y0 + r)),
+                    kn(pt(x1, y1 - r), pt(x1, y1 - r), pt(x1, y1 - r + k)),
+                    kn(pt(x1 - r, y1), pt(x1 - r + k, y1), pt(x1 - r, y1)),
+                    kn(pt(x0 + r, y1), pt(x0 + r, y1), pt(x0 + r - k, y1)),
+                    kn(pt(x0, y1 - r), pt(x0, y1 - r + k), pt(x0, y1 - r)),
+                    kn(pt(x0, y0 + r), pt(x0, y0 + r), pt(x0, y0 + r - k)),
+                ]
+            }
+        } else {
+            let (cx, cy, rx, ry) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, w / 2.0 * K, h / 2.0 * K);
+            vec![
+                kn(pt(cx, y0), pt(cx - rx, y0), pt(cx + rx, y0)),
+                kn(pt(x1, cy), pt(x1, cy - ry), pt(x1, cy + ry)),
+                kn(pt(cx, y1), pt(cx + rx, y1), pt(cx - rx, y1)),
+                kn(pt(x0, cy), pt(x0, cy + ry), pt(x0, cy - ry)),
+            ]
+        };
+        self.radius = None;
+        self.closed = true;
+        self.reflatten();
+        true
     }
     pub fn fill_alpha(&self) -> f32 {
         self.opacity.unwrap_or(1.0).clamp(0.0, 1.0) * if self.no_stroke { 1.0 } else { 0.3 }

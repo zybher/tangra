@@ -65,7 +65,10 @@ type Sel = (Kind, String);
 #[derive(Clone, Copy, PartialEq)]
 enum Tool {
     Select,
+    /// Click points (drag to curve them) into a path
     Pen,
+    /// Freehand line
+    Pencil,
     Highlighter,
     Pixelate,
     Text,
@@ -127,6 +130,7 @@ enum TbIcon {
     Ellipse,
     Arrow,
     Pen,
+    Pencil,
     Highlighter,
     Pixelate,
     Text,
@@ -143,7 +147,8 @@ fn paint_icon(p: &egui::Painter, icon: TbIcon, c: Pos2, s: f32, col: Color32) {
         TbIcon::Rect => "rectangle",
         TbIcon::Ellipse => "ellipse",
         TbIcon::Arrow => "arrow",
-        TbIcon::Pen => "pencil",
+        TbIcon::Pen => "pen",
+        TbIcon::Pencil => "pencil",
         TbIcon::Highlighter => "highlighter",
         TbIcon::Pixelate => "pixelate",
         TbIcon::Text => "text",
@@ -350,6 +355,10 @@ struct App {
     mosaics: HashMap<String, TextureHandle>,
     /// Lasso loop in world coords, waiting for Delete
     lasso: Option<Vec<Pt>>,
+    /// Pen path being placed (canvas/pen.rs)
+    pen: Option<crate::canvas::pen::PenDraft>,
+    /// Path whose points are being edited (canvas/path_edit.rs)
+    path_edit: Option<crate::canvas::path_edit::PathEdit>,
     /// Pixels the image edits are worked from, per file (capped size)
     edit_base: HashMap<String, (u32, u32, Vec<u8>)>,
     /// Edited copy per picture id, with the settings it was made from
@@ -512,6 +521,8 @@ impl App {
             pending: HashSet::new(),
             mosaics: HashMap::new(),
             lasso: None,
+            pen: None,
+            path_edit: None,
             edit_base: HashMap::new(),
             edited: HashMap::new(),
             stats_on: false,

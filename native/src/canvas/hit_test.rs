@@ -41,20 +41,24 @@ impl App {
         let Some([ox, oy, ow, oh]) = self.stroke_rect(id) else { return };
         let (kx, ky) = (to[2] / ow.max(1e-3), to[3] / oh.max(1e-3));
         if let Some(s) = self.board.world_strokes.iter_mut().find(|s| s.id == id) {
-            for p in &mut s.points {
+            let f = |p: &mut Pt| {
                 p.x = to[0] + (p.x - ox) * kx;
                 p.y = to[1] + (p.y - oy) * ky;
-            }
+            };
+            s.points.iter_mut().for_each(f);
+            s.knots.iter_mut().for_each(|k| [&mut k.p, &mut k.i, &mut k.o].into_iter().for_each(f));
             return;
         }
         for img in &mut self.board.images {
             let (sx, sy) = img.scale();
             let (ix, iy) = (img.x, img.y);
             if let Some(s) = img.annotations.strokes.iter_mut().find(|s| s.id == id) {
-                for p in &mut s.points {
+                let f = |p: &mut Pt| {
                     p.x = (to[0] + (ix + p.x * sx - ox) * kx - ix) / sx;
                     p.y = (to[1] + (iy + p.y * sy - oy) * ky - iy) / sy;
-                }
+                };
+                s.points.iter_mut().for_each(f);
+                s.knots.iter_mut().for_each(|k| [&mut k.p, &mut k.i, &mut k.o].into_iter().for_each(f));
                 return;
             }
         }

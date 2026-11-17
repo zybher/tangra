@@ -7,7 +7,7 @@ impl App {
     pub(crate) fn toolbar_ui(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>, rect: Rect) {
         use TbIcon as I;
         // None = divider. A tool of None means "add this item to the middle of the view".
-        let items: [Option<(I, &str, Option<Tool>)>; 14] = [
+        let items: [Option<(I, &str, Option<Tool>)>; 15] = [
             Some((I::Select, "Select  ·  V", Some(Tool::Select))),
             None,
             Some((I::Frame, "Frame  ·  F", Some(Tool::Frame))),
@@ -17,6 +17,7 @@ impl App {
             Some((I::Arrow, "Arrow  ·  A", Some(Tool::Arrow))),
             None,
             Some((I::Pen, "Pen  ·  P", Some(Tool::Pen))),
+            Some((I::Pencil, "Pencil  ·  Shift+P", Some(Tool::Pencil))),
             Some((I::Highlighter, "Highlighter  ·  H", Some(Tool::Highlighter))),
             Some((I::Pixelate, "Pixelate  ·  B", Some(Tool::Pixelate))),
             Some((I::Text, "Text  ·  T", Some(Tool::Text))),
@@ -119,7 +120,7 @@ impl App {
                 (Some(Tool::Frame), _) => Some(1u8),
                 (Some(Tool::Rect | Tool::Ellipse), _) => Some(2),
                 (Some(Tool::Text), _) => Some(4),
-                (Some(Tool::Pen | Tool::Highlighter | Tool::Arrow), _) => Some(3),
+                (Some(Tool::Pen | Tool::Pencil | Tool::Highlighter | Tool::Arrow), _) => Some(3),
                 (Some(Tool::Pixelate), _) => Some(5),
                 _ => None,
             };

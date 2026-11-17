@@ -306,7 +306,7 @@ impl App {
                         s.color = c.clone();
                     }
                 } else if self.tool == Tool::Select || self.tool == Tool::Eraser {
-                    self.tool = Tool::Pen;
+                    self.tool = Tool::Pencil;
                 }
             }
             Act::Width(w) => self.pen_width = w,

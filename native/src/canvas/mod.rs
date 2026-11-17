@@ -27,4 +27,7 @@ pub(crate) mod z_order;
 pub(crate) mod tilt3d;
 mod lasso;
 pub(crate) mod align;
+pub(crate) mod path_mesh;
+pub(crate) mod pen;
+pub(crate) mod path_edit;
 pub(crate) use align::Align;

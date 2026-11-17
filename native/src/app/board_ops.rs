@@ -57,7 +57,7 @@ impl App {
     pub(crate) fn activate(&mut self, sel: Sel) {
         let (k, id) = sel;
         match k {
-            Kind::Stroke => {}
+            Kind::Stroke => self.begin_path_edit(&id),
             // Sticky notes were removed; an old board's notes still show but aren't edited
             Kind::Note => {}
             Kind::Group => {
