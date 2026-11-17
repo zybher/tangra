@@ -1004,36 +1004,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // Auto-collapse, like the toolbar dropdowns: the pointer stays well clear of the bar and
         // its popover for a moment (leaving the window counts too)
         ui_block(&ctx, if pop != 0 && pop_rect.is_positive() { bar.union(pop_rect) } else { bar });
-        if pop != 0 && set_pop == pop {
-            let zone = if pop_rect.is_positive() { bar.union(pop_rect) } else { bar };
-            let far = ctx.input(|i| i.pointer.hover_pos()).map_or(true, |q| {
-                let d = vec2((zone.min.x - q.x).max(q.x - zone.max.x).max(0.0), (zone.min.y - q.y).max(q.y - zone.max.y).max(0.0));
-                d.length() > 220.0
-            });
-            // Just moved to the object's other side: wait until the pointer has reached it
-            let grace = super::drop_anim::flip_grace(&ctx, bid);
-            if grace && ctx.input(|i| i.pointer.hover_pos()).is_some_and(|q| zone.expand(4.0).contains(q)) {
-                ctx.data_mut(|d| d.remove::<bool>(bid.with("grace")));
-            }
-            let far = far && !grace;
-            let aid = bid.with("away");
-            let now = ctx.input(|i| i.time);
-            if far {
-                let t = ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(aid, || now));
-                ctx.request_repaint();
-                if now - t > 0.35 {
-                    set_pop = 0;
-                }
-            } else {
-                ctx.data_mut(|d| d.remove::<f64>(aid));
-            }
-        }
-        if set_pop == 0 {
-            ctx.data_mut(|d| {
-                d.remove::<f64>(bid.with("away"));
-                d.remove::<bool>(bid.with("grace"));
-            });
-        }
+        let zone = if pop != 0 && pop_rect.is_positive() { bar.union(pop_rect) } else { bar };
+        super::drop_anim::far_collapse(&ctx, bid, zone, pop, &mut set_pop, false);
         ctx.data_mut(|d| d.insert_temp(bid.with("pop"), set_pop));
 
         // Tooltip above the pill (hidden while a popover is open)

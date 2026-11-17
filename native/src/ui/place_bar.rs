@@ -535,8 +535,11 @@ impl App {
                 set_pop = 0;
             }
         }
+        let img_drag: bool = ctx.data(|d| d.get_temp(egui::Id::new("qd_img_pop").with("dragging"))).unwrap_or(false);
+        let zone = if pop_rect.is_positive() { bar.union(pop_rect) } else { bar };
+        super::drop_anim::far_collapse(&ctx, bid, zone, pop, &mut set_pop, img_drag);
         ctx.data_mut(|d| d.insert_temp(bid.with("pop"), set_pop));
-        ui_block(&ctx, if pop_rect.is_positive() { bar.union(pop_rect) } else { bar });
+        ui_block(&ctx, zone);
 
         // Tooltip above the pill, same as the style bar's
         let tk = ease(&ctx, bid.with("tip"), tip.is_some());

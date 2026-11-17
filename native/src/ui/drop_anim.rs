@@ -81,7 +81,7 @@ pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, 
         let mut last = 0;
         for c in 1..=3usize {
             let per = n.div_ceil(c);
-            if c > 1 && (per < 2 || per == last || grid_w(w, c) > bar.width().max(w) * WIDE) {
+            if c > 1 && (per < 2 || per == last || grid_w(w, c) > bar.width().max(grid_w(w, 2)) * WIDE) {
                 break;
             }
             last = per;
@@ -232,5 +232,43 @@ impl DropAnim {
             Rect::from_min_max(pos2(cur[0], pr.min.y), pos2(cur[0] + cur[1], cur[2]))
         };
         (bg, cur[0] - pr.min.x)
+    }
+}
+
+/// How far (px) the pointer may wander from a bar and its open dropdown before it collapses
+pub(crate) const FAR: f32 = 440.0;
+
+/// Auto-collapse shared by the style and placement bars: the pointer stays more than `FAR`
+/// clear of the bar and its dropdown (`zone`) for a moment (leaving the window counts too).
+/// Waits after the bar moved to the object's other side until the pointer has reached it, and
+/// while `hold` (a row being dragged). Sets `set_pop` to 0 when it fires.
+pub(crate) fn far_collapse(ctx: &egui::Context, bid: egui::Id, zone: Rect, pop: u8, set_pop: &mut u8, hold: bool) {
+    if pop != 0 && *set_pop == pop {
+        let far = ctx.input(|i| i.pointer.hover_pos()).map_or(true, |q| {
+            let d = vec2((zone.min.x - q.x).max(q.x - zone.max.x).max(0.0), (zone.min.y - q.y).max(q.y - zone.max.y).max(0.0));
+            d.length() > FAR
+        });
+        let grace = flip_grace(ctx, bid);
+        if grace && ctx.input(|i| i.pointer.hover_pos()).is_some_and(|q| zone.expand(4.0).contains(q)) {
+            ctx.data_mut(|d| d.remove::<bool>(bid.with("grace")));
+        }
+        let far = far && !grace && !hold;
+        let aid = bid.with("away");
+        let now = ctx.input(|i| i.time);
+        if far {
+            let t = ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(aid, || now));
+            ctx.request_repaint();
+            if now - t > 0.35 {
+                *set_pop = 0;
+            }
+        } else {
+            ctx.data_mut(|d| d.remove::<f64>(aid));
+        }
+    }
+    if *set_pop == 0 {
+        ctx.data_mut(|d| {
+            d.remove::<f64>(bid.with("away"));
+            d.remove::<bool>(bid.with("grace"));
+        });
     }
 }
