@@ -275,9 +275,9 @@ impl App {
             if hover.is_some_and(|q| hit(q).is_some()) || drag.is_some() {
                 ctx.set_cursor_icon(egui::CursorIcon::Default);
             } else if hover.is_some_and(|q| near_line(&s, &scr, q).is_some()) {
-                // the pen pointer: a click here adds a point
-                crate::ui::cursor::set_badge(ctx, "pen");
-                ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+                // the arrow turns into the pen, nib on the pointer: a click here adds a point
+                crate::ui::cursor::set_pose_at(ctx, "pen", 28.0, [5.6, 18.4]);
+                ctx.set_cursor_icon(egui::CursorIcon::None);
             }
         }
         used

@@ -5,7 +5,8 @@
 //! arrows don't lean (they keep pointing the way they resize) and the I-beam leans half as much.
 //! Switching between shapes morphs one into the other (cursor_morph.rs).
 //! The pan hand (Grab) closes into the fist (Grabbing) while dragging, and the eraser's ring is
-//! asked for by name (`set_pose`); both morph to and from every other pointer.
+//! asked for by name (`set_pose`); both morph to and from every other pointer. So is the pen
+//! over a path's line while editing points (`set_pose_at`, its nib on the pointer).
 //!
 //! Motion: the arrow follows the pointer with a very short glide (~25 ms, so clicks still land
 //! where it points) and leans into sideways movement, tipping right when moving right and left
@@ -43,8 +44,8 @@ pub(crate) fn paint(ctx: &egui::Context) {
     let sid = egui::Id::new("qd_cursor_st");
     let icon = ctx.output(|o| o.cursor_icon);
     let pass = ctx.cumulative_pass_nr();
-    let named = ctx.data(|d| d.get_temp::<(&'static str, f32, u64)>(pose_id())).filter(|(_, _, f)| *f == pass);
-    let sh = shape(icon).or_else(|| named.filter(|_| icon == egui::CursorIcon::None).map(|(name, px, _)| Shape { name, hot: [12.0, 12.0], px, lean: 0.0 }));
+    let named = ctx.data(|d| d.get_temp::<(&'static str, f32, [f32; 2], u64)>(pose_id())).filter(|(_, _, _, f)| *f == pass);
+    let sh = shape(icon).or_else(|| named.filter(|_| icon == egui::CursorIcon::None).map(|(name, px, hot, _)| Shape { name, hot, px, lean: if hot == [12.0, 12.0] { 0.0 } else { 1.0 } }));
     let Some(sh) = sh else {
         ctx.data_mut(|d| d.remove::<St>(sid));
         ctx.data_mut(|d| d.remove::<Pose>(last_id()));
@@ -166,8 +167,14 @@ fn pose_id() -> egui::Id {
 /// A pointer with no native cursor (the eraser ring), by pack name and size, every frame;
 /// the caller sets CursorIcon::None
 pub(crate) fn set_pose(ctx: &egui::Context, name: &'static str, px: f32) {
+    set_pose_at(ctx, name, px, [12.0, 12.0]);
+}
+
+/// Like `set_pose`, with `hot` (the point of the icon's 24-unit box) on the pointer; such a
+/// pointer leans as it moves, like the arrow (the pen over a path's line: path_edit.rs)
+pub(crate) fn set_pose_at(ctx: &egui::Context, name: &'static str, px: f32, hot: [f32; 2]) {
     let pass = ctx.cumulative_pass_nr();
-    ctx.data_mut(|d| d.insert_temp(pose_id(), (name, px, pass)));
+    ctx.data_mut(|d| d.insert_temp(pose_id(), (name, px, hot, pass)));
 }
 
 struct Shape {

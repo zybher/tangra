@@ -533,7 +533,7 @@ const PACK: &[(&str, &str)] = &[
     ("arrow", r##"<path d="M5 19L19 5M9 5h10v10"/>"##),
     ("arrow-curved", r##"<path d="M4 19.5C4 10.5 9.5 5 19 5M16 2l3 3-3 3"/>"##),
     ("connector", r##"<circle cx="4.5" cy="6" r="1.5" fill="currentColor" fill-opacity=".25"/><path d="M6 6h4a2 2 0 0 1 2 2v8a2 2 0 0 0 2 2h6M17 15l3 3-3 3"/>"##),
-    ("pen", r##"<path d="M12 3l6 7.5-2.5 8.5h-7L6 10.5zM12 3v6.5M9 21h6"/><circle cx="12" cy="11.25" r="1.75"/>"##),
+    ("pen", r##"<path d="M5.6 18.4L6.7 8.8L14.5 4.6L19.4 9.5L15.2 17.3zM5.6 18.4L10.2 13.8M16.2 3.5L20.5 7.8"/><circle cx="11.5" cy="12.5" r="1.75"/>"##),
     ("pencil", r##"<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5zM13.5 7l3 3"/>"##),
     ("highlighter", r##"<rect x="3" y="19.5" width="10" height="2.5" rx="1" fill="currentColor" fill-opacity=".25" stroke="none"/><path d="M15 3.5l5 5-8 8-5-5zM7 11.5l-1.6 4.1 2.5 2.5 4.1-1.6"/>"##),
     ("brush", r##"<path d="M18.5 3.5l2 2-8 8-2-2zM10.5 11.5c-2.5 0-4 1.5-4 4 0 1.5-1 2.5-3 3.5 3 1 7 .5 8.5-2 .8-1.3.5-2.5-.5-3.5"/>"##),
