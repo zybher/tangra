@@ -43,8 +43,11 @@ fn cfg() -> tr::Config {
 }
 
 fn col(c: tr::Rgba) -> Color32 {
-    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color32::from_rgba_unmultiplied(b(c.r), b(c.g), b(c.b), b(c.a))
+    // Premultiplied in gamma space: egui's from_rgba_unmultiplied does it in linear light,
+    // which makes faint glows several times brighter and keeps them showing until alpha is 0
+    let a = c.a.clamp(0.0, 1.0);
+    let b = |v: f32| (v.clamp(0.0, 1.0) * a * 255.0).round() as u8;
+    Color32::from_rgba_premultiplied(b(c.r), b(c.g), b(c.b), (a * 255.0).round() as u8)
 }
 
 /// The toggle button. Returns the new mode (true = light) on the click that picks it.
@@ -102,39 +105,67 @@ pub(crate) fn tick(ctx: &egui::Context) {
         if s.tg.is_animating() || s.pending.is_some() {
             ctx.request_repaint();
         }
-        let Some(rv) = fr.reveal else {
+        if fr.reveal.is_none() {
             s.snap = None;
+        }
+        if fr.overlay.is_empty() && s.snap.is_none() {
             return;
-        };
-        let Some(tex) = &s.snap else { return };
+        }
         // Under the drawn pointer (Debug), over everything else
         let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("qd_theme_reveal")));
         let o = screen.min;
         let at = |v: tr::Vec2| o + vec2(v.x, v.y);
-        // The old look, with the new one showing through a growing hole
-        let c = at(rv.center);
-        let far = screen.size().length() * 2.0 + rv.radius;
-        let uv = |q: Pos2| pos2((q.x - o.x) / screen.width().max(1.0), (q.y - o.y) / screen.height().max(1.0));
-        let mut m = Mesh::with_texture(tex.id());
-        const N: u32 = 128;
-        for i in 0..N {
-            let a = i as f32 / N as f32 * std::f32::consts::TAU;
-            let d = vec2(a.cos(), a.sin());
-            for q in [c + d * rv.radius, c + d * far] {
-                m.vertices.push(Vertex { pos: q, uv: uv(q), color: Color32::WHITE });
+        if let (Some(rv), Some(tex)) = (fr.reveal, &s.snap) {
+            // The old look, with the new one showing through a growing hole
+            let c = at(rv.center);
+            let far = screen.size().length() * 2.0 + rv.radius;
+            let uv = |q: Pos2| pos2((q.x - o.x) / screen.width().max(1.0), (q.y - o.y) / screen.height().max(1.0));
+            let mut m = Mesh::with_texture(tex.id());
+            const N: u32 = 128;
+            for i in 0..N {
+                let a = i as f32 / N as f32 * std::f32::consts::TAU;
+                let d = vec2(a.cos(), a.sin());
+                for q in [c + d * rv.radius, c + d * far] {
+                    m.vertices.push(Vertex { pos: q, uv: uv(q), color: Color32::WHITE });
+                }
             }
+            for i in 0..N {
+                let (a, b) = (2 * i, 2 * ((i + 1) % N));
+                m.add_triangle(a, a + 1, b);
+                m.add_triangle(b, a + 1, b + 1);
+            }
+            p.add(m);
         }
-        for i in 0..N {
-            let (a, b) = (2 * i, 2 * ((i + 1) % N));
-            m.add_triangle(a, a + 1, b);
-            m.add_triangle(b, a + 1, b + 1);
-        }
-        p.add(m);
         // The crate's overlay, in its order
         for pr in &fr.overlay {
             match *pr {
+                // Big circles (the bloom) as soft glows, not flat discs
+                tr::Prim::Circle { c, r, color } if r > 12.0 => {
+                    glow(&p, at(c), r * 1.5, col(color));
+                }
                 tr::Prim::Circle { c, r, color } => {
                     p.circle_filled(at(c), r, col(color));
+                }
+                // Wide rings (the rim) as a soft band, clear at both edges
+                tr::Prim::Ring { c, r, width, color } if width > 4.0 => {
+                    let (c, cl) = (at(c), col(color));
+                    let mut m = Mesh::default();
+                    const N: u32 = 160;
+                    for i in 0..N {
+                        let a = i as f32 / N as f32 * std::f32::consts::TAU;
+                        let d = vec2(a.cos(), a.sin());
+                        for (rr, cc) in [((r - width / 2.0).max(0.0), Color32::TRANSPARENT), (r, cl), (r + width / 2.0, Color32::TRANSPARENT)] {
+                            m.vertices.push(Vertex { pos: c + d * rr, uv: WHITE_UV, color: cc });
+                        }
+                    }
+                    for i in 0..N {
+                        let (a, b) = (3 * i, 3 * ((i + 1) % N));
+                        for s in 0..2 {
+                            m.add_triangle(a + s, a + s + 1, b + s);
+                            m.add_triangle(a + s + 1, b + s + 1, b + s);
+                        }
+                    }
+                    p.add(m);
                 }
                 tr::Prim::Ring { c, r, width, color } => {
                     p.circle_stroke(at(c), r, EStroke::new(width, col(color)));
@@ -149,7 +180,7 @@ pub(crate) fn tick(ctx: &egui::Context) {
                     const L: u32 = 10;
                     for j in 0..=L {
                         let f = j as f32 / L as f32;
-                        let k = (std::f32::consts::PI * f.powf(0.7)).sin().powi(2) * 0.35;
+                        let k = (std::f32::consts::PI * f.powf(0.7)).sin().powi(2);
                         let d = r * f;
                         for (side, a) in [(-hw, 0.0), (0.0, k), (hw, 0.0)] {
                             let ang = am + side;

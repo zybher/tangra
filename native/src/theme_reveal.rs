@@ -334,11 +334,13 @@ pub struct Config {
     pub ray_count: u32,
     /// Respect the OS "reduce motion" setting: quick crossfade, no overlay.
     pub reduced_motion: bool,
+    /// Seconds the sun rays and bloom keep fading out after the reveal ends.
+    pub glow_tail: f32,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { duration: 1.0, feather: 26.0, star_count: 110, ray_count: 14, reduced_motion: false }
+        Self { duration: 1.0, feather: 26.0, star_count: 110, ray_count: 14, reduced_motion: false, glow_tail: 1.5 }
     }
 }
 
@@ -371,6 +373,9 @@ pub struct ThemeToggle {
     origin: Vec2,
     press: Spring,
     clock: f32,
+    /// Seconds since the reveal started, and (origin, to light) while the glow still shows
+    age: f32,
+    fx: Option<(Vec2, bool)>,
 }
 
 impl ThemeToggle {
@@ -384,6 +389,8 @@ impl ThemeToggle {
             origin: Vec2::default(),
             press: Spring { x: 1.0, v: 0.0 },
             clock: 0.0,
+            age: 0.0,
+            fx: None,
         }
     }
 
@@ -393,7 +400,7 @@ impl ThemeToggle {
     }
 
     pub fn is_animating(&self) -> bool {
-        self.dir != 0.0 || (self.press.x - 1.0).abs() > 0.001 || self.press.v.abs() > 0.01
+        self.dir != 0.0 || self.fx.is_some() || (self.press.x - 1.0).abs() > 0.001 || self.press.v.abs() > 0.01
     }
 
     /// Call on click. `origin` = centre of the toggle button in screen px.
@@ -424,12 +431,20 @@ impl ThemeToggle {
         self.t = 0.0;
         self.dir = 1.0;
         self.origin = origin;
+        self.age = 0.0;
+        self.fx = Some((origin, self.to == Mode::Light));
     }
 
     pub fn update(&mut self, dt: f32) {
         let dt = dt.min(0.1); // don't jump after a hitch
         self.clock += dt;
         self.press.step(dt, 1.0, 520.0, 17.0);
+        if self.fx.is_some() {
+            self.age += dt;
+            if self.age > self.config.duration + self.config.glow_tail {
+                self.fx = None;
+            }
+        }
         if self.dir == 0.0 {
             return;
         }
@@ -472,6 +487,7 @@ impl ThemeToggle {
         };
         if !animating || self.config.reduced_motion {
             frame.base = blended;
+            self.lingering(&mut frame.overlay, viewport);
             return frame;
         }
 
@@ -488,37 +504,8 @@ impl ThemeToggle {
         let glint = if to_light { Rgba::hex(0xFFF4DC) } else { Rgba::hex(0xE4ECFF) };
         let ov = &mut frame.overlay;
 
-        // 1. Sunrise: god rays sweeping out of the button.
-        if to_light {
-            let n = self.config.ray_count;
-            let bell = (PI * t).sin();
-            for i in 0..n {
-                let a = i as f32 * TAU / n as f32 + hash(i, 7) * 0.3 + t * 0.5;
-                let w = 0.018 + 0.022 * hash(i, 8);
-                let r = radius * (1.12 + 0.45 * hash(i, 9));
-                // Wide faint + narrow brighter wedge = soft-edged beam.
-                for (wm, alpha) in [(1.9, 0.045), (0.7, 0.085)] {
-                    ov.push(Prim::Wedge {
-                        c: o,
-                        r,
-                        a0: a - w * wm,
-                        a1: a + w * wm,
-                        color: Rgba::hex(0xFFE9C2).with_alpha(alpha * bell * env),
-                    });
-                }
-            }
-        }
-
-        // 2. Bloom around the button.
-        let bloom = (1.0 - t).powf(1.4) * env;
-        for k in 0..3 {
-            let kf = k as f32;
-            ov.push(Prim::Circle {
-                c: o,
-                r: 18.0 + radius * (0.06 + 0.07 * kf),
-                color: rim.with_alpha(0.11 * bloom / (1.0 + kf)),
-            });
-        }
+        // 1-2. Sun rays and bloom (they outlive the reveal, see `lingering`)
+        self.lingering(ov, viewport);
 
         // 3. Stars live in the dark half and are swept away / switched on by the edge.
         let mut glints = Vec::new();
@@ -568,6 +555,44 @@ impl ThemeToggle {
             }
         }
         frame
+    }
+}
+
+impl ThemeToggle {
+    /// Sun rays (going light) and the bloom round the button. They come in with the reveal
+    /// and fade out smoothly over `glow_tail` after it, instead of ending with it.
+    fn lingering(&self, ov: &mut Vec<Prim>, viewport: Vec2) {
+        let Some((o, to_light)) = self.fx else { return };
+        if self.config.reduced_motion {
+            return;
+        }
+        let dur = self.config.duration;
+        let s = (self.age / (dur + self.config.glow_tail)).clamp(0.0, 1.0);
+        let env = smoothstep(0.0, 0.06, s) * (1.0 - smoothstep(0.25, 1.0, s));
+        if env <= 0.001 {
+            return;
+        }
+        let corners = [Vec2::new(0.0, 0.0), Vec2::new(viewport.x, 0.0), Vec2::new(0.0, viewport.y), viewport];
+        let max_r = corners.iter().map(|c| c.dist(o)).fold(0.0, f32::max) + self.config.feather;
+        // follows the reveal's front while it grows, then holds at full size
+        let tr = (self.age / dur).min(1.0);
+        let radius = max_r * ease_in_out_cubic(remap(tr, 0.03, 1.0));
+        let rim = if to_light { Rgba::hex(0xFFD493) } else { Rgba::hex(0x8DAEFF) };
+        if to_light {
+            let n = self.config.ray_count;
+            for i in 0..n {
+                let a = i as f32 * TAU / n as f32 + hash(i, 7) * 0.3 + self.age / dur * 0.5;
+                let w = 0.018 + 0.022 * hash(i, 8);
+                let r = radius * (1.12 + 0.45 * hash(i, 9));
+                for (wm, alpha) in [(1.9, 0.045), (0.7, 0.085)] {
+                    ov.push(Prim::Wedge { c: o, r, a0: a - w * wm, a1: a + w * wm, color: Rgba::hex(0xFFE9C2).with_alpha(alpha * env) });
+                }
+            }
+        }
+        for k in 0..3 {
+            let kf = k as f32;
+            ov.push(Prim::Circle { c: o, r: 18.0 + radius * (0.06 + 0.07 * kf), color: rim.with_alpha(0.11 * env / (1.0 + kf)) });
+        }
     }
 }
 
