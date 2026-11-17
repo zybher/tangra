@@ -15,6 +15,8 @@ struct Item {
     dash: Option<(f32, f32)>,
     /// fill="none": a closed shape a pointer keeps hollow (pointers fill closed shapes otherwise)
     hollow: bool,
+    /// class="crease": a pointer's inner line (a hand's finger gaps), drawn dark on its fill
+    crease: bool,
 }
 
 fn attr<'a>(el: &'a str, name: &str) -> Option<&'a str> {
@@ -308,7 +310,8 @@ fn parse(svg: &str) -> Vec<Item> {
         let stroke = if attr(el, "stroke") == Some("none") { None } else { Some(attr(el, "stroke-width").and_then(|v| v.parse().ok()).unwrap_or(1.75)) };
         let dash = attr(el, "stroke-dasharray").map(nums).and_then(|v| (v.len() >= 2).then(|| (v[0], v[1])));
         let hollow = attr(el, "fill") == Some("none");
-        items.push(Item { subs, fill, stroke, dash, hollow });
+        let crease = attr(el, "class") == Some("crease");
+        items.push(Item { subs, fill, stroke, dash, hollow, crease });
     }
     items
 }
@@ -331,7 +334,7 @@ fn items(name: &'static str) -> Option<Rc<Vec<Item>>> {
 
 /// The icon's subpaths in its 24-unit box, as a pointer draws them: (points, closed, filled)
 pub(crate) fn subpaths(name: &'static str) -> Vec<(Vec<[f32; 2]>, bool, bool)> {
-    items(name).map(|it| it.iter().flat_map(|i| i.subs.iter().map(move |(v, c)| (v.clone(), *c, *c && !i.hollow))).collect()).unwrap_or_default()
+    items(name).map(|it| it.iter().filter(|i| !i.crease).flat_map(|i| i.subs.iter().map(move |(v, c)| (v.clone(), *c, *c && !i.hollow))).collect()).unwrap_or_default()
 }
 
 /// Paints icon `name` as a pointer: a dark edge `ink` around it, closed shapes filled with
@@ -358,7 +361,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
     };
     // Soft shadow, then the dark edge
     for (off, col, extra) in [(egui::vec2(0.6, 1.0), Color32::from_black_alpha(50), 3.6), (egui::vec2(0.0, 0.0), ink, 2.6)] {
-        for it in items.iter() {
+        for it in items.iter().filter(|i| !i.crease) {
             for (v, closed) in &it.subs {
                 let v: Vec<Pos2> = pts(v, *closed).into_iter().map(|q| q + off).collect();
                 // A tiny closed shape (a dot): a stroke wider than the shape folds into junk, so
@@ -380,7 +383,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
         }
     }
     // Body
-    for it in items.iter() {
+    for it in items.iter().filter(|i| !i.crease) {
         for (v, closed) in &it.subs {
             let v = pts(v, *closed);
             let bb = egui::Rect::from_points(&v);
@@ -399,13 +402,89 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
             }
         }
     }
+    // Creases on top, in the edge's colour
+    for it in items.iter().filter(|i| i.crease) {
+        for (v, closed) in &it.subs {
+            let v = pts(v, *closed);
+            let st = Stroke::new(w(it) * 0.75, ink);
+            p.add(Shape::line(v.clone(), st));
+            for q in [v.first(), v.last()].into_iter().flatten() {
+                p.circle_filled(*q, st.width / 2.0, ink);
+            }
+        }
+    }
 }
 
-/// Fills a (star-shaped) polygon as a fan of triangles from its first point
-fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
-    for i in 1..v.len().saturating_sub(1) {
-        p.add(Shape::convex_polygon(vec![v[0], v[i], v[i + 1]], col, Stroke::NONE));
+/// Fills a simple polygon (concave ones too, like a hand) by clipping ears; whatever can't be
+/// clipped (an outline folded mid-morph) falls back to a fan from its first point
+pub(crate) fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
+    for t in ears(v) {
+        p.add(Shape::convex_polygon(t.to_vec(), col, Stroke::NONE));
     }
+}
+
+/// The same triangles as one plain mesh (no edge smoothing: a mid-morph outline that folds flat
+/// would otherwise shoot out spikes)
+pub(crate) fn fan_mesh(p: &egui::Painter, v: &[Pos2], col: Color32) {
+    let mut m = egui::Mesh::default();
+    for t in ears(v) {
+        let i = m.vertices.len() as u32;
+        for x in t {
+            m.colored_vertex(x, col);
+        }
+        m.add_triangle(i, i + 1, i + 2);
+    }
+    p.add(Shape::mesh(m));
+}
+
+fn ears(v: &[Pos2]) -> Vec<[Pos2; 3]> {
+    let mut out: Vec<[Pos2; 3]> = Vec::new();
+    let mut q: Vec<Pos2> = Vec::with_capacity(v.len());
+    for &x in v {
+        if q.last().map_or(true, |l: &Pos2| (*l - x).length() > 1e-3) {
+            q.push(x);
+        }
+    }
+    while q.len() > 1 && (q[0] - q[q.len() - 1]).length() <= 1e-3 {
+        q.pop();
+    }
+    let n = q.len();
+    if n < 3 {
+        return out;
+    }
+    let cross = |a: Pos2, b: Pos2, c: Pos2| (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    let area: f32 = (0..n).map(|i| q[i].x * q[(i + 1) % n].y - q[(i + 1) % n].x * q[i].y).sum();
+    let ccw = area > 0.0;
+    let inside = |t: [Pos2; 3], x: Pos2| {
+        let d = [cross(t[0], t[1], x), cross(t[1], t[2], x), cross(t[2], t[0], x)];
+        if ccw { d.iter().all(|v| *v > 0.0) } else { d.iter().all(|v| *v < 0.0) }
+    };
+    let mut tri = |a: Pos2, b: Pos2, c: Pos2| out.push([a, b, c]);
+    let mut idx: Vec<usize> = (0..n).collect();
+    while idx.len() > 3 {
+        let m = idx.len();
+        let ear = (0..m).find(|&i| {
+            let (a, b, c) = (q[idx[(i + m - 1) % m]], q[idx[i]], q[idx[(i + 1) % m]]);
+            let cr = cross(a, b, c);
+            if cr.abs() < 1e-6 {
+                return true; // a straight run: dropping the middle point loses nothing
+            }
+            (cr > 0.0) == ccw && !idx.iter().any(|&j| j != idx[(i + m - 1) % m] && j != idx[i] && j != idx[(i + 1) % m] && inside([a, b, c], q[j]))
+        });
+        let Some(i) = ear else {
+            for k in 1..m - 1 {
+                tri(q[idx[0]], q[idx[k]], q[idx[k + 1]]);
+            }
+            return out;
+        };
+        let (a, b, c) = (q[idx[(i + m - 1) % m]], q[idx[i]], q[idx[(i + 1) % m]]);
+        if cross(a, b, c).abs() >= 1e-6 {
+            tri(a, b, c);
+        }
+        idx.remove(i);
+    }
+    tri(q[idx[0]], q[idx[1]], q[idx[2]]);
+    out
 }
 
 /// Paints icon `name` centred on `c`, its 24-unit box `px` pixels wide
@@ -464,7 +543,8 @@ pub(crate) fn draw(p: &egui::Painter, name: &'static str, c: Pos2, px: f32, col:
 /// The pack: (name, SVG body on a 24x24 box, stroke 1.75, round caps and joins)
 const PACK: &[(&str, &str)] = &[
     ("cursor", r##"<path d="M5.5 3.5L18.5 10l-5.9 2.1L10 18z"/>"##),
-    ("hand", r##"<path d="M8 15V6.5a1.5 1.5 0 0 1 3 0V11M11 11V5a1.5 1.5 0 0 1 3 0v6M14 11V6.5a1.5 1.5 0 0 1 3 0V12M17 12V9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.7-2.3L3.9 15.9a1.5 1.5 0 0 1 2.3-1.9L8 15.5"/>"##),
+    // Pointer hands: one closed outline (filled like the arrow), finger gaps as creases
+    ("hand", r##"<path d="M8 15.5V6.5a1.5 1.5 0 0 1 3 0V5a1.5 1.5 0 0 1 3 0V6.5a1.5 1.5 0 0 1 3 0V9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.7-2.3L3.9 15.9a1.5 1.5 0 0 1 2.3-1.9L8 15.5z"/><path class="crease" d="M11 6.5V11M14 6.5V11M17 9.5V12"/>"##),
     // Pointer shapes drawn in place of the native ones (ui/cursor.rs); (12, 12) sits on the pointer
     ("resize-h", r##"<path d="M4 12h16M7.5 8.5L4 12l3.5 3.5M16.5 8.5L20 12l-3.5 3.5"/>"##),
     ("resize-v", r##"<path d="M12 4v16M8.5 7.5L12 4l3.5 3.5M8.5 16.5L12 20l3.5-3.5"/>"##),
@@ -473,7 +553,7 @@ const PACK: &[(&str, &str)] = &[
     ("eraser-ring", r##"<circle cx="12" cy="12" r="7" fill="none"/>"##),
     ("crosshair", r##"<path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21"/><circle cx="12" cy="12" r="1" fill="currentColor"/>"##),
     ("text-cursor", r##"<path d="M9 4.5c1.7 0 3 .8 3 2.5 0-1.7 1.3-2.5 3-2.5M9 19.5c1.7 0 3-.8 3-2.5 0 1.7 1.3 2.5 3 2.5M12 7v10M10.5 12h3"/>"##),
-    ("grabbing", r##"<path d="M7 10.5V8a1.5 1.5 0 0 1 3 0v1.5M10 9V7a1.5 1.5 0 0 1 3 0v2M13 9V7.5a1.5 1.5 0 0 1 3 0V10M16 10V9a1.5 1.5 0 0 1 3 0v3.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),
+    ("grabbing", r##"<path d="M7 11V8a1.5 1.5 0 0 1 3 0V7a1.5 1.5 0 0 1 3 0V7.5a1.5 1.5 0 0 1 3 0V9a1.5 1.5 0 0 1 3 0V12.5a6.5 6.5 0 0 1-6.5 6.5h-1.3a5.5 5.5 0 0 1-4.4-2.2l-1.6-2.3a2 2 0 0 1 .6-2.8L7 11z"/><path class="crease" d="M10 8V9.5M13 7.5V9M16 9V10M7 11v1.5c1.6 0 2.9.7 3.5 2"/>"##),
     ("frame", r##"<path d="M7.5 3v18M16.5 3v18M3 7.5h18M3 16.5h18"/>"##),
     ("rectangle", r##"<rect x="4" y="5" width="16" height="14" rx="2"/>"##),
     ("ellipse", r##"<circle cx="12" cy="12" r="8.5"/>"##),
@@ -539,7 +619,8 @@ const PACK: &[(&str, &str)] = &[
     ("palette", r##"<path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4-4-7.4-9-7.4z"/><circle cx="7.5" cy="11" r="1.25" fill="currentColor" stroke="none"/><circle cx="9.5" cy="7.5" r="1.25" fill="currentColor" stroke="none"/><circle cx="14" cy="7" r="1.25" fill="currentColor" stroke="none"/><circle cx="17" cy="10" r="1.25" fill="currentColor" stroke="none"/>"##),
     ("image", r##"<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15.5l-5-5L5 20"/>"##),
     ("mask", r##"<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="4" fill="currentColor" fill-opacity=".25"/>"##),
-    ("corner-radius", r##"<path d="M4 20v-8a8 8 0 0 1 8-8h8"/><path d="M4 8.5V4h4.5" stroke-dasharray="0 3"/>"##),
+    // Figma's: just the four rounded corners of a square
+    ("corner-radius", r##"<path d="M4 9.5V8a4 4 0 0 1 4-4h1.5M14.5 4H16a4 4 0 0 1 4 4v1.5M20 14.5V16a4 4 0 0 1-4 4h-1.5M9.5 20H8a4 4 0 0 1-4-4v-1.5"/>"##),
     ("stroke-weight", r##"<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2"/><path d="M4 18h16" stroke-width="3.25"/>"##),
     ("line-dashed", r##"<path d="M4 12h16" stroke-dasharray="3 4"/>"##),
     ("layers", r##"<path d="M12 3.5L20.5 8 12 12.5 3.5 8z" fill="currentColor" fill-opacity=".25"/><path d="M3.5 12l8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5"/>"##),

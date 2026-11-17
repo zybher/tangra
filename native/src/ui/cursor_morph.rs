@@ -101,16 +101,9 @@ fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
         p.circle_filled(bb.center(), bb.width().max(bb.height()) / 2.0, col);
         return;
     }
-    // One plain mesh: mid-morph the outline can fold flat, and smoothed polygon edges then
-    // shoot out as long spikes
-    let mut m = egui::Mesh::default();
-    for q in v {
-        m.colored_vertex(*q, col);
-    }
-    for i in 1..v.len().saturating_sub(1) as u32 {
-        m.add_triangle(0, i, i + 1);
-    }
-    p.add(egui::Shape::mesh(m));
+    // Same triangles as the still pointer (concave outlines like a hand fill right too), as
+    // one plain mesh: mid-morph the outline can fold flat, and smoothed edges then spike
+    crate::ui::svg_icons::fan_mesh(p, v, col);
 }
 
 /// A stroke as separate segments with round joints (a folded polyline's mitred joins spike too)

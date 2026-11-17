@@ -96,6 +96,9 @@ fn reap(now: f64, all: bool) -> HashSet<String> {
         for id in &done {
             s.dying.remove(id);
         }
+        // finished fade-ins too: only marks on pictures ask `k`, so the rest would otherwise
+        // stay listed forever and keep `busy` (a redraw every frame) on
+        s.born.retain(|_, (t0, _)| now - *t0 < d);
         done
     })
 }

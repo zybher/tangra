@@ -19,7 +19,7 @@ pub(crate) fn set_width(w: f32) {
 }
 const GAP: f32 = 12.0;
 /// Width of the collapsed bar (logo, name, open button)
-const TAB_W: f32 = 150.0;
+const TAB_W: f32 = 108.0;
 
 /// Sidebar glyph: a small window with its left pane marked
 fn sidebar_glyph(p: &egui::Painter, c: Pos2, col: Color32) {
@@ -77,19 +77,6 @@ pub(crate) fn toggle_outline(ctx: &egui::Context) {
         let c = d.get_temp::<bool>(id).unwrap_or(false);
         d.insert_temp(id, !c);
     });
-}
-
-/// The Tangra mark: three tangram triangles forming one peak, drawn in a `size` square
-pub(crate) fn paint_logo(p: &egui::Painter, c: Pos2, size: f32, a: f32) {
-    let f = size / 80.0;
-    let q = |x: f32, y: f32| c + vec2((x - 60.0) * f, (y - 60.0) * f);
-    for (pts, col) in [
-        ([(20.0, 100.0), (60.0, 20.0), (60.0, 100.0)], Color32::from_rgb(0xDC, 0x26, 0x26)),
-        ([(60.0, 20.0), (100.0, 100.0), (60.0, 100.0)], Color32::from_rgb(0xF8, 0x71, 0x71)),
-        ([(60.0, 60.0), (80.0, 100.0), (40.0, 100.0)], Color32::from_rgb(0x7F, 0x1D, 0x1D)),
-    ] {
-        p.add(Shape::convex_polygon(pts.iter().map(|&(x, y)| q(x, y)).collect(), col.gamma_multiply(a), EStroke::NONE));
-    }
 }
 
 struct Tree {
@@ -267,11 +254,12 @@ impl App {
         let k = ease(ctx, egui::Id::new("qd_outline_k_ease"), show);
         ctx.data_mut(|d| d.insert_temp(kid(), k));
         // One shape morphs between the collapsed tab and the open panel (same top-left corner):
-        // `m` 0 = tab, 1 = panel. The panel's rows fade out before it shrinks, the tab's
-        // logo fades in once it has nearly closed (and the reverse on the way out).
-        let m = if k + tk > 1e-4 { (k / (k + tk)).clamp(0.0, 1.0) } else { 0.0 };
+        // `m` 0 = tab, 1 = panel, one eased value over the cascade's time (not two quick eases
+        // played against each other). The panel's rows fade out before it shrinks, the tab's
+        // label fades in once it has nearly closed (and the reverse on the way out).
+        let m = ctx.animate_bool_with_time_and_easing(egui::Id::new("qd_outline_m"), show, 0.45 * anim_k(), egui::emath::easing::cubic_out);
         let pa = ((m - 0.45) / 0.55).clamp(0.0, 1.0) * k.min(1.0);
-        if k > 0.01 || tk > 0.01 {
+        if k > 0.01 || tk > 0.01 || (m > 0.001 && m < 0.999) {
             let tab = Rect::from_min_size(pos2(canvas.min.x, canvas.min.y + 10.0), vec2(TAB_W, 40.0));
             let full = vec2(width(), (canvas.height() - 20.0).max(120.0));
             let lerp = |a: f32, b: f32| a + (b - a) * m;
@@ -290,24 +278,28 @@ impl App {
                     p.rect_filled(shape, rnd, frame_bg().gamma_multiply(al));
                     p.rect_stroke(shape, rnd, EStroke::new(1.0_f32, border().gamma_multiply(al)));
                     let (r, _) = ui.allocate_exact_size(vec2(TAB_W, 40.0), Sense::hover());
-                    if ta > 0.01 {
-                        paint_logo(&p, pos2(r.min.x + 22.0, r.center().y), 18.0, ta);
-                        p.text(pos2(r.min.x + 40.0, r.center().y), Align2::LEFT_CENTER, "Tangra", FontId::proportional(13.0), Color32::from_gray(235).gamma_multiply(ta));
-                    }
-                    let br = Rect::from_center_size(pos2(r.max.x - 22.0, r.center().y), vec2(26.0, 26.0));
-                    if tk > 0.5 {
+                    // The whole tab opens the outline: its icon, then "Outline" (the app's mark
+                    // already sits in the title bar above)
+                    let br = r.shrink2(vec2(6.0, 7.0));
+                    let gc = pos2(br.min.x + 16.0, br.center().y);
+                    let h = if tk > 0.5 {
                         let resp = ui.interact(br, egui::Id::new("qd_outline_open"), Sense::click()).on_hover_text("Show outline");
                         let (h, pr) = hover_fx(ui.ctx(), &resp, true);
                         p.rect_filled(br.expand(1.0 * h - pr), 7.0, hover_fill(h, pr).gamma_multiply(ta));
-                        sidebar_glyph(&p, br.center(), mix(TEXT_DIM, Color32::from_gray(235), h).gamma_multiply(ta));
                         if resp.clicked() {
                             toggle_outline(ui.ctx());
                         }
-                    } else if ta > 0.01 {
-                        sidebar_glyph(&p, br.center(), TEXT_DIM.gamma_multiply(ta));
+                        h
+                    } else {
+                        0.0
+                    };
+                    if ta > 0.01 {
+                        let col = mix(TEXT_DIM, Color32::from_gray(235), h).gamma_multiply(ta);
+                        sidebar_glyph(&p, gc, col);
+                        p.text(pos2(gc.x + 16.0, br.center().y), Align2::LEFT_CENTER, "Outline", FontId::proportional(13.0), col);
                     }
                 });
-            if (k > 0.001 && k < 0.999) || (tk > 0.001 && tk < 0.999) {
+            if (k > 0.001 && k < 0.999) || (tk > 0.001 && tk < 0.999) || (m > 0.001 && m < 0.999) {
                 ctx.request_repaint();
             }
         }

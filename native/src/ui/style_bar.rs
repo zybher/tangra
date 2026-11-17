@@ -34,6 +34,10 @@ impl App {
             }
             _ => None,
         };
+        // A dialog (new board, rename...) folds the bar away with its usual exit
+        if self.prompt.is_some() {
+            target = None;
+        }
         let multi = self.selected.len() > 1;
         // Closing: keep drawing the last item's bar for a moment so it can animate out
         // (icons drop away one by one while the pill shrinks). `closing` is 0..1 progress.

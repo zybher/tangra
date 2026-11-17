@@ -99,7 +99,8 @@ impl App {
         });
         // Going off screen with a dropdown open: the dropdown closes first, then the bar
         let on_screen = on_screen || (in_frame && !cm_open && super::drop_anim::hold_bar(&ctx, bid));
-        let show = in_frame && on_screen && self.edit.is_none() && self.sel_label.is_none() && !alt && !cm_open;
+        // a dialog (new board, rename...) folds it away like any other exit
+        let show = in_frame && on_screen && self.edit.is_none() && self.sel_label.is_none() && !alt && !cm_open && self.prompt.is_none();
 
         let k = anim_k().max(1e-3);
         let p = ui.painter().clone();

@@ -1,6 +1,6 @@
 //! The Tangra mark at the top left of the title bar, ahead of the tabs. It sits still and
-//! now and then plays a little easter egg (ui/logo_anim.rs); hovering spreads its pieces,
-//! clicking makes it hop. Idle it costs nothing: one wake-up is scheduled for the next egg.
+//! plays a little easter egg now and then while hovered (ui/logo_anim.rs); hovering spreads its pieces,
+//! clicking makes it hop. Idle it costs nothing: no wake-ups at all.
 use super::logo_anim::{LogoAnim, COLORS};
 use crate::*;
 use std::sync::Mutex;
@@ -21,6 +21,8 @@ pub(crate) fn title_logo(ui: &mut egui::Ui, c: Pos2, size: f32) {
     let (a, last) = g.get_or_insert_with(|| (LogoAnim::new((now.to_bits() ^ 0x9E37_79B9_7F4A_7C15) | 1), now));
     a.reduce_motion = anim_k() == 0.0;
     a.set_hover(resp.hovered());
+    // easter eggs only while the pointer rests on it, so an idle app never wakes up
+    a.eggs_enabled = resp.hovered();
     if resp.clicked() {
         a.click();
     }
