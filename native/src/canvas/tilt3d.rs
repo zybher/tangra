@@ -96,13 +96,12 @@ impl Tilt {
         m
     }
 
-    /// The tilted picture with rounded corners (`rd`: world units), in screen space: rings
+    /// The tilted picture (rounded corners: `rd`, world units, 0 for square), in screen space: rings
     /// shrinking from the rounded outline to the centre, fine enough to stay perspective-correct
     /// `feather`: width (screen points) of the soft outer edge, one device pixel
     pub fn mesh_rounded(&self, bx: [f32; 4], rd: f32, feather: f32, to_screen: impl Fn(f32, f32) -> Pos2, tex: TextureId, tint: Color32) -> Mesh {
-        if rd <= 0.0 {
-            return self.mesh(bx, to_screen, tex, tint);
-        }
+        // (square corners too: the corners' points just sit on top of each other)
+        let rd = rd.max(0.0);
         let [x, y, w, h] = bx;
         let col = self.shade(tint);
         let ol = flat_outline(bx, rd);
