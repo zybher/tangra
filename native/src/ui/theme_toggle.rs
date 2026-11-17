@@ -29,12 +29,17 @@ fn with<R>(f: impl FnOnce(&mut St) -> R) -> R {
     ST.with(|s| {
         let mut s = s.borrow_mut();
         let st = s.get_or_insert_with(|| St {
-            tg: tr::ThemeToggle::new(if light_on() { tr::Mode::Light } else { tr::Mode::Dark }, tr::Config::default()),
+            tg: tr::ThemeToggle::new(if light_on() { tr::Mode::Light } else { tr::Mode::Dark }, cfg()),
             snap: None,
             pending: None,
         });
         f(st)
     })
+}
+
+/// No stars: the canvas already has its dot pattern
+fn cfg() -> tr::Config {
+    tr::Config { star_count: 0, ..tr::Config::default() }
 }
 
 fn col(c: tr::Rgba) -> Color32 {
@@ -64,7 +69,7 @@ pub(crate) fn button(ui: &mut egui::Ui, ctx: &egui::Context, r: Rect) -> Option<
         s.tg.poke();
         if anim_k() <= 0.0 {
             // animations off: straight switch, no overlay
-            s.tg = tr::ThemeToggle::new(if to { tr::Mode::Light } else { tr::Mode::Dark }, tr::Config::default());
+            s.tg = tr::ThemeToggle::new(if to { tr::Mode::Light } else { tr::Mode::Dark }, cfg());
             LIGHT.store(to, std::sync::atomic::Ordering::Relaxed);
         } else {
             s.pending = Some((r.center(), to));
@@ -135,16 +140,28 @@ pub(crate) fn tick(ctx: &egui::Context) {
                     p.circle_stroke(at(c), r, EStroke::new(width, col(color)));
                 }
                 tr::Prim::Wedge { c, r, a0, a1, color } => {
-                    let (c, cl) = (at(c), col(color));
+                    // A soft beam instead of a hard slice: brightest down its middle, clear at
+                    // both sides and fading in from the button and out toward its end, at a
+                    // fraction of the crate's strength so the beams melt into one glow
+                    let c = at(c);
+                    let (am, hw) = ((a0 + a1) / 2.0, (a1 - a0) / 2.0);
                     let mut m = Mesh::default();
-                    m.vertices.push(Vertex { pos: c, uv: WHITE_UV, color: cl });
-                    const S: u32 = 6;
-                    for i in 0..=S {
-                        let a = a0 + (a1 - a0) * i as f32 / S as f32;
-                        m.vertices.push(Vertex { pos: c + vec2(a.cos(), a.sin()) * r, uv: WHITE_UV, color: cl });
+                    const L: u32 = 10;
+                    for j in 0..=L {
+                        let f = j as f32 / L as f32;
+                        let k = (std::f32::consts::PI * f.powf(0.7)).sin().powi(2) * 0.35;
+                        let d = r * f;
+                        for (side, a) in [(-hw, 0.0), (0.0, k), (hw, 0.0)] {
+                            let ang = am + side;
+                            m.vertices.push(Vertex { pos: c + vec2(ang.cos(), ang.sin()) * d, uv: WHITE_UV, color: col(color.with_alpha(color.a * a)) });
+                        }
                     }
-                    for i in 1..=S {
-                        m.add_triangle(0, i, i + 1);
+                    for j in 0..L {
+                        let (a, b) = (3 * j, 3 * (j + 1));
+                        for s in 0..2 {
+                            m.add_triangle(a + s, a + s + 1, b + s);
+                            m.add_triangle(a + s + 1, b + s + 1, b + s);
+                        }
                     }
                     p.add(m);
                 }
