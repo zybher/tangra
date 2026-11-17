@@ -61,7 +61,7 @@ impl App {
             // Eased like the toolbar menu's pinned rows: letting go plays the rise backwards
             let pinned: Vec<f32> = (0..n).map(|i| ease(&ctx, bid.with(("ipin", kind, i)), dragging == Some(i))).collect();
             let (rows, mags, pr) = wave_grid_k(&ctx, bid.with(("iwave", kind)), left, top + ph, panel_w, PITCH, n, cols, &pinned, SOFT, dragging.is_some());
-            let dy = top - pr.min.y;
+            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
             let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
             let live = pop == kind;

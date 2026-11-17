@@ -115,6 +115,18 @@ impl App {
         let (mut ok, mut cancel) = (false, false);
         let danger = matches!(pr, Prompt::ConfirmDelete);
         let board_name = clip_name(&self.board.name, 24);
+        if live {
+            let sr = ctx.screen_rect();
+            crate::widgets::ui_block(ctx, sr);
+            egui::Area::new(egui::Id::new("qd_prompt_block"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(sr.min)
+                .constrain(false)
+                .show(ctx, |ui| {
+                    ui.allocate_rect(sr, Sense::click_and_drag());
+                });
+            ctx.move_to_top(egui::LayerId::new(egui::Order::Foreground, mid));
+        }
         egui::Area::new(mid)
             .order(egui::Order::Foreground)
             .fixed_pos(r.min)

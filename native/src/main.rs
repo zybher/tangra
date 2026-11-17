@@ -1053,6 +1053,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport,
         centered: true,
+        multisampling: 4,
         ..Default::default()
     };
     eframe::run_native("Tangra", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))

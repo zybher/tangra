@@ -37,7 +37,7 @@ impl App {
         let sg = if up { -1.0 } else { 1.0 };
         let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
         let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave"), left, top + ph, w, super::drop_anim::PITCH, n, cols);
-        let dy = top - pr.min.y;
+        let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
         let pr = pr.translate(vec2(0.0, dy));
             let (bgr, gx) = da.panel(&ctx, pr, up);
         let live = open == 1;
