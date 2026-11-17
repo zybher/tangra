@@ -53,6 +53,8 @@ fn col(c: tr::Rgba) -> Color32 {
 /// The toggle button. Returns the new mode (true = light) on the click that picks it.
 pub(crate) fn button(ui: &mut egui::Ui, ctx: &egui::Context, r: Rect) -> Option<bool> {
     let resp = ui.allocate_rect(r, Sense::click());
+    // dropdowns stay open when this is clicked (drop_anim::closing_press)
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_theme_btn"), r));
     let (h, pr) = hover_fx(ctx, &resp, true);
     let p = ui.painter();
     p.rect_filled(r.shrink(1.5 * (1.0 - h) + pr), 6.0, hover_fill(h, pr));

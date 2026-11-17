@@ -122,7 +122,15 @@ pub(crate) fn left_for(cx: f32, rect: Rect, w: f32) -> f32 {
 /// A press that should close open dropdowns and popovers: any press except one that starts
 /// moving the canvas (middle button, or with space held), so they stay open while panning
 pub(crate) fn closing_press(ctx: &egui::Context) -> bool {
-    ctx.input(|i| i.pointer.any_pressed() && !i.pointer.button_pressed(egui::PointerButton::Middle) && !(i.key_down(egui::Key::Space) && !ctx.wants_keyboard_input()))
+    // The light / dark toggle doesn't count: the reveal freezes the screen as it starts, which
+    // would hold a half-closed dropdown on the old side (ui/theme_toggle.rs)
+    let tog: Rect = ctx.data(|d| d.get_temp(egui::Id::new("qd_theme_btn"))).unwrap_or(Rect::NOTHING);
+    ctx.input(|i| {
+        i.pointer.any_pressed()
+            && !i.pointer.button_pressed(egui::PointerButton::Middle)
+            && !(i.key_down(egui::Key::Space) && !ctx.wants_keyboard_input())
+            && !i.pointer.interact_pos().is_some_and(|q| tog.contains(q))
+    })
 }
 
 /// True while bar `bar`'s dropdown is open or still playing its exit (`bar`: the bar's id).
