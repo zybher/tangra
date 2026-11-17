@@ -375,7 +375,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
                     fan(p, &v, col);
                 }
                 let st = Stroke::new(w(it) + extra, col);
-                p.add(Shape::line(v.clone(), st));
+                safe_line(p, &v, st);
                 for q in [v.first(), v.last()].into_iter().flatten() {
                     p.circle_filled(*q, st.width / 2.0, col);
                 }
@@ -395,7 +395,7 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
                 fan(p, &v, fill);
             } else {
                 let st = Stroke::new(w(it), fill);
-                p.add(Shape::line(v.clone(), st));
+                safe_line(p, &v, st);
                 for q in [v.first(), v.last()].into_iter().flatten() {
                     p.circle_filled(*q, st.width / 2.0, fill);
                 }
@@ -407,11 +407,35 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
         for (v, closed) in &it.subs {
             let v = pts(v, *closed);
             let st = Stroke::new(w(it) * 0.75, ink);
-            p.add(Shape::line(v.clone(), st));
+            safe_line(p, &v, st);
             for q in [v.first(), v.last()].into_iter().flatten() {
                 p.circle_filled(*q, st.width / 2.0, ink);
             }
         }
+    }
+}
+
+/// A polyline that never spikes: it's split wherever it turns back sharply (a pointed join
+/// there shoots out across the screen), with a round cap at each split
+fn safe_line(p: &egui::Painter, v: &[Pos2], st: Stroke) {
+    let mut run: Vec<Pos2> = Vec::new();
+    for (i, &q) in v.iter().enumerate() {
+        if run.last().is_some_and(|l| (*l - q).length() < 1e-3) {
+            continue;
+        }
+        run.push(q);
+        let sharp = run.len() >= 2 && v.get(i + 1).is_some_and(|&n| {
+            let (a, b) = ((q - run[run.len() - 2]).normalized(), (n - q).normalized());
+            a.dot(b) < -0.3
+        });
+        if sharp {
+            p.add(Shape::line(std::mem::take(&mut run), st));
+            p.circle_filled(q, st.width / 2.0, st.color);
+            run.push(q);
+        }
+    }
+    if run.len() >= 2 {
+        p.add(Shape::line(run, st));
     }
 }
 
@@ -422,7 +446,9 @@ pub(crate) fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
     // across the screen), its edge smoothed by a hairline of the same colour
     fan_mesh(p, v, col);
     if v.len() > 2 {
-        p.add(Shape::closed_line(v.to_vec(), Stroke::new(1.0, col)));
+        let mut c = v.to_vec();
+        c.push(v[0]);
+        safe_line(p, &c, Stroke::new(1.0, col));
     }
 }
 
