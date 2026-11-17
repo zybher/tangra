@@ -189,7 +189,8 @@ impl App {
             // One picture texture drawn with a tint (the crossfade below draws two)
             let draw_tex = |tex: &egui::TextureHandle, tint: Color32| {
                 if let Some(t) = &tilt {
-                    p.add(egui::Shape::mesh(t.mesh([img.x, img.y, img.width, img.height], |x, y| v.s(x, y), tex.id(), tint)));
+                    // rounded corners turn with the picture (rd is screen px, the mesh wants world)
+                    p.add(egui::Shape::mesh(t.mesh_rounded([img.x, img.y, img.width, img.height], rd / z.max(1e-6), |x, y| v.s(x, y), tex.id(), tint)));
                 } else if let Some(poly) = &cut {
                     p.add(egui::Shape::mesh(super::round_clip::textured_poly(poly, r, tex.id(), tint)));
                 } else if rd > 0.0 {
@@ -218,7 +219,12 @@ impl App {
                 }
                 None => draw_tex(tex, Color32::WHITE),
             });
-            if let (Some(_), Some(tex)) = (&tilt, tex) {
+            if let (Some(t), Some(tex)) = (&tilt, tex) {
+                // the same shadow the flat picture casts, following its tilted (rounded) outline
+                if cut.is_none() && self.parent_of(&img.id).is_none() && !img.edit.as_ref().is_some_and(|e| !e.cuts.is_empty()) && img.erase.is_empty() && img.erase_loops.is_empty() {
+                    let pts: Vec<Pos2> = t.shown_outline([img.x, img.y, img.width, img.height], rd / z.max(1e-6)).into_iter().map(|(x, y)| v.s(x, y)).collect();
+                    super::tilt3d::soft_shadow(p, &pts, vec2(0.0, 4.0 * z), (14.0 * z).min(40.0), 90.0 / 255.0);
+                }
                 draw_pic(tex);
             } else {
             // Only pictures straight on the board, and not ones with cut-out holes (it shows grey through)
