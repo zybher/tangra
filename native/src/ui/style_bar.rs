@@ -26,6 +26,13 @@ impl App {
             Tilt,
             /// Restore lasso-cut areas: only while the picture has cuts (eases in and out)
             Restore,
+            /// Point editing (canvas/path_edit.rs): sharp/smooth, mirroring dropdown, delete
+            /// point, reset shape, done
+            PtSmooth,
+            PtMirror,
+            PtDelete,
+            PtReset,
+            PtDone,
         }
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_style_bar");
@@ -85,6 +92,9 @@ impl App {
         let mut stroke_pos = 0u8;
         // Closed shapes (rectangle, ellipse...) can be filled: Some(filled now)
         let mut shape_fill: Option<bool> = None;
+        // Editing this path's points: the bar swaps to point buttons
+        let pt_mode = matches!((&target, &self.path_edit), (Some((Kind::Stroke, id)), Some(e)) if &e.id == id) && closing.is_none();
+        let picked = if pt_mode { self.picked_knot() } else { None };
         if let (Some((k, id)), false) = (&target, place_only) {
             match k {
                 Kind::Group => {
@@ -104,6 +114,9 @@ impl App {
                             segs.push(Seg::Arrange);
                         }
                     }
+                }
+                Kind::Stroke if pt_mode => {
+                    segs = vec![Seg::PtSmooth, Seg::PtMirror, Seg::PtDelete, Seg::PtReset, Seg::PtDone];
                 }
                 Kind::Stroke => {
                     if let Some(st) = self.find_stroke(id) {
@@ -139,7 +152,7 @@ impl App {
         let place_targets = self.place_targets();
         let opacity_now = place_targets.first().map_or(100.0, |t| (self.opacity_of(&t.1) * 100.0).round());
         let framed = target.is_some() && self.share_frame(&place_targets);
-        if !segs.is_empty() || framed {
+        if (!segs.is_empty() || framed) && !pt_mode {
             if framed {
                 segs.push(Seg::Align);
             }
@@ -155,7 +168,7 @@ impl App {
             _ => false,
         };
         let rest_k = ease(&ctx, bid.with("restore_k"), has_cuts);
-        if !segs.is_empty() && rest_k > 0.01 {
+        if !segs.is_empty() && rest_k > 0.01 && !pt_mode {
             segs.push(Seg::Restore);
         }
         // Remember the controls, and close with exactly those (the selection is already gone,
@@ -177,16 +190,21 @@ impl App {
             item = ctx.data(|d| d.get_temp::<[f32; 4]>(bid.with("last_r")));
         }
         let show = !segs.is_empty() && item.is_some() && idle;
-        let key = target.as_ref().map(|t| t.1.clone()).unwrap_or_default();
+        let key = target.as_ref().map(|t| if pt_mode { format!("{}#pts", t.1) } else { t.1.clone() }).unwrap_or_default();
         let last: Option<Rect> = ctx.data(|d| d.get_temp(bid));
         let was: String = ctx.data(|d| d.get_temp(bid.with("on"))).unwrap_or_default();
         let now_key = if show { key } else { String::new() };
         if now_key != was {
             // switching straight to another item replays the entrance there
             let glide = !was.is_empty() && !now_key.is_empty();
+            // same object, point buttons in or out: its controls cascade in again where it is
+            let swap = glide && was.trim_end_matches("#pts") == now_key.trim_end_matches("#pts");
             ctx.data_mut(|d| {
                 d.insert_temp(bid.with("on"), now_key.clone());
                 d.remove::<bool>(bid.with("flip"));
+                if swap {
+                    d.insert_temp(bid.with("t0"), self.now);
+                }
                 if !glide {
                     d.insert_temp(bid.with("t0"), self.now);
                     d.remove::<(f32, f32, f32)>(bid.with("glide"));
@@ -244,6 +262,8 @@ impl App {
             Seg::StrokePos => 40.0,
             Seg::Adjust | Seg::Tilt => 32.0,
             Seg::Restore => 32.0 * rest_k,
+            Seg::PtMirror => 40.0,
+            Seg::PtSmooth | Seg::PtDelete | Seg::PtReset | Seg::PtDone => 32.0,
         };
         // Dock-style magnify, like the bottom toolbar: a smoothed focus follows the pointer
         // and each segment swells (and the bar widens) by its distance from it
@@ -281,7 +301,7 @@ impl App {
             let open: u8 = ctx.data(|d| d.get_temp(bid.with("pop"))).unwrap_or(0);
             segs.iter().enumerate().map(|(i, sg)| {
                 let d = (offs[i] - focus) / (seg_w(sg) * 1.05);
-                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, Seg::Adjust => 6, Seg::Tilt => 7, _ => 0 };
+                let k = match sg { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, Seg::Adjust => 6, Seg::Tilt => 7, Seg::PtMirror => 8, _ => 0 };
                 let act = spring(&ctx, bid.with(("mag_on", i)), k != 0 && open == k, 18.0);
                 (sa * (-d * d).exp()).max(act)
             }).collect()
@@ -387,7 +407,9 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let mut xx = bar.center().x - content_w / 2.0 + pad;
         let n = segs.len();
         // Each dropdown sits centred over its own button, like the toolbar menu
-        let mut btn_cx = [f32::NAN; 8];
+        let mut btn_cx = [f32::NAN; 9];
+        // point button pressed: 0 sharp/smooth, 1 delete, 2 reset, 3 done
+        let mut pt_act: Option<u8> = None;
         let mut img_btn = [Rect::NOTHING; 2];
         let mut restore = false;
         for (i, s) in segs.iter().enumerate() {
@@ -402,7 +424,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             let wd = seg_ws(i, s);
             let mg = mags[i];
             let r = Rect::from_center_size(pos2(xx + wd / 2.0, cyy), vec2(seg_w(s), 26.0));
-            let dk = match s { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, Seg::Adjust => 6, Seg::Tilt => 7, _ => 0 };
+            let dk = match s { Seg::Color => 1, Seg::Arrange => 2, Seg::Aspect => 3, Seg::Align => 4, Seg::StrokePos => 5, Seg::Adjust => 6, Seg::Tilt => 7, Seg::PtMirror => 8, _ => 0 };
             if dk != 0 {
                 btn_cx[dk] = r.center().x;
             }
@@ -637,6 +659,51 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                         restore = true;
                     }
                 }
+                Seg::PtMirror => {
+                    let en = picked.is_some();
+                    let resp = ui.interact(r, bid.with("pmir"), Sense::click());
+                    let (hh, pp) = hover_fx(&ctx, &resp, en);
+                    let en_k = ease(&ctx, bid.with("pmir_en"), en);
+                    pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
+                    let lq = ctx.animate_bool_with_time(bid.with(("liquid", 8)), pop == 8, 0.5 * anim_k());
+                    let lq = lq * lq * (3.0 - 2.0 * lq);
+                    if lq >= 0.999 {
+                        pb.rect_filled(tr(r), 8.0 * sc, blue().gamma_multiply(ca));
+                    } else if lq > 0.001 {
+                        liquid_fill(&pb, tr(r), 8.0 * sc, lq, ctx.input(|i| i.time) as f32 + 8.0);
+                    }
+                    let gc = mix(txt_dim(), hi(), hh.max(lq)).gamma_multiply(ca * (0.35 + 0.65 * en_k));
+                    crate::ui::svg_icons::draw(&p, "flip-horizontal", pos2(r.min.x + 14.0, cyy), 15.0, gc);
+                    crate::ui::svg_icons::draw(&p, "chevron-down", pos2(r.max.x - 10.0, cyy), 12.0, gc);
+                    if resp.hovered() {
+                        tip = Some((r.center().x, if en { "Mirroring" } else { "Mirroring (pick a point)" }));
+                    }
+                    if en && resp.clicked() {
+                        set_pop = if pop == 8 { 0 } else { 8 };
+                    }
+                }
+                Seg::PtSmooth | Seg::PtDelete | Seg::PtReset | Seg::PtDone => {
+                    let (kind, icon, label): (u8, &'static str, &str) = match s {
+                        Seg::PtSmooth if picked.is_some_and(|k| !k.sharp()) => (0, "polygon", "Make sharp"),
+                        Seg::PtSmooth => (0, "curves", "Make smooth"),
+                        Seg::PtDelete => (1, "trash", "Delete point"),
+                        Seg::PtReset => (2, "rotate-ccw", "Reset shape"),
+                        _ => (3, "check", "Done"),
+                    };
+                    let en = kind >= 2 || picked.is_some();
+                    let resp = ui.interact(r, bid.with(("pbtn", kind)), Sense::click());
+                    let (hh, pp) = hover_fx(&ctx, &resp, en);
+                    let en_k = ease(&ctx, bid.with(("pbtn_en", kind)), en);
+                    pb.rect_filled(tr(r), 8.0 * sc, hover_fill(hh, pp).gamma_multiply(ca));
+                    let gc = mix(txt_dim(), hi(), hh).gamma_multiply(ca * (0.35 + 0.65 * en_k));
+                    crate::ui::svg_icons::draw(&p, icon, pos2(r.center().x, cyy), 16.0, gc);
+                    if resp.hovered() {
+                        tip = Some((r.center().x, if en { label } else { "Pick a point first" }));
+                    }
+                    if en && resp.clicked() {
+                        pt_act = Some(kind);
+                    }
+                }
                 Seg::Arrange => {
                     let resp = ui.interact(r, bid.with("arr"), Sense::click());
                     let (hh, pp) = hover_fx(&ctx, &resp, true);
@@ -670,6 +737,15 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
 
         if restore {
             self.restore_cuts();
+        }
+        match pt_act {
+            Some(0) => self.path_toggle_smooth(),
+            Some(1) => {
+                self.path_delete_knot();
+            }
+            Some(2) => self.path_reset(),
+            Some(3) => self.path_edit = None,
+            _ => {}
         }
         // Live scrub: one undo step per drag
         let scrubbing = !scrubbed.is_empty();
@@ -968,6 +1044,26 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
                 p.text(pos2(rr.min.x + 32.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * k), col);
                 if pop == 5 && resp.clicked() {
                     acts.push(Act::StrokePos(*v));
+                    set_pop = 0;
+                }
+            }
+        }
+        // Point mirroring dropdown: how the picked point's two handles follow each other
+        let k8 = da.k(8);
+        if k8 > 0.001 {
+            let rows_def: [(&str, u8); 3] = [("No mirroring", 1), ("Mirror angle", 0), ("Mirror angle and length", 2)];
+            let cur_m = picked.map(|k| k.m);
+            let w = fit(10.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
+            let dd = super::bar_drop::open(ui, &da, bid, pop, 8, bar, rect, btn_cx[8], rows_def.len(), w, super::bar_drop::MENU);
+            pop_rect = pop_rect.union(dd.zone());
+            for (i, (name, m)) in rows_def.iter().enumerate() {
+                let (rr, wm, p) = dd.row(&da, i);
+                let resp = ui.interact(rr, bid.with(("pmir", i)), Sense::click());
+                wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
+                let ok = ease(&ctx, bid.with(("pmir_on", i)), cur_m == Some(*m));
+                p.text(pos2(rr.min.x + 10.0, rr.center().y), Align2::LEFT_CENTER, *name, FontId::proportional(12.0 * (1.0 + 0.14 * wm)), mix(mix(txt_dim(), txt(), wm), blue(), ok));
+                if pop == 8 && resp.clicked() {
+                    self.path_set_mirror(*m);
                     set_pop = 0;
                 }
             }

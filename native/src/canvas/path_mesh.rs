@@ -16,8 +16,8 @@ type Shapes = Vec<Vec<Vec<[f32; 2]>>>;
 /// stays one piece); a closed path ends on its first point, like `Stroke::points`
 pub(crate) fn flatten(s: &Stroke, map: &impl Fn(Pt) -> Pos2) -> Vec<Pos2> {
     let mut out = Vec::new();
-    for j in 0..s.segments() {
-        let (a, b, c, d) = s.segment(j);
+    let segs = s.drawn_segments();
+    for &(a, b, c, d) in &segs {
         let (sa, sb, sc, sd) = (map(a), map(b), map(c), map(d));
         let straight = b == a && c == d;
         let len = sa.distance(sb) + sb.distance(sc) + sc.distance(sd);
@@ -29,9 +29,9 @@ pub(crate) fn flatten(s: &Stroke, map: &impl Fn(Pt) -> Pos2) -> Vec<Pos2> {
             out.push(w(w(ab, bc), w(bc, cd)));
         }
     }
-    match (s.closed, s.knots.first(), s.knots.last()) {
-        (true, Some(f), _) => out.push(map(f.p)),
-        (false, _, Some(l)) => out.push(map(l.p)),
+    match (s.closed, segs.first(), segs.last()) {
+        (true, Some(f), _) => out.push(map(f.0)),
+        (false, _, Some(l)) => out.push(map(l.3)),
         _ => {}
     }
     out

@@ -35,6 +35,9 @@ enum PAct {
     Cap(u8),
     Edit(u8, f32, bool),
     Reset(u8),
+    /// the picked path point (canvas/path_edit.rs): "px" / "py" / "pr" (corner), value, first
+    Pt(&'static str, f32, bool),
+    Mirror(u8),
 }
 
 /// Figma-style number field: label left, value right. Drag sideways to scrub, double-click
@@ -253,6 +256,18 @@ impl App {
         };
         let n_sel = self.selected.len();
         let is_group = kind == Kind::Group;
+        // Editing this path's points with one picked: its own rows
+        let pick = match (&self.path_edit, kind) {
+            (Some(e), Kind::Stroke) if e.id == id => self.picked_knot(),
+            _ => None,
+        };
+        // the point's rows cascade in when it's picked
+        let pk_now = pick.map(|_| self.path_edit.as_ref().and_then(|e| e.sel)).flatten();
+        let pk_was: Option<usize> = ctx.data(|d| d.get_temp(bid.with("pk"))).flatten();
+        if pk_now.is_some() && pk_now != pk_was {
+            ctx.data_mut(|d| d.insert_temp(bid.with("t_sel"), now));
+        }
+        ctx.data_mut(|d| d.insert_temp(bid.with("pk"), pk_now));
 
         let mut out: Vec<PAct> = Vec::new();
         egui::Area::new(bid).order(egui::Order::Middle).fixed_pos(card.min).show(ctx, |ui| {
@@ -336,6 +351,56 @@ impl App {
                         ui.painter().text(r.center(), Align2::CENTER_CENTER, "Coming soon", FontId::proportional(11.0), txt_dim().gamma_multiply(a));
                     }
                     let design = tab == 0;
+
+                    // The picked point: where it is, how its handles follow, corner rounding
+                    if let (true, Some(k)) = (design, pick) {
+                        head(ui, &mut row, "Point", first);
+                        first = false;
+                        let (r, a) = row(ui, FH);
+                        let (l, rr) = halves(r);
+                        if let Some((v, f1)) = field(ui, bid.with("px"), l, "X", k.p.x, "", 1.0, -1e6, 1e6, false, a) {
+                            out.push(PAct::Pt("px", v, f1));
+                        }
+                        if let Some((v, f1)) = field(ui, bid.with("py"), rr, "Y", k.p.y, "", 1.0, -1e6, 1e6, false, a) {
+                            out.push(PAct::Pt("py", v, f1));
+                        }
+                        gap(ui);
+                        if k.sharp() {
+                            // a sharp point can be rounded off
+                            let (r, a) = row(ui, FH);
+                            if let Some((v, f1)) = field(ui, bid.with("pr"), r, "Corner", k.r, "", 0.25, 0.0, 1000.0, false, a) {
+                                out.push(PAct::Pt("pr", v, f1));
+                            }
+                        } else {
+                            // Mirroring: a pill slides to the picked third (as the stroke position)
+                            let (r, a) = row(ui, FH);
+                            let opts: [(&str, u8); 3] = [("None", 1), ("Angle", 0), ("Angle+Len", 2)];
+                            let cur = opts.iter().position(|o| o.1 == k.m).unwrap_or(1) as f32;
+                            let at = ctx.animate_value_with_time(bid.with("pm_k"), cur, 0.2 * anim_k());
+                            let p = ui.painter();
+                            p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                            let third = r.width() / 3.0;
+                            p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * third, r.min.y + 2.0), vec2(third - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a) as u8));
+                            for (j, (name, val)) in opts.into_iter().enumerate() {
+                                let br = Rect::from_min_size(pos2(r.min.x + j as f32 * third, r.min.y), vec2(third, r.height()));
+                                let resp = ui.interact(br, bid.with(("pm", j)), Sense::click()).on_hover_text(match val {
+                                    1 => "Handles move on their own",
+                                    0 => "Handles stay in line",
+                                    _ => "Handles stay in line and the same length",
+                                });
+                                let on = val == k.m;
+                                let (hh, pp) = hover_fx(ctx, &resp, !on);
+                                if !on {
+                                    ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
+                                }
+                                let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
+                                ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
+                                if resp.clicked() && !on {
+                                    out.push(PAct::Mirror(val));
+                                }
+                            }
+                        }
+                    }
 
                     // Position and size (one object, not one the frame arranges)
                     if design && single && !locked {
@@ -650,6 +715,24 @@ impl App {
                 PAct::Reset(0) => self.reset_adjust(),
                 PAct::Reset(1) => self.restore_cuts(),
                 PAct::Reset(_) => self.reset_tilt(),
+                PAct::Mirror(m) => self.path_set_mirror(m),
+                PAct::Pt(key, v, first) => {
+                    if first {
+                        self.snapshot();
+                    }
+                    self.path_change_knot(|s, j| {
+                        let k = &mut s.knots[j];
+                        if key == "pr" {
+                            k.r = v.max(0.0);
+                            return;
+                        }
+                        let (dx, dy) = if key == "px" { (v - k.p.x, 0.0) } else { (0.0, v - k.p.y) };
+                        for q in [&mut k.p, &mut k.i, &mut k.o] {
+                            q.x += dx;
+                            q.y += dy;
+                        }
+                    });
+                }
             }
         }
         if dirty {

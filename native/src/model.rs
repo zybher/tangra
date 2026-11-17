@@ -69,11 +69,20 @@ pub struct Knot {
     pub p: Pt,
     pub i: Pt,
     pub o: Pt,
+    /// Rounding of a sharp corner (world units; drawn as an arc, the point itself stays put)
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub r: f32,
+    /// How its handles follow each other: 0 same angle, 1 each on its own, 2 same angle and length
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub m: u8,
 }
 
 impl Knot {
     pub fn corner(p: Pt) -> Self {
-        Knot { p, i: p, o: p }
+        Knot { p, i: p, o: p, ..Default::default() }
+    }
+    pub fn sharp(&self) -> bool {
+        self.i == self.p && self.o == self.p
     }
 }
 
@@ -145,18 +154,61 @@ impl Stroke {
     /// a closed shape everywhere)
     pub fn reflatten(&mut self) {
         let mut pts = Vec::new();
-        for j in 0..self.segments() {
-            let (a, b, c, d) = self.segment(j);
+        let segs = self.drawn_segments();
+        for &(a, b, c, d) in &segs {
             for s in 0..SEG_STEPS {
                 pts.push(cubic(a, b, c, d, s as f32 / SEG_STEPS as f32));
             }
         }
-        match (self.closed, self.knots.first(), self.knots.last()) {
-            (true, Some(f), _) => pts.push(f.p),
-            (false, _, Some(l)) => pts.push(l.p),
+        match (self.closed, segs.first(), segs.last()) {
+            (true, Some(f), _) => pts.push(f.0),
+            (false, _, Some(l)) => pts.push(l.3),
             _ => {}
         }
         self.points = pts;
+    }
+    /// The segments as drawn: a rounded sharp corner becomes two points joined by an arc
+    pub fn drawn_segments(&self) -> Vec<(Pt, Pt, Pt, Pt)> {
+        let n = self.knots.len();
+        if !self.knots.iter().any(|k| k.r > 0.0) {
+            return (0..self.segments()).map(|j| self.segment(j)).collect();
+        }
+        let mut ks: Vec<Knot> = Vec::with_capacity(n * 2);
+        let len = |a: Pt, b: Pt| ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+        for (j, k) in self.knots.iter().enumerate() {
+            let ends = !self.closed && (j == 0 || j + 1 == n);
+            if k.r <= 0.0 || !k.sharp() || ends || n < 3 {
+                ks.push(*k);
+                continue;
+            }
+            let (pv, nx) = (self.knots[(j + n - 1) % n], self.knots[(j + 1) % n]);
+            // toward the neighbours along the line as it leaves the corner
+            let a = if pv.o != pv.p { pv.o } else { pv.p };
+            let b = if nx.i != nx.p { nx.i } else { nx.p };
+            let (la, lb) = (len(k.p, a), len(k.p, b));
+            if la < 1e-3 || lb < 1e-3 {
+                ks.push(*k);
+                continue;
+            }
+            let u1 = Pt { x: (a.x - k.p.x) / la, y: (a.y - k.p.y) / la };
+            let u2 = Pt { x: (b.x - k.p.x) / lb, y: (b.y - k.p.y) / lb };
+            let th = (u1.x * u2.x + u1.y * u2.y).clamp(-1.0, 1.0).acos();
+            if th < 0.01 || th > std::f32::consts::PI - 0.01 {
+                ks.push(*k);
+                continue;
+            }
+            // how far along each side the arc starts, at most half the side
+            let t = (k.r / (th / 2.0).tan()).min(len(k.p, pv.p) / 2.0).min(len(k.p, nx.p) / 2.0);
+            let rr = t * (th / 2.0).tan();
+            let h = 4.0 / 3.0 * ((std::f32::consts::PI - th) / 4.0).tan() * rr;
+            let at = |u: Pt, d: f32| Pt { x: k.p.x + u.x * d, y: k.p.y + u.y * d };
+            let (pa, pb) = (at(u1, t), at(u2, t));
+            ks.push(Knot { p: pa, i: pa, o: at(u1, t - h), ..Default::default() });
+            ks.push(Knot { p: pb, i: at(u2, t - h), o: pb, ..Default::default() });
+        }
+        let m = ks.len();
+        let segs = if self.closed { m } else { m.saturating_sub(1) };
+        (0..segs).map(|j| { let (a, b) = (ks[j], ks[(j + 1) % m]); (a.p, a.o, b.i, b.p) }).collect()
     }
     /// A rectangle or ellipse becomes a closed path that looks the same, so its points can be
     /// edited (false for anything else: arrows, pencil lines)
@@ -171,7 +223,7 @@ impl Stroke {
         }
         let (w, h) = (x1 - x0, y1 - y0);
         let pt = |x: f32, y: f32| Pt { x, y };
-        let kn = |p: Pt, i: Pt, o: Pt| Knot { p, i, o };
+        let kn = |p: Pt, i: Pt, o: Pt| Knot { p, i, o, ..Default::default() };
         // handle length that makes a quarter curve a circle's
         const K: f32 = 0.5523;
         self.knots = if n == 4 {

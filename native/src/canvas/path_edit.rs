@@ -3,6 +3,9 @@
 //! drag a handle to bend the curve (the opposite handle turns with it; Alt bends one side
 //! only), click the line to add a point there, double-click a point to switch it between
 //! sharp and smooth, Delete removes the picked point. Esc, or a click off the path, ends it.
+//! While editing: the shape wears a faint blue hatch, the line under the pointer shows where a
+//! new point would go, and a dragged point / handle snaps level with the path's own points.
+//! The edit bar swaps to point buttons (ui/style_bar.rs) and the panel shows the picked point.
 
 use crate::*;
 
@@ -13,6 +16,10 @@ pub(crate) struct PathEdit {
     pub sel: Option<usize>,
     /// (point, 0 the point / 1 its `i` handle / 2 its `o` handle) being dragged
     drag: Option<(usize, u8)>,
+    /// The stroke as it was when editing began (Reset brings it back, rectangle and all)
+    orig: Stroke,
+    /// Snap guide lines while dragging (world x0, y0, x1, y1)
+    guides: Vec<[f32; 4]>,
 }
 
 /// How near (screen px) the pointer must be to grab a point / handle / the line
@@ -26,6 +33,7 @@ impl App {
             return;
         }
         let Some(i) = self.board.world_strokes.iter().position(|s| s.id == id) else { return };
+        let orig = self.board.world_strokes[i].clone();
         if self.board.world_strokes[i].knots.is_empty() {
             let mut s = self.board.world_strokes[i].clone();
             if !s.to_path() {
@@ -35,7 +43,68 @@ impl App {
             self.board.world_strokes[i] = s;
             self.mark_dirty();
         }
-        self.path_edit = Some(PathEdit { id: id.to_string(), sel: None, drag: None });
+        self.path_edit = Some(PathEdit { id: id.to_string(), sel: None, drag: None, orig, guides: Vec::new() });
+    }
+
+    /// The picked point of the edited path
+    pub(crate) fn picked_knot(&self) -> Option<Knot> {
+        let e = self.path_edit.as_ref()?;
+        self.board.world_strokes.iter().find(|s| s.id == e.id)?.knots.get(e.sel?).copied()
+    }
+
+    /// Changes the picked point (no undo step: the caller takes one per gesture)
+    pub(crate) fn path_change_knot(&mut self, f: impl FnOnce(&mut Stroke, usize)) {
+        let Some(j) = self.path_edit.as_ref().and_then(|e| e.sel) else { return };
+        if let Some(s) = self.edited().filter(|s| j < s.knots.len()) {
+            f(s, j);
+            s.reflatten();
+            self.mark_dirty();
+        }
+    }
+
+    /// Bar / panel: the picked point sharp <-> smooth
+    pub(crate) fn path_toggle_smooth(&mut self) {
+        self.snapshot();
+        self.path_change_knot(toggle_smooth);
+    }
+
+    /// How the picked point's handles follow each other (0 angle, 1 apart, 2 angle + length);
+    /// the handles line up at once
+    pub(crate) fn path_set_mirror(&mut self, m: u8) {
+        self.snapshot();
+        self.path_change_knot(|s, j| {
+            let k = &mut s.knots[j];
+            k.m = m;
+            let p = k.p;
+            let len = |a: Pt| ((a.x - p.x).powi(2) + (a.y - p.y).powi(2)).sqrt();
+            if k.o == p || k.i == p || m == 1 {
+                return;
+            }
+            let (lo, li) = (len(k.o), len(k.i));
+            let l = if m == 2 { (lo + li) / 2.0 } else { li };
+            let (ux, uy) = ((k.o.x - p.x) / lo, (k.o.y - p.y) / lo);
+            k.i = Pt { x: p.x - ux * l, y: p.y - uy * l };
+            if m == 2 {
+                k.o = Pt { x: p.x + ux * l, y: p.y + uy * l };
+            }
+        });
+    }
+
+    /// Reset: the stroke as it was before editing (a rectangle comes back as one, which ends
+    /// point editing)
+    pub(crate) fn path_reset(&mut self) {
+        let Some(e) = &self.path_edit else { return };
+        let orig = e.orig.clone();
+        self.snapshot();
+        if let Some(s) = self.edited() {
+            *s = orig.clone();
+        }
+        if orig.knots.is_empty() {
+            self.path_edit = None;
+        } else if let Some(e) = self.path_edit.as_mut() {
+            e.sel = None;
+        }
+        self.mark_dirty();
     }
 
     fn edited(&mut self) -> Option<&mut Stroke> {
@@ -137,8 +206,29 @@ impl App {
         }
         if let Some((j, h)) = drag {
             if down {
+                let mut guides = Vec::new();
+                let free = ctx.input(|i| i.modifiers.ctrl);
                 if let (Some(q), Some(st)) = (hover, self.edited()) {
-                    let w = v.w(q);
+                    let mut w = v.w(q);
+                    // level with the path's own points (this point's too, for its handles);
+                    // Ctrl moves freely, like the object snap
+                    if !free {
+                        let reach = 6.0 / v.cam.zoom;
+                        let others: Vec<Pt> = st.knots.iter().enumerate().filter(|(i, _)| *i != j || h != 0).map(|(_, k)| k.p).collect();
+                        let near = |d: &dyn Fn(&Pt) -> f32| others.iter().map(|o| (d(o).abs(), *o)).filter(|x| x.0 < reach).min_by(|a, b| a.0.total_cmp(&b.0)).map(|x| x.1);
+                        if let Some(o) = near(&|o: &Pt| o.x - w.x) {
+                            w.x = o.x;
+                            guides.push([o.x, o.y, 0.0, 0.0]);
+                        }
+                        if let Some(o) = near(&|o: &Pt| o.y - w.y) {
+                            w.y = o.y;
+                            guides.push([o.x, o.y, 0.0, 0.0]);
+                        }
+                        // guides run from the point snapped to, to where it lands
+                        for g in &mut guides {
+                            (g[2], g[3]) = (w.x, w.y);
+                        }
+                    }
                     if let Some(k) = st.knots.get_mut(j) {
                         let p = k.p;
                         match h {
@@ -150,10 +240,14 @@ impl App {
                                 }
                             }
                             _ => {
+                                let m = k.m;
                                 let (this, other) = if h == 1 { (&mut k.i, &mut k.o) } else { (&mut k.o, &mut k.i) };
                                 *this = w;
-                                // the other side turns to stay in line, keeping its own length
-                                if !alt && *other != p {
+                                if !alt && m == 2 {
+                                    // mirrored: the other side matches it exactly
+                                    *other = Pt { x: 2.0 * p.x - w.x, y: 2.0 * p.y - w.y };
+                                } else if !alt && m == 0 && *other != p {
+                                    // the other side turns to stay in line, keeping its own length
                                     let len = ((other.x - p.x).powi(2) + (other.y - p.y).powi(2)).sqrt();
                                     let (dx, dy) = (p.x - w.x, p.y - w.y);
                                     let dl = (dx * dx + dy * dy).sqrt();
@@ -167,13 +261,24 @@ impl App {
                     st.reflatten();
                     self.mark_dirty();
                 }
+                if let Some(e) = self.path_edit.as_mut() {
+                    e.guides = guides;
+                }
             } else if let Some(e) = self.path_edit.as_mut() {
                 e.drag = None;
+                e.guides.clear();
             }
             used = true;
         }
-        if hover.is_some_and(|q| hit(q).is_some()) {
-            ctx.set_cursor_icon(egui::CursorIcon::Default);
+        let over_ui = hover.is_some_and(|q| !resp.contains_pointer() || ui_blocks(ctx, q));
+        if !over_ui && !space {
+            if hover.is_some_and(|q| hit(q).is_some()) || drag.is_some() {
+                ctx.set_cursor_icon(egui::CursorIcon::Default);
+            } else if hover.is_some_and(|q| near_line(&s, &scr, q).is_some()) {
+                // the pen pointer: a click here adds a point
+                crate::ui::cursor::set_badge(ctx, "pen");
+                ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+            }
         }
         used
     }
@@ -182,8 +287,44 @@ impl App {
     pub(crate) fn paint_path_edit(&self, p: &egui::Painter, v: View) {
         let Some(e) = &self.path_edit else { return };
         let Some(s) = self.board.world_strokes.iter().find(|s| s.id == e.id) else { return };
-        let pts = super::path_mesh::flatten(s, &|q: Pt| v.s(q.x, q.y));
+        let ctx = p.ctx();
+        let id = egui::Id::new(("qd_pedit", &e.id));
+        let scr = |q: Pt| v.s(q.x, q.y);
+        let pts = super::path_mesh::flatten(s, &scr);
+        // point mode: a faint diagonal hatch over the shape, eased in
+        let hk = ease(ctx, id.with("hatch"), true);
+        if s.closed && pts.len() > 3 {
+            hatch(p, &pts, blue().gamma_multiply(0.35 * hk));
+        }
         p.add(Shape::line(pts, EStroke::new(1.5_f32, blue())));
+        // snap guides (the object snap's look)
+        for g in &e.guides {
+            let (a, b) = (v.s(g[0], g[1]), v.s(g[2], g[3]));
+            let st = EStroke::new(1.0_f32, Color32::from_rgb(242, 78, 30));
+            p.line_segment([a, b], st);
+            for c in [a, b] {
+                p.line_segment([c + vec2(-3.0, -3.0), c + vec2(3.0, 3.0)], st);
+                p.line_segment([c + vec2(-3.0, 3.0), c + vec2(3.0, -3.0)], st);
+            }
+        }
+        // where a click would add a point: a ghost dot on the line under the pointer
+        let hover = ctx.pointer_hover_pos().filter(|q| p.clip_rect().contains(*q) && !ui_blocks(ctx, *q));
+        let on_knot = hover.is_some_and(|q| s.knots.iter().any(|k| [k.p, k.i, k.o].iter().any(|h| scr(*h).distance(q) < GRAB_PX)));
+        let spot = hover.filter(|_| e.drag.is_none() && !on_knot).and_then(|q| near_line(s, &scr, q)).map(|(j, t)| {
+            let (a, b, c, d) = s.segment(j);
+            scr(cubic(a, b, c, d, t))
+        });
+        let gk = ease(ctx, id.with("ghost"), spot.is_some());
+        if let Some(c) = spot {
+            ctx.data_mut(|d| d.insert_temp(id.with("ghost_at"), c));
+        }
+        if gk > 0.01 {
+            if let Some(c) = ctx.data(|d| d.get_temp::<Pos2>(id.with("ghost_at"))) {
+                let r = 3.5 * gk;
+                p.circle_filled(c, r, Color32::WHITE.gamma_multiply(gk));
+                p.circle_stroke(c, r, EStroke::new(1.5_f32, blue().gamma_multiply(gk)));
+            }
+        }
         paint_knots(p, v, &s.knots, e.sel, e.drag, &e.id);
     }
 }
@@ -243,6 +384,46 @@ pub(crate) fn paint_knots(p: &egui::Painter, v: View, knots: &[Knot], sel: Optio
     }
 }
 
+/// Diagonal lines 7 px apart over the inside of the outline `pts` (screen), cut where they
+/// cross it (even-odd), so only the shape is striped
+fn hatch(p: &egui::Painter, pts: &[Pos2], col: Color32) {
+    if col.a() == 0 {
+        return;
+    }
+    // along u = x + y: each stripe is where u is constant
+    let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+    for q in pts {
+        lo = lo.min(q.x + q.y);
+        hi = hi.max(q.x + q.y);
+    }
+    let clip = p.clip_rect();
+    // only the stripes that can be on screen
+    lo = lo.max(clip.min.x + clip.min.y);
+    hi = hi.min(clip.max.x + clip.max.y);
+    let gap = 7.0;
+    let st = EStroke::new(1.0_f32, col);
+    let mut u = (lo / gap).ceil() * gap;
+    let mut xs: Vec<f32> = Vec::new();
+    while u < hi {
+        xs.clear();
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let (ua, ub) = (a.x + a.y, b.x + b.y);
+            if (ua <= u) != (ub <= u) {
+                let t = (u - ua) / (ub - ua);
+                xs.push(a.x + (b.x - a.x) * t);
+            }
+        }
+        xs.sort_by(|a, b| a.total_cmp(b));
+        for c in xs.chunks(2) {
+            if let [x0, x1] = c {
+                p.line_segment([pos2(*x0, u - x0), pos2(*x1, u - x1)], st);
+            }
+        }
+        u += gap;
+    }
+}
+
 /// Nearest spot on the path's line to `q` within reach: (segment, t)
 fn near_line(s: &Stroke, scr: &impl Fn(Pt) -> Pos2, q: Pos2) -> Option<(usize, f32)> {
     let mut best: Option<(f32, usize, f32)> = None;
@@ -269,7 +450,7 @@ fn split(s: &mut Stroke, j: usize, t: f32) {
     let n = s.knots.len();
     s.knots[j].o = ab;
     s.knots[(j + 1) % n].i = cd;
-    s.knots.insert(j + 1, Knot { p: m, i: abc, o: bcd });
+    s.knots.insert(j + 1, Knot { p: m, i: abc, o: bcd, ..Default::default() });
 }
 
 /// A point with handles loses them (sharp); a sharp one gets handles along its neighbours
@@ -277,7 +458,7 @@ fn toggle_smooth(s: &mut Stroke, j: usize) {
     let n = s.knots.len();
     let k = s.knots[j];
     if k.i != k.p || k.o != k.p {
-        s.knots[j] = Knot::corner(k.p);
+        s.knots[j] = Knot { r: k.r, m: k.m, ..Knot::corner(k.p) };
         return;
     }
     let prev = if j > 0 { s.knots[j - 1].p } else if s.closed { s.knots[n - 1].p } else { k.p };
@@ -290,6 +471,7 @@ fn toggle_smooth(s: &mut Stroke, j: usize) {
     let (ux, uy) = (dx / dl, dy / dl);
     let dist = |a: Pt| ((a.x - k.p.x).powi(2) + (a.y - k.p.y).powi(2)).sqrt() / 3.0;
     let (li, lo) = (dist(prev), dist(next));
+    s.knots[j].r = 0.0;
     s.knots[j].i = Pt { x: k.p.x - ux * li, y: k.p.y - uy * li };
     s.knots[j].o = Pt { x: k.p.x + ux * lo, y: k.p.y + uy * lo };
 }
