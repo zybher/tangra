@@ -65,8 +65,9 @@ pub(crate) fn button(ui: &mut egui::Ui, ctx: &egui::Context, r: Rect) -> Option<
         return None;
     }
     with(|s| {
-        if s.snap.is_some() || s.pending.is_some() {
-            return None; // one reveal at a time
+        // one transition at a time: no clicks until the reveal and its glow have finished
+        if s.snap.is_some() || s.pending.is_some() || s.tg.is_animating() {
+            return None;
         }
         let to = !light_on();
         s.tg.poke();
