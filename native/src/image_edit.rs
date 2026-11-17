@@ -79,12 +79,13 @@ pub(crate) const ADJUST_ROWS: [(u8, &str, f32, f32); 5] = [
     (4, "Warmth", -100.0, 100.0),
 ];
 /// Same for the 3D rows
-pub(crate) const TILT_ROWS: [(u8, &str, f32, f32); 4] = [
+pub(crate) const TILT_ROWS: [(u8, &str, f32, f32); 3] = [
     (5, "Tilt", -80.0, 80.0),
     (6, "Turn", -80.0, 80.0),
-    (7, "Spin", -180.0, 180.0),
     (8, "Depth", -100.0, 100.0),
 ];
+/// Flat 2D rotation (degrees), its own control outside the 3D rows
+pub(crate) const SPIN_ROW: (u8, &str, f32, f32) = (7, "Rotation", -180.0, 180.0);
 
 fn mat_mul(a: [[f32; 3]; 3], b: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
     let mut r = [[0.0; 3]; 3];
@@ -249,7 +250,8 @@ impl App {
 
     pub(crate) fn reset_tilt(&mut self) {
         self.snapshot();
-        self.edit_each(|e| (e.tilt_x, e.tilt_y, e.spin, e.depth) = (0.0, 0.0, 0.0, 0.0));
+        // rotation is its own control now and stays
+        self.edit_each(|e| (e.tilt_x, e.tilt_y, e.depth) = (0.0, 0.0, 0.0));
     }
 
     pub(crate) fn restore_cuts(&mut self) {

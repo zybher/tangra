@@ -39,7 +39,7 @@ impl App {
             let per_px = if kind == 1 { 0.5 } else { 0.3 };
             // The reset button: (tooltip, enabled, which). Restoring lasso cuts is its own button
             // on the placement bar (place_bar.rs)
-            let (rs_tip, rs_on, rs_which) = if kind == 1 { ("Reset adjustments", ed.has_color(), 0u8) } else { ("Reset 3D", ed.has_tilt() || ed.depth != 0.0, 2u8) };
+            let (rs_tip, rs_on, rs_which) = if kind == 1 { ("Reset adjustments", ed.has_color(), 0u8) } else { ("Reset 3D", ed.tilt_x != 0.0 || ed.tilt_y != 0.0 || ed.depth != 0.0, 2u8) };
             let n = sliders.len();
             let panel_w = super::drop_anim::fit_w(&ctx, 12.0, &sliders.iter().map(|s| s.1).collect::<Vec<_>>()) + VALUE_W;
             // Same fit as the bars' other dropdowns: off the picture, in 1-3 columns, else the

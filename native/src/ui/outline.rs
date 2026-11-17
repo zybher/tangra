@@ -253,21 +253,28 @@ impl App {
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_outline_tabk"), tk));
         let k = ease(ctx, egui::Id::new("qd_outline_k_ease"), show);
         ctx.data_mut(|d| d.insert_temp(kid(), k));
-        // One shape morphs between the collapsed tab and the open panel (same top-left corner):
-        // `m` 0 = tab, 1 = panel, one eased value over the cascade's time (not two quick eases
-        // played against each other). The panel's rows fade out before it shrinks, the tab's
-        // label fades in once it has nearly closed (and the reverse on the way out).
-        let m = ctx.animate_bool_with_time_and_easing(egui::Id::new("qd_outline_m"), show, 0.45 * anim_k(), egui::emath::easing::cubic_out);
-        let pa = ((m - 0.45) / 0.55).clamp(0.0, 1.0) * k.min(1.0);
-        if k > 0.01 || tk > 0.01 || (m > 0.001 && m < 0.999) {
-            let tab = Rect::from_min_size(pos2(canvas.min.x, canvas.min.y + 10.0), vec2(TAB_W, 40.0));
-            let full = vec2(width(), (canvas.height() - 20.0).max(120.0));
-            let lerp = |a: f32, b: f32| a + (b - a) * m;
-            let shape = Rect::from_min_size(tab.min, vec2(lerp(tab.width(), full.x), lerp(tab.height(), full.y)));
-            let rr = lerp(12.0, 10.0);
+        // One card morphs between the collapsed tab and the open panel (same top-left corner),
+        // the way the properties card does: its width and height glide to the new size
+        // (micro::glide) while the panel's rows fade in / out inside it (clipped to the card)
+        // and the tab's label fades the other way
+        let tab = Rect::from_min_size(pos2(canvas.min.x, canvas.min.y + 10.0), vec2(TAB_W, 40.0));
+        let full = vec2(width(), (canvas.height() - 20.0).max(120.0));
+        let (tw, th) = if show { (full.x, full.y) } else { (tab.width(), tab.height()) };
+        // Once settled open, it follows the panel's own resizing (edge drag, window) exactly
+        let sid = egui::Id::new("qd_outline_settled");
+        let settled = show && ctx.data(|d| d.get_temp::<bool>(sid)).unwrap_or(false);
+        let gw = super::micro::glide(ctx, egui::Id::new("qd_outline_gw"), tw, settled);
+        let gh = super::micro::glide(ctx, egui::Id::new("qd_outline_gh"), th, settled);
+        let moving = gw != tw || gh != th;
+        ctx.data_mut(|d| d.insert_temp(sid, show && !moving));
+        let shape = Rect::from_min_size(tab.min, vec2(gw, gh));
+        let pa = k.min(1.0);
+        if k > 0.01 || tk > 0.01 || moving {
+            let m = ((gw - tab.width()) / (full.x - tab.width()).max(1.0)).clamp(0.0, 1.0);
+            let rr = 12.0 + (10.0 - 12.0) * m;
             let rnd = Rounding { nw: 0.0, sw: 0.0, ne: rr, se: rr };
             let al = (k + tk).min(1.0);
-            let ta = ((0.55 - m) / 0.55).clamp(0.0, 1.0) * tk.min(1.0);
+            let ta = tk.min(1.0);
             egui::Area::new(egui::Id::new("qd_outline_tab_area"))
                 .order(egui::Order::Middle)
                 .fixed_pos(tab.min)
@@ -294,12 +301,13 @@ impl App {
                         0.0
                     };
                     if ta > 0.01 {
+                        let p = p.with_clip_rect(shape);
                         let col = mix(TEXT_DIM, Color32::from_gray(235), h).gamma_multiply(ta);
                         sidebar_glyph(&p, gc, col);
                         p.text(pos2(gc.x + 16.0, br.center().y), Align2::LEFT_CENTER, "Outline", FontId::proportional(13.0), col);
                     }
                 });
-            if (k > 0.001 && k < 0.999) || (tk > 0.001 && tk < 0.999) || (m > 0.001 && m < 0.999) {
+            if (k > 0.001 && k < 0.999) || (tk > 0.001 && tk < 0.999) || moving {
                 ctx.request_repaint();
             }
         }
@@ -423,6 +431,8 @@ impl App {
             .interactable(show)
             .show(ctx, |ui| {
                 ui.set_opacity(pa);
+                // the rows show only inside the card as it grows / shrinks
+                ui.set_clip_rect(shape.intersect(ctx.screen_rect()));
                 #[allow(non_snake_case)]
                 let W = width();
                 let shell = Rect::from_min_size(pos, vec2(W, h));

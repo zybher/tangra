@@ -2,23 +2,30 @@
 //! only what the selection can change, like the hover bars (which stay): position and size,
 //! align, opacity and corners, fill, stroke, text size, and a picture's adjustments and 3D.
 //! Number fields scrub sideways, or take a typed value on click. With nothing selected it's a
-//! small card with a hint; picking something morphs it (same glide as the bars) to fit what
-//! that object has, at whichever of 4:3, 1:1 or 3:4 suits that much content best.
+//! small card with a hint; picking something morphs it (same glide as the bars) to a slim,
+//! fixed width and the height of what that object has. Numbers behave like the bars': drag
+//! to scrub, double-click to type (num_edit.rs), and the shown value counts to its new one.
+//! Size has an aspect lock; a picture's flat rotation sits under Position (out of the 3D rows).
+//! Tabs at the top: Design (all of the above) and Animate (a placeholder for now).
 
-use crate::image_edit::{ImageEdit, ADJUST_ROWS, TILT_ROWS};
+use crate::image_edit::{ImageEdit, ADJUST_ROWS, SPIN_ROW, TILT_ROWS};
 use crate::*;
 
 /// Field height
 const FH: f32 = 26.0;
 const GAP: f32 = 6.0;
 /// Card padding and distance from the canvas edges
-const PAD: f32 = 12.0;
+const PAD: f32 = 10.0;
+/// Card width with something selected (slim, like Figma's)
+const CARD_W: f32 = 228.0;
 const EDGE: f32 = 12.0;
 const HINT: &str = "Select something to see its properties";
 
 enum PAct {
     /// key, value, first change of this edit (takes the undo step)
     Num(&'static str, f32, bool),
+    /// width and height together (aspect lock)
+    Size(f32, f32, bool),
     Align(Align),
     Dist(bool),
     Color(String),
@@ -27,43 +34,15 @@ enum PAct {
     Reset(u8),
 }
 
-/// Figma-style number field: label left, value right. Drag sideways to scrub, click to type.
+/// Figma-style number field: label left, value right. Drag sideways to scrub, double-click
+/// to type (num_edit.rs, like the bars); the shown number counts to a new value.
 /// `liquid`: fills with the accent up to the value on hover, like the bars' opacity.
 #[allow(clippy::too_many_arguments)]
 fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: &str, per_px: f32, lo: f32, hi: f32, liquid: bool, a: f32) -> Option<(f32, bool)> {
     let ctx = ui.ctx().clone();
     let p = ui.painter().clone();
-    let tid = id.with("txt");
-    let typing: Option<String> = ctx.data(|d| d.get_temp(tid));
     p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
     let lx = r.min.x + 8.0;
-    if let Some(mut s) = typing {
-        p.rect_stroke(r.shrink(0.5), 6.0, EStroke::new(1.0_f32, blue().gamma_multiply(a)));
-        let lr = p.text(pos2(lx, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(11.0), TEXT_DIM.gamma_multiply(a));
-        let te_id = id.with("te");
-        let resp = ui.put(
-            Rect::from_min_max(pos2(lr.max.x + 6.0, r.min.y), pos2(r.max.x - 6.0, r.max.y)),
-            egui::TextEdit::singleline(&mut s).id(te_id).frame(false).font(FontId::proportional(12.0)).vertical_align(egui::Align::Center),
-        );
-        let started: bool = ctx.data(|d| d.get_temp(tid.with("st"))).unwrap_or(false);
-        if !started {
-            resp.request_focus();
-            ctx.data_mut(|d| d.insert_temp(tid.with("st"), true));
-            ctx.data_mut(|d| d.insert_temp(tid, s));
-            return None;
-        }
-        if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            ctx.data_mut(|d| d.remove::<String>(tid));
-            return None;
-        }
-        if resp.lost_focus() || !resp.has_focus() {
-            ctx.data_mut(|d| d.remove::<String>(tid));
-            let t = s.trim().trim_end_matches(unit).trim().replace(',', ".");
-            return t.parse::<f32>().ok().map(|v| (v.clamp(lo, hi), true));
-        }
-        ctx.data_mut(|d| d.insert_temp(tid, s));
-        return None;
-    }
     let resp = ui.interact(r, id, Sense::click_and_drag());
     let (hh, pp) = hover_fx(&ctx, &resp, true);
     p.rect_filled(r, 6.0, hover_fill(hh, pp).gamma_multiply(a));
@@ -85,16 +64,24 @@ fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: 
     if resp.hovered() || resp.dragged() {
         ctx.set_cursor_icon(CursorIcon::ResizeHorizontal);
     }
-    let lc = if liquid { mix(TEXT_DIM, Color32::WHITE, hl) } else { mix(TEXT_DIM, TEXT, hl * 0.5) };
-    p.text(pos2(lx, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(11.0), lc.gamma_multiply(a));
-    let vc = if liquid { mix(TEXT, Color32::WHITE, hl) } else { mix(Color32::from_gray(200), TEXT, hl) };
-    p.text(pos2(r.max.x - 8.0, r.center().y), Align2::RIGHT_CENTER, format!("{}{}", val.round() as i32, unit), FontId::proportional(12.0), vc.gamma_multiply(a));
-    if resp.clicked() {
-        ctx.data_mut(|d| {
-            d.insert_temp(tid, format!("{}", val.round() as i32));
-            d.insert_temp(tid.with("st"), false);
-        });
+    let mut out = None;
+    // Double-click to type it; typed / nudged values morph in
+    let ne = super::num_edit::NumEdit::run(&ctx, &resp, a > 0.5, val, lo, hi);
+    if let Some(v) = ne.apply {
+        out = Some((v, ne.first));
     }
+    let cy = r.center().y;
+    ne.draw(&p, Some(r), pos2(r.max.x - 8.0, cy), 12.0);
+    let lc = if liquid { mix(TEXT_DIM, Color32::WHITE, hl) } else { mix(TEXT_DIM, TEXT, hl * 0.5) };
+    p.text(pos2(lx, cy), Align2::LEFT_CENTER, label, FontId::proportional(11.0), lc.gamma_multiply(a));
+    let vc = if liquid { mix(TEXT, Color32::WHITE, hl) } else { mix(Color32::from_gray(200), TEXT, hl.max(ne.e)) };
+    // Counts to a new value (follows the pointer exactly while scrubbed)
+    let shown = super::micro::glide(&ctx, id.with("num"), val, resp.dragged());
+    if shown != val {
+        ctx.request_repaint();
+    }
+    let txt = ne.text.clone().unwrap_or_else(|| format!("{}{}", shown.round() as i32, unit));
+    p.with_clip_rect(r).text(pos2(r.max.x - 8.0, cy), Align2::RIGHT_CENTER, txt, FontId::proportional(12.0), vc.gamma_multiply(a));
     if resp.drag_started() {
         ctx.data_mut(|d| d.insert_temp(id.with("v0"), val));
     }
@@ -103,10 +90,10 @@ fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: 
         let dx = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.interact_pos()).map_or(0.0, |(a, b)| b.x - a.x));
         let nv = (v0 + dx * per_px).round().clamp(lo, hi);
         if nv != val || resp.drag_started() {
-            return Some((nv, resp.drag_started()));
+            out = Some((nv, resp.drag_started()));
         }
     }
-    None
+    out
 }
 
 /// Two side-by-side halves of a row
@@ -161,15 +148,12 @@ impl App {
         let ca = ease(ctx, bid.with("ca"), has);
         let shown = if has { target } else { last }.filter(|s| ca > 0.01 && self.rect_of(s.0, &s.1).is_some());
 
-        // Card size: the hint's when empty; else the content's height (measured last pass) at
-        // the ratio whose width suits it best (4:3 short lists, 1:1, 3:4 long ones)
+        // Card size: the hint's when empty; else slim and the content's height (measured last pass)
         let max_h = (canvas.height() - 2.0 * EDGE - 70.0).max(120.0);
         let hint_w = ctx.fonts(|f| f.layout_no_wrap(HINT.to_string(), FontId::proportional(11.5), TEXT_DIM).size().x);
         let (tw, th) = if has {
             let ch: f32 = ctx.data(|d| d.get_temp(bid.with("ch"))).unwrap_or(240.0);
-            let h = (ch + 2.0 * PAD).min(max_h);
-            let w = [4.0 / 3.0, 1.0, 3.0 / 4.0].into_iter().map(|r| h * r).min_by(|a: &f32, b: &f32| (a - 280.0).abs().total_cmp(&(b - 280.0).abs())).unwrap_or(280.0);
-            (w.clamp(240.0, 330.0), h)
+            (CARD_W.max(hint_w + 2.0 * PAD + 8.0), (ch + 2.0 * PAD).min(max_h))
         } else {
             (hint_w + 2.0 * PAD + 8.0, 44.0)
         };
@@ -181,6 +165,8 @@ impl App {
         let card = Rect::from_min_size(pos2(canvas.max.x - EDGE - w, canvas.min.y + EDGE), vec2(w, h));
         // the hover bars keep clear of it (bar_morph::wall_hi)
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_props_card"), card));
+        // Design / Animate tab (switching cascades the rows in again)
+        let tab: u8 = ctx.data(|d| d.get_temp(bid.with("tab"))).unwrap_or(0);
         let t_sel: f64 = ctx.data(|d| d.get_temp(bid.with("t_sel"))).unwrap_or(now);
         let xs = ((now - t_sel) as f32 / (0.6 * k)).clamp(0.0, 1.0);
         if xs < 1.0 {
@@ -294,14 +280,58 @@ impl App {
                     };
                     let gap = |ui: &mut egui::Ui| ui.add_space(GAP);
 
+                    // Tabs: a pill slides to the picked one (like the stroke position switch)
+                    {
+                        let (r, a) = row(ui, FH);
+                        let at = ctx.animate_value_with_time(bid.with("tab_k"), tab as f32, 0.2 * anim_k());
+                        let p = ui.painter();
+                        p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                        let half = r.width() / 2.0;
+                        p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * half, r.min.y + 2.0), vec2(half - 4.0, r.height() - 4.0)), 5.0, Color32::from_white_alpha((22.0 * a) as u8));
+                        for (j, name) in ["Design", "Animate"].into_iter().enumerate() {
+                            let br = Rect::from_min_size(pos2(r.min.x + j as f32 * half, r.min.y), vec2(half, r.height()));
+                            let resp = ui.interact(br, bid.with(("tab", j)), Sense::click());
+                            let on = j as u8 == tab;
+                            let (hh, pp) = hover_fx(ctx, &resp, !on);
+                            if !on {
+                                ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
+                            }
+                            let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
+                            ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.5), mix(TEXT_DIM, Color32::from_gray(235), onk.max(hh * 0.5)).gamma_multiply(a));
+                            if resp.clicked() && !on {
+                                ctx.data_mut(|d| {
+                                    d.insert_temp(bid.with("tab"), j as u8);
+                                    d.insert_temp(bid.with("t_sel"), now);
+                                });
+                            }
+                        }
+                        gap(ui);
+                    }
+
                     // Title: what's selected
                     let (r, a) = row(ui, 22.0);
                     let label = if n_sel > 1 { format!("{title}  ·  {n_sel} selected") } else { title.to_string() };
                     ui.painter().text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), Color32::from_gray(235).gamma_multiply(a));
                     let mut first = false;
 
+                    // Animate: a placeholder (prototype-style interactions come later)
+                    if tab == 1 {
+                        head(ui, &mut row, "Interaction", first);
+                        for (k, v) in [("Trigger", "On click"), ("Animation", "Smart animate"), ("Curve", "Ease out"), ("Duration", "300 ms")] {
+                            let (r, a) = row(ui, FH);
+                            let p = ui.painter();
+                            p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                            p.text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, k, FontId::proportional(11.0), TEXT_DIM.gamma_multiply(a * 0.7));
+                            p.text(pos2(r.max.x - 8.0, r.center().y), Align2::RIGHT_CENTER, v, FontId::proportional(12.0), Color32::from_gray(200).gamma_multiply(a * 0.6));
+                            gap(ui);
+                        }
+                        let (r, a) = row(ui, 22.0);
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, "Coming soon", FontId::proportional(11.0), TEXT_DIM.gamma_multiply(a));
+                    }
+                    let design = tab == 0;
+
                     // Position and size (one object, not one the frame arranges)
-                    if single && !locked {
+                    if design && single && !locked {
                         head(ui, &mut row, "Position", first);
                         first = false;
                         let (r, a) = row(ui, FH);
@@ -312,21 +342,47 @@ impl App {
                         if let Some((v, f1)) = field(ui, bid.with("y"), rr, "Y", r0[1], "", 1.0, -1e6, 1e6, false, a) {
                             out.push(PAct::Num("y", v, f1));
                         }
-                        if kind != Kind::Text {
+                        // A picture's flat rotation (its own control, out of the 3D rows)
+                        if let Some(e) = &edit {
                             gap(ui);
                             let (r, a) = row(ui, FH);
-                            let (l, rr) = halves(r);
+                            let (fk, name, lo, hi) = SPIN_ROW;
+                            if let Some((nv, f1)) = field(ui, bid.with("spin"), r, name, e.spin, "°", 0.5, lo, hi, false, a) {
+                                out.push(PAct::Edit(fk, nv, f1));
+                            }
+                        }
+                        if kind != Kind::Text {
+                            head(ui, &mut row, "Size", false);
+                            let (r, a) = row(ui, FH);
+                            // W, the aspect lock, H
+                            let lw = 24.0;
+                            let fw = (r.width() - lw - GAP) / 2.0;
+                            let l = Rect::from_min_size(r.min, vec2(fw, r.height()));
+                            let lr = Rect::from_min_size(pos2(l.max.x + GAP / 2.0, r.min.y), vec2(lw, r.height()));
+                            let rr = Rect::from_min_max(pos2(lr.max.x + GAP / 2.0, r.min.y), r.max);
+                            let lock_id = egui::Id::new("qd_props_ratio_lock");
+                            let lock: bool = ctx.data(|d| d.get_temp(lock_id)).unwrap_or(false);
+                            let resp = ui.interact(lr, bid.with("lock"), Sense::click()).on_hover_text(if lock { "Unlock aspect ratio" } else { "Lock aspect ratio" });
+                            let (hh, pp) = hover_fx(ctx, &resp, true);
+                            let lk = ease(ctx, bid.with("lock_k"), lock);
+                            let p = ui.painter();
+                            p.rect_filled(lr, 6.0, hover_fill(hh, pp).gamma_multiply(a));
+                            super::svg_icons::draw(p, "link", lr.center(), 15.0, mix(mix(TEXT_DIM, TEXT, hh * 0.5), blue(), lk).gamma_multiply(a));
+                            if resp.clicked() {
+                                ctx.data_mut(|d| d.insert_temp(lock_id, !lock));
+                            }
+                            let ratio = r0[3] / r0[2].max(1e-3);
                             if let Some((v, f1)) = field(ui, bid.with("w"), l, "W", r0[2], "", 1.0, 1.0, 1e6, false, a) {
-                                out.push(PAct::Num("w", v, f1));
+                                out.push(if lock { PAct::Size(v, (v * ratio).max(1.0), f1) } else { PAct::Num("w", v, f1) });
                             }
                             if let Some((v, f1)) = field(ui, bid.with("h"), rr, "H", r0[3], "", 1.0, 1.0, 1e6, false, a) {
-                                out.push(PAct::Num("h", v, f1));
+                                out.push(if lock { PAct::Size((v / ratio.max(1e-3)).max(1.0), v, f1) } else { PAct::Num("h", v, f1) });
                             }
                         }
                     }
 
                     // Align inside the frame
-                    if align {
+                    if design && align {
                         head(ui, &mut row, "Align", first);
                         first = false;
                         let mut btns: Vec<(u8, &str)> = vec![(0, "Left"), (1, "Centre"), (2, "Right"), (3, "Top"), (4, "Middle"), (5, "Bottom")];
@@ -363,6 +419,7 @@ impl App {
                     }
 
                     // Layer: opacity (+ corners)
+                    if design {
                     head(ui, &mut row, "Layer", first);
                     first = false;
                     let (r, a) = row(ui, FH);
@@ -456,7 +513,7 @@ impl App {
                     if let Some(e) = &edit {
                         for (sec, rows, per, reset) in [("Adjust", &ADJUST_ROWS[..], 0.5, 0u8), ("3D", &TILT_ROWS[..], 0.3, 2u8)] {
                             let (hr, a) = head(ui, &mut row, sec, first);
-                            let dirty = if reset == 0 { e.has_color() } else { e.has_tilt() || e.depth != 0.0 };
+                            let dirty = if reset == 0 { e.has_color() } else { e.tilt_x != 0.0 || e.tilt_y != 0.0 || e.depth != 0.0 };
                             if dirty && link(ui, bid.with(("rst", reset)), pos2(hr.max.x, hr.center().y), "Reset", a) {
                                 out.push(PAct::Reset(reset));
                             }
@@ -480,6 +537,7 @@ impl App {
                             }
                         }
                     }
+                    }
                     let _ = first;
                     // measured for next pass's card height (only for what's selected now)
                     if has {
@@ -499,6 +557,15 @@ impl App {
                         self.snapshot();
                     }
                     self.props_set(kind, &id, key, v);
+                    dirty = true;
+                }
+                PAct::Size(w, h, first) => {
+                    if first {
+                        self.snapshot();
+                    }
+                    if let Some(r) = self.rect_of(kind, &id) {
+                        self.set_rect(kind, &id, [r[0], r[1], w, h]);
+                    }
                     dirty = true;
                 }
                 PAct::Align(a) => self.align_selection(a),
