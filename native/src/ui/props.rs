@@ -38,6 +38,134 @@ enum PAct {
     /// the picked path point (canvas/path_edit.rs): "px" / "py" / "pr" (corner), value, first
     Pt(&'static str, f32, bool),
     Mirror(u8),
+    /// blend mode for everything selected (canvas/layers.rs BLENDS)
+    Blend(u8),
+    /// gradient fill (canvas/gradient.rs): kind (None = solid), pick / move / add / remove a
+    /// stop, the picked stop's opacity, flip
+    GKind(Option<u8>),
+    GPick(usize),
+    GMove(usize, f32),
+    GAdd(f32),
+    GDel(usize),
+    GAlpha(f32, bool),
+    GSmooth(f32, bool),
+    GFlip,
+}
+
+/// A row of choices; a pill sits under the picked one and slides when it changes. `cur`
+/// None: nothing in this row is picked (the pill fades out where it was)
+#[allow(clippy::too_many_arguments)]
+fn pills(ui: &mut egui::Ui, id: egui::Id, r: Rect, names: &[&str], cur: Option<usize>, font: f32, a: f32) -> Option<usize> {
+    let ctx = ui.ctx().clone();
+    let n = names.len().max(1);
+    let cell = r.width() / n as f32;
+    let last: usize = ctx.data(|d| d.get_temp(id.with("last"))).unwrap_or(0);
+    let at_i = cur.unwrap_or(last);
+    ctx.data_mut(|d| d.insert_temp(id.with("last"), at_i));
+    let at = ctx.animate_value_with_time(id.with("k"), at_i as f32, 0.2 * anim_k());
+    let on_k = ease(&ctx, id.with("on"), cur.is_some());
+    let p = ui.painter().clone();
+    p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+    p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * cell, r.min.y + 2.0), vec2(cell - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a * on_k) as u8));
+    let mut out = None;
+    for (j, name) in names.iter().enumerate() {
+        let br = Rect::from_min_size(pos2(r.min.x + j as f32 * cell, r.min.y), vec2(cell, r.height()));
+        let resp = ui.interact(br, id.with(j), Sense::click());
+        let on = cur == Some(j);
+        let (hh, pp) = hover_fx(&ctx, &resp, !on);
+        if !on {
+            p.rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
+        }
+        let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0) * on_k;
+        p.text(br.center(), Align2::CENTER_CENTER, *name, FontId::proportional(font), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
+        if resp.clicked() && !on {
+            out = Some(j);
+        }
+    }
+    out
+}
+
+/// A gradient's colours as a bar (over a checkerboard, so see-through stops show) with its
+/// stops as dots under it: click a dot to pick it, drag it along, right-click to remove it,
+/// click the bar to add one there
+fn gradient_bar(ui: &mut egui::Ui, id: egui::Id, r: Rect, g: &Gradient, pick: Option<usize>, a: f32, out: &mut Vec<PAct>) {
+    let ctx = ui.ctx().clone();
+    let p = ui.painter().clone();
+    let bar = Rect::from_min_max(r.min + vec2(7.0, 0.0), pos2(r.max.x - 7.0, r.min.y + 14.0));
+    let cp = p.with_clip_rect(bar.intersect(p.clip_rect()));
+    let sq = 5.0;
+    let mut x = bar.min.x;
+    let mut i = 0;
+    while x < bar.max.x {
+        for (j, y) in [bar.min.y, bar.min.y + sq, bar.min.y + sq * 2.0].into_iter().enumerate() {
+            let c = if (i + j) % 2 == 0 { gray_ui(70) } else { gray_ui(110) };
+            cp.rect_filled(Rect::from_min_size(pos2(x, y), vec2(sq, sq)), 0.0, c.gamma_multiply(a));
+        }
+        x += sq;
+        i += 1;
+    }
+    let mut m = egui::Mesh::default();
+    const N: usize = 48;
+    for k in 0..=N {
+        let t = k as f32 / N as f32;
+        let c = crate::canvas::gradient::color32_at(g, t).gamma_multiply(a);
+        let x = bar.min.x + t * bar.width();
+        m.colored_vertex(pos2(x, bar.min.y), c);
+        m.colored_vertex(pos2(x, bar.max.y), c);
+        if k > 0 {
+            let q = (k * 2) as u32;
+            m.add_triangle(q - 2, q - 1, q);
+            m.add_triangle(q - 1, q + 1, q);
+        }
+    }
+    p.add(egui::Shape::mesh(m));
+    p.rect_stroke(bar, 3.0, EStroke::new(1.0_f32, wa((40.0 * a) as u8)));
+    let t_of = |x: f32| ((x - bar.min.x) / bar.width()).clamp(0.0, 1.0);
+    let dot_y = bar.max.y + 8.0;
+    let resp = ui.interact(r, id, Sense::click_and_drag());
+    let hov = resp.hover_pos();
+    let near = |q: Pos2| g.stops.iter().enumerate().map(|(j, s)| (j, (bar.min.x + s.at * bar.width() - q.x).abs())).filter(|(_, d)| *d < 8.0).min_by(|x, y| x.1.total_cmp(&y.1)).map(|(j, _)| j);
+    let held_id = id.with("held");
+    if resp.drag_started() || resp.clicked() {
+        if let Some(q) = resp.interact_pointer_pos() {
+            match near(q) {
+                Some(j) => {
+                    out.push(PAct::GPick(j));
+                    ctx.data_mut(|d| d.insert_temp(held_id, j));
+                }
+                None if resp.clicked() => out.push(PAct::GAdd(t_of(q.x))),
+                None => {}
+            }
+        }
+    }
+    if resp.dragged() {
+        if let (Some(j), Some(q)) = (ctx.data(|d| d.get_temp::<usize>(held_id)), resp.interact_pointer_pos()) {
+            out.push(PAct::GMove(j, t_of(q.x)));
+        }
+    }
+    if resp.drag_stopped() || resp.clicked() {
+        ctx.data_mut(|d| d.remove::<usize>(held_id));
+        ctx.data_mut(|d| d.remove::<bool>(id.with("gmv")));
+    }
+    if resp.secondary_clicked() {
+        if let Some(j) = resp.interact_pointer_pos().and_then(near).filter(|_| g.stops.len() > 2) {
+            out.push(PAct::GDel(j));
+        }
+    }
+    for (j, st) in g.stops.iter().enumerate() {
+        let cx = bar.min.x + st.at * bar.width();
+        let c = pos2(cx, dot_y);
+        let hh = ease(&ctx, id.with(("hv", j)), hov.is_some_and(|q| (q.x - cx).abs() < 8.0));
+        let on = ease(&ctx, id.with(("on", j)), pick == Some(j));
+        let rad = 5.0 + 1.0 * hh + 1.0 * on;
+        p.line_segment([pos2(cx, bar.max.y), pos2(cx, c.y - rad)], EStroke::new(1.0_f32, wa((90.0 * a) as u8)));
+        p.circle_filled(c, rad + 1.0, Color32::from_black_alpha((120.0 * a) as u8));
+        p.circle_filled(c, rad, hex(&st.color).gamma_multiply(a));
+        p.circle_stroke(c, rad, EStroke::new(1.5_f32, mix(wa(200), blue(), on).gamma_multiply(a)));
+    }
+    if hov.is_some() {
+        ctx.set_cursor_icon(if hov.and_then(near).is_some() { CursorIcon::Grab } else { CursorIcon::PointingHand });
+    }
 }
 
 /// Figma-style number field: label left, value right. Drag sideways to scrub, double-click
@@ -256,6 +384,16 @@ impl App {
         };
         let n_sel = self.selected.len();
         let is_group = kind == Kind::Group;
+        // Gradient fill: frames and closed shapes / paths (canvas/gradient.rs)
+        let can_grad = single
+            && match kind {
+                Kind::Group => true,
+                Kind::Stroke => self.find_stroke(&id).is_some_and(|s| s.closed_len().is_some() || (s.closed && !s.knots.is_empty())),
+                _ => false,
+            };
+        let grad = if can_grad { self.gradient_of(&id) } else { None };
+        let gstop = self.grad_edit.as_ref().filter(|e| e.0 == id).map(|e| e.1).filter(|j| grad.as_ref().is_some_and(|g| *j < g.stops.len()));
+        let blend_now = self.board.blend.get(&id).copied().unwrap_or(0);
         // Editing this path's points with one picked: its own rows
         let pick = match (&self.path_edit, kind) {
             (Some(e), Kind::Stroke) if e.id == id => self.picked_knot(),
@@ -504,10 +642,92 @@ impl App {
                             out.push(PAct::Num("corner", v, f1));
                         }
                     }
+                    // Blend mode: the row shows it; a click opens the choices under it
+                    if crate::canvas::layers::available() {
+                        gap(ui);
+                        let names = crate::canvas::layers::BLENDS;
+                        let open_id = bid.with("blend_open");
+                        let open: bool = ctx.data(|d| d.get_temp(open_id)).unwrap_or(false);
+                        let (r, a) = row(ui, FH);
+                        let resp = ui.interact(r, bid.with("blend_row"), Sense::click());
+                        let (hh, pp) = hover_fx(ctx, &resp, true);
+                        let p = ui.painter();
+                        p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                        p.rect_filled(r, 6.0, hover_fill(hh, pp).gamma_multiply(a));
+                        p.text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, "Blend", FontId::proportional(11.5), txt_dim().gamma_multiply(a));
+                        p.text(pos2(r.max.x - 24.0, r.center().y), Align2::RIGHT_CENTER, names[blend_now as usize % names.len()], FontId::proportional(12.0), mix(gray_ui(225), hi(), hh).gamma_multiply(a));
+                        let ok = ease(ctx, open_id.with("k"), open);
+                        crate::ui::svg_icons::draw(p, if ok > 0.5 { "chevron-up" } else { "chevron-down" }, pos2(r.max.x - 12.0, r.center().y), 12.0, mix(txt_dim(), hi(), hh).gamma_multiply(a));
+                        if resp.clicked() {
+                            ctx.data_mut(|d| d.insert_temp(open_id, !open));
+                        }
+                        if ok > 0.001 {
+                            // three a row; rows rise in one after another as it opens
+                            for (ri, chunk) in names.chunks(3).enumerate() {
+                                let k = ((ok * 1.6) - ri as f32 * 0.15).clamp(0.0, 1.0);
+                                let k = 1.0 - (1.0 - k).powi(3);
+                                ui.add_space(4.0 * ok);
+                                let (r, a2) = row(ui, (FH - 2.0) * ok);
+                                if r.height() < 4.0 {
+                                    continue;
+                                }
+                                let base = ri * 3;
+                                let cur = (blend_now as usize).checked_sub(base).filter(|c| *c < chunk.len());
+                                if let Some(j) = pills(ui, bid.with(("blend", ri)), r.translate(vec2(0.0, (1.0 - k) * 6.0)), chunk, cur, 10.5, a2 * k) {
+                                    out.push(PAct::Blend((base + j) as u8));
+                                }
+                            }
+                        }
+                    }
 
                     // Fill / colour swatches
                     if let Some(col) = &fill {
                         head(ui, &mut row, if is_group { "Fill" } else { "Colour" }, first);
+                        // Solid or a gradient (canvas/gradient.rs; its handles show on the canvas
+                        // while a stop is picked)
+                        if can_grad {
+                            let (r, a) = row(ui, FH);
+                            let mut names = vec!["Solid"];
+                            names.extend(crate::canvas::gradient::KINDS);
+                            let cur = grad.as_ref().map_or(0, |g| g.kind as usize + 1);
+                            if let Some(j) = pills(ui, bid.with("gkind"), r, &names, Some(cur), 10.5, a) {
+                                out.push(PAct::GKind(j.checked_sub(1).map(|k| k as u8)));
+                            }
+                            if let Some(g) = &grad {
+                                gap(ui);
+                                let (r, a) = row(ui, 30.0);
+                                // the bar, and a flip button at its right end
+                                let fr = Rect::from_min_size(pos2(r.max.x - 26.0, r.min.y), vec2(26.0, 22.0));
+                                gradient_bar(ui, bid.with("gbar"), Rect::from_min_max(r.min, pos2(fr.min.x - 4.0, r.max.y)), g, gstop, a, &mut out);
+                                let resp = ui.interact(fr, bid.with("gflip"), Sense::click()).on_hover_text("Swap the gradient's ends");
+                                let (hh, pp) = hover_fx(ctx, &resp, true);
+                                let p = ui.painter();
+                                p.rect_filled(fr, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                                p.rect_filled(fr, 6.0, hover_fill(hh, pp).gamma_multiply(a));
+                                crate::ui::svg_icons::draw(p, "flip-horizontal", fr.center(), 14.0, mix(txt_dim(), hi(), hh).gamma_multiply(a));
+                                if resp.clicked() {
+                                    out.push(PAct::GFlip);
+                                }
+                                gap(ui);
+                                let (r, a) = row(ui, FH);
+                                let (l, rr) = halves(r);
+                                let st_a = gstop.and_then(|j| g.stops.get(j)).map_or(100.0, |s| (s.alpha * 100.0).round());
+                                if let Some((v, f1)) = field(ui, bid.with("gal"), l, "Stop", st_a, "%", 0.5, 0.0, 100.0, true, a) {
+                                    out.push(PAct::GAlpha(v / 100.0, f1));
+                                }
+                                // how softly the colours ease into each other (no hard edge where it ends)
+                                if let Some((v, f1)) = field(ui, bid.with("gsm"), rr, "Smooth", (g.smooth * 100.0).round(), "%", 0.5, 0.0, 100.0, true, a) {
+                                    out.push(PAct::GSmooth(v / 100.0, f1));
+                                }
+                            }
+                            gap(ui);
+                        }
+                        // with a gradient the swatches colour its picked stop
+                        let col = &match (&grad, gstop) {
+                            (Some(g), Some(j)) => g.stops[j].color.clone(),
+                            (Some(_), None) => String::new(),
+                            _ => col.clone(),
+                        };
                         let (r, a) = row(ui, 28.0);
                         let mut sw: Vec<&str> = PEN_COLORS.to_vec();
                         if is_group {
@@ -706,6 +926,16 @@ impl App {
                 }
                 PAct::Align(a) => self.align_selection(a),
                 PAct::Dist(h) => self.distribute_selection(h),
+                PAct::Color(c) if grad.is_some() && c != "none" => {
+                    self.snapshot();
+                    let j = gstop.unwrap_or(0);
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
+                            s.color = c;
+                        }
+                    });
+                    self.grad_edit = Some((id.clone(), j));
+                }
                 PAct::Color(c) => acts.push(if is_group { Act::GroupColor(c) } else { Act::Color(c) }),
                 PAct::StrokePos(v) => {
                     acts.push(Act::StrokePos(v));
@@ -716,6 +946,94 @@ impl App {
                 PAct::Reset(1) => self.restore_cuts(),
                 PAct::Reset(_) => self.reset_tilt(),
                 PAct::Mirror(m) => self.path_set_mirror(m),
+                PAct::Blend(m) => {
+                    self.snapshot();
+                    for (_, sid) in self.selected.clone() {
+                        if m == 0 {
+                            self.board.blend.remove(&sid);
+                        } else {
+                            self.board.blend.insert(sid, m);
+                        }
+                    }
+                    dirty = true;
+                }
+                PAct::GKind(k) => {
+                    self.snapshot();
+                    self.edit_gradient(&id, |g, base| match (k, g.as_mut()) {
+                        (None, _) => *g = None,
+                        (Some(k), Some(g)) => g.set_kind(k),
+                        (Some(k), None) => *g = Some(Gradient::new(k, base)),
+                    });
+                    self.grad_edit = k.map(|_| (id.clone(), 0));
+                }
+                PAct::GPick(j) => self.grad_edit = Some((id.clone(), j)),
+                PAct::GMove(j, t) => {
+                    // one undo step for the whole drag
+                    let mid = egui::Id::new("qd_props").with("gbar").with("gmv");
+                    if !ctx.data(|d| d.get_temp::<bool>(mid)).unwrap_or(false) {
+                        self.snapshot();
+                        ctx.data_mut(|d| d.insert_temp(mid, true));
+                    }
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
+                            s.at = t;
+                        }
+                    });
+                }
+                PAct::GAdd(t) => {
+                    self.snapshot();
+                    let mut at = 0;
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(g) = g.as_mut() {
+                            let [r, gg, b, a] = crate::canvas::gradient::color_at(g, t);
+                            let hx = format!("#{:02x}{:02x}{:02x}", (r * 255.0) as u8, (gg * 255.0) as u8, (b * 255.0) as u8);
+                            g.stops.push(Stop { at: t, color: hx, alpha: a });
+                            at = g.stops.len() - 1;
+                        }
+                    });
+                    self.grad_edit = Some((id.clone(), at));
+                }
+                PAct::GDel(j) => {
+                    self.snapshot();
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(g) = g.as_mut().filter(|g| g.stops.len() > 2) {
+                            g.stops.remove(j);
+                        }
+                    });
+                    self.grad_edit = Some((id.clone(), 0));
+                }
+                PAct::GAlpha(v, first) => {
+                    if first {
+                        self.snapshot();
+                    }
+                    let j = gstop.unwrap_or(0);
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
+                            s.alpha = v.clamp(0.0, 1.0);
+                        }
+                    });
+                    self.grad_edit = Some((id.clone(), j));
+                }
+                PAct::GSmooth(v, first) => {
+                    if first {
+                        self.snapshot();
+                    }
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(g) = g.as_mut() {
+                            g.smooth = v.clamp(0.0, 1.0);
+                        }
+                    });
+                }
+                PAct::GFlip => {
+                    self.snapshot();
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(g) = g.as_mut() {
+                            for s in &mut g.stops {
+                                s.at = 1.0 - s.at;
+                            }
+                        }
+                    });
+                }
                 PAct::Pt(key, v, first) => {
                     if first {
                         self.snapshot();

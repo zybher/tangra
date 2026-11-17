@@ -4,34 +4,10 @@ use crate::*;
 use std::collections::HashMap;
 
 impl App {
-    pub(crate) fn paint(&self, p: &egui::Painter, rect: Rect, v: View, hover: Option<Pos2>) {
+    /// Every object in stacking order; `only`: just these ids (copy as picture, canvas/capture.rs)
+    pub(crate) fn paint_items(&self, p: &egui::Painter, rect: Rect, v: View, only: Option<&std::collections::HashSet<String>>) {
         let z = v.cam.zoom;
         let b = &self.board;
-        let r_top = Rounding { nw: 10.0, ne: 10.0, sw: 0.0, se: 0.0 };
-        p.rect_filled(rect, r_top, bg());
-        // The gradient fades in and out (audit #92)
-        let gk = ease(p.ctx(), egui::Id::new("qd_grad_k"), gradient_on());
-        if gk > 0.001 {
-            fill_rounded_top(p, rect, 10.0, |q| gradient_at(q, rect).gamma_multiply(gk));
-        }
-
-        if aurora() {
-            p.ctx().data_mut(|d| d.insert_temp(egui::Id::new("qd_canvas_rect"), rect));
-            paint_aura(&p.with_clip_rect(rect), rect, self.now);
-        }
-        if aurora() || gradient_on() {
-            if let Some(n) = &self.noise {
-                // Tiled 1:1 in screen pixels; adds 0-3 levels of brightness at random
-                let ppp = p.ctx().pixels_per_point();
-                let tile = 128.0 / ppp;
-                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(rect.width() / tile, rect.height() / tile));
-                p.image(n.id(), rect, uv, Color32::WHITE);
-            }
-        }
-
-        // Dot grid (canvas/grid_fade.rs: zoom levels and pattern changes crossfade)
-        super::grid_fade::paint_grid(p, rect, v, self.settings.pattern, self.settings.grid_dots, self.now);
-
         let item_rect = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_max(v.s(x, y), v.s(x + w, y + h));
 
         // Inside a rounded clipping frame: the object's own shape cut to the frame's rounded shape
@@ -111,13 +87,20 @@ impl App {
             let fr = gf(&pctx, fid.with("r"), group_radius(c)) * z;
             let cut = round_cut(&c.id, r, fr).filter(|(_, safe)| !safe);
             match &cut {
-                Some((poly, _)) if poly.len() >= 3 => {
-                    p.add(egui::Shape::convex_polygon(poly.clone(), fill_color, EStroke::NONE));
-                }
+                // a gradient fill replaces the colour (canvas/gradient.rs)
+                Some((poly, _)) if poly.len() >= 3 => match &c.gradient {
+                    Some(g) => super::gradient::fill(p, egui::Shape::convex_polygon(poly.clone(), Color32::WHITE, EStroke::NONE), g, r, 1.0),
+                    None => {
+                        p.add(egui::Shape::convex_polygon(poly.clone(), fill_color, EStroke::NONE));
+                    }
+                },
                 Some(_) => {}
-                None => {
-                    p.rect_filled(r, fr, fill_color);
-                }
+                None => match &c.gradient {
+                    Some(g) => super::gradient::fill(p, egui::Shape::rect_filled(r, fr, Color32::WHITE), g, r, 1.0),
+                    None => {
+                        p.rect_filled(r, fr, fill_color);
+                    }
+                },
             }
             // Stroke is in world units: it scales with the zoom like the frame itself
             let bw = gf(&pctx, fid.with("w"), c.border.unwrap_or(1.0)) * z;
@@ -430,10 +413,20 @@ impl App {
             let notes: HashMap<&str, &Note> = b.sticky_notes.iter().map(|x| (x.id.as_str(), x)).collect();
             let strokes: HashMap<&str, &Stroke> = b.world_strokes.iter().map(|x| (x.id.as_str(), x)).collect();
             let texts: HashMap<&str, &Label> = b.world_texts.iter().map(|x| (x.id.as_str(), x)).collect();
+            // Blend modes (canvas/layers.rs): the object goes on its own layer, then mixes with
+            // what's under it; a frame's layer holds everything inside it too
+            let blend = |id: &str| b.blend.get(id).copied().filter(|m| *m > 0 && super::layers::available());
             for st in self.paint_steps() {
                 match st {
                     Step::Item((k, id)) => {
+                        if only.is_some_and(|o| !o.contains(&id)) {
+                            continue;
+                        }
                         let id = id.as_str();
+                        let bl = blend(id);
+                        if bl.is_some() {
+                            super::layers::begin_blend(p);
+                        }
                         match k {
                             Kind::Group => groups.get(id).map(|x| paint_frame(x)),
                             Kind::Image => images.get(id).map(|x| paint_img(x)),
@@ -442,17 +435,61 @@ impl App {
                             Kind::Stroke => strokes.get(id).map(|x| paint_stroke_item(x)),
                             Kind::Text => texts.get(id).map(|x| paint_text(x)),
                         };
+                        // a frame's layer ends with its contents (Step::End)
+                        if let (Some(m), false) = (bl, k == Kind::Group) {
+                            super::layers::end_blend(p, m);
+                        }
                     }
                     // A frame's outline goes over its own contents, under whatever is in front of it
                     Step::End(id) => {
+                        if only.is_some_and(|o| !o.contains(&id)) {
+                            continue;
+                        }
                         let ls = late_strokes.borrow_mut().remove(&id);
                         for (lp, s) in ls.into_iter().flatten() {
                             lp.add(s);
+                        }
+                        if let Some(m) = blend(&id) {
+                            super::layers::end_blend(p, m);
                         }
                     }
                 }
             }
         }
+    }
+
+    pub(crate) fn paint(&self, p: &egui::Painter, rect: Rect, v: View, hover: Option<Pos2>) {
+        let r_top = Rounding { nw: 10.0, ne: 10.0, sw: 0.0, se: 0.0 };
+        p.rect_filled(rect, r_top, bg());
+        // The gradient fades in and out (audit #92)
+        let gk = ease(p.ctx(), egui::Id::new("qd_grad_k"), gradient_on());
+        if gk > 0.001 {
+            fill_rounded_top(p, rect, 10.0, |q| gradient_at(q, rect).gamma_multiply(gk));
+        }
+
+        if aurora() {
+            p.ctx().data_mut(|d| d.insert_temp(egui::Id::new("qd_canvas_rect"), rect));
+            paint_aura(&p.with_clip_rect(rect), rect, self.now);
+        }
+        if aurora() || gradient_on() {
+            if let Some(n) = &self.noise {
+                // Tiled 1:1 in screen pixels; adds 0-3 levels of brightness at random
+                let ppp = p.ctx().pixels_per_point();
+                let tile = 128.0 / ppp;
+                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(rect.width() / tile, rect.height() / tile));
+                p.image(n.id(), rect, uv, Color32::WHITE);
+            }
+        }
+
+        // Dot grid (canvas/grid_fade.rs: zoom levels and pattern changes crossfade)
+        super::grid_fade::paint_grid(p, rect, v, self.settings.pattern, self.settings.grid_dots, self.now);
+
+        // Every object, back to front (also drawn on its own for copy as picture)
+        self.paint_items(p, rect, v, None);
+        let item_rect = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_max(v.s(x, y), v.s(x + w, y + h));
+        let z = v.cam.zoom;
+        let b = &self.board;
+
         // Stroke being drawn right now
         if let Some((target, s)) = &self.active {
             match target.as_ref().and_then(|id| b.images.iter().find(|i| &i.id == id)) {
@@ -653,6 +690,7 @@ impl App {
         }
 
         self.paint_path_edit(p, v);
+        self.paint_gradient_handles(p, v);
         self.paint_pen(p, v, hover);
         self.paint_snap(p, v, hover);
         self.paint_gap_handles(p, v, hover);

@@ -128,6 +128,15 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
     // stroke position slides between inside / centre / outside
     let spk = gf(ctx, gid.with("sp"), stroke_inset(s.stroke_pos, 2.0));
     let inset = |w: f32| spk * w / 2.0;
+    // Gradient fill: the fill's own shape drawn in white, then given the gradient
+    // (canvas/gradient.rs); its box is the object's, so the handles stretch with it
+    let grad_k = o * fk;
+    let paint_fill = |mk: &dyn Fn(Color32) -> Shape| match &s.gradient {
+        Some(g) => super::gradient::fill(p, mk(Color32::WHITE), g, Rect::from_points(&pts), grad_k),
+        None => {
+            p.add(mk(fill_col));
+        }
+    };
     // Pen path: any shape, so its own fill (path_mesh.rs) and a plain line with sharp joins
     if !s.knots.is_empty() {
         // flattened on screen, finer the bigger it's drawn, so curves stay smooth when zoomed in
@@ -135,7 +144,13 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
         let n = pts.len();
         if s.closed && n > 3 {
             if fk > 0.001 {
-                p.add(super::path_mesh::fill(&pts[..n - 1], fill_col, ctx.pixels_per_point()));
+                let ppp = ctx.pixels_per_point();
+                match &s.gradient {
+                    Some(g) => super::gradient::fill(p, Shape::mesh(super::path_mesh::fill(&pts[..n - 1], Color32::WHITE, ppp)), g, Rect::from_points(&pts), grad_k),
+                    None => {
+                        p.add(super::path_mesh::fill(&pts[..n - 1], fill_col, ppp));
+                    }
+                }
             }
             if sk > 0.001 {
                 p.add(super::path_mesh::line(&offset_closed(&pts[..n - 1], inset(width)), width, col, true, ctx.pixels_per_point()));
@@ -150,7 +165,7 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
         let rr = Rect::from_points(&pts[..4]);
         let rad = (gf(ctx, gid.with("r"), rad) * zk).min(rr.width().min(rr.height()) / 2.0);
         if fk > 0.001 {
-            p.rect_filled(rr, rad, fill_col);
+            paint_fill(&|c| Shape::rect_filled(rr, rad, c));
         }
         if sk > 0.001 {
             let width = if s.stroke_pos == 1 { width.min(rr.size().min_elem().max(0.5)) } else { width };
@@ -163,9 +178,9 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
     if let (Some(n), true) = (s.closed_len(), fk > 0.001) {
         // Ellipses: own mesh, egui's feathering spikes out of a thin ellipse's ends (ellipse_mesh.rs)
         if n > 4 {
-            p.add(super::ellipse_mesh::fill(&pts[..n], fill_col));
+            paint_fill(&|c| super::ellipse_mesh::fill(&pts[..n], c));
         } else {
-            p.add(Shape::convex_polygon(pts[..n].to_vec(), fill_col, EStroke::NONE));
+            paint_fill(&|c| Shape::convex_polygon(pts[..n].to_vec(), c, EStroke::NONE));
         }
     }
     if s.closed_len().is_some() && sk <= 0.001 {

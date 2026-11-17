@@ -716,6 +716,8 @@ impl App {
         // Placing a pen path / dragging a path's points takes the pointer (pen.rs, path_edit.rs)
         let pen = self.pen_input(ctx, resp, rect, space);
         let space = space || pen || self.path_edit_input(ctx, resp, rect, space);
+        // dragging a gradient's handles (canvas/gradient_handles.rs)
+        let space = space || self.gradient_input(ctx, resp, rect, space);
         if !space {
             if resp.drag_started_by(PointerButton::Primary) {
                 if let Some(p) = press.or(pos).filter(|p| !ui_blocks(ctx, *p)) {

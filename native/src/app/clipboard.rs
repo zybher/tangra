@@ -47,8 +47,9 @@ impl App {
             let _ = cb.set_text(marker);
         }
         let n = sel.len();
-        ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_objclip"), c));
-        self.toast(format!("Copied {n} item{}", if n == 1 { "" } else { "s" }));
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_objclip"), c.clone()));
+        // and as a picture of how they look (canvas/capture.rs); pasting it here brings the objects back
+        self.request_capture(&self.selected.clone(), c, format!("Copied {n} item{}", if n == 1 { "" } else { "s" }));
     }
 
     /// Leaves a copy of each item where it is, just beneath the original (Alt+drag)
@@ -256,6 +257,14 @@ impl App {
     pub(crate) fn copy_image(&mut self, baked: bool) {
         let Some((Kind::Image, id)) = self.sel.clone() else { return };
         let Some(img) = self.board.images.iter().find(|i| i.id == id).cloned() else { return };
+        // As it looks on the canvas (tilt, adjustments, cuts, opacity, marks: canvas/capture.rs)
+        if baked && crate::canvas::layers::available() {
+            let center = Pt { x: img.x + img.width / 2.0, y: img.y + img.height / 2.0 };
+            let c = ObjClip { nonce: new_id(), images: vec![img], notes: vec![], links: vec![], groups: vec![], texts: vec![], strokes: vec![], center };
+            let sel: HashSet<Sel> = [(Kind::Image, id)].into_iter().collect();
+            self.request_capture(&sel, c, "Copied as it looks");
+            return;
+        }
         match platform::load_rgba(&asset_path(&self.board.id, &img.asset_file_name)) {
             Ok((mut w, mut h, mut rgba)) => {
                 // Bake at 2x for normal-sized images so ink stays as crisp as it looks on canvas

@@ -60,6 +60,62 @@ pub struct Stroke {
     /// Pen paths only: the last point joins back to the first
     #[serde(default, skip_serializing_if = "is_false")]
     pub closed: bool,
+    /// Closed shapes: the inside painted with a gradient instead of `color` (canvas/gradient.rs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<Gradient>,
+}
+
+/// A gradient fill. `from` / `to` are fractions of the object's box, so it moves and
+/// stretches with it: linear runs from -> to; radial / diamond are centred on `from` and reach
+/// `to`; angular turns around `from`, starting toward `to`
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct Gradient {
+    /// 0 linear, 1 radial, 2 angular, 3 diamond
+    pub kind: u8,
+    pub stops: Vec<Stop>,
+    pub from: [f32; 2],
+    pub to: [f32; 2],
+    /// 0..1: how softly each colour eases into the next (0 straight blend, 1 fully eased,
+    /// no visible edge where a gradient ends)
+    pub smooth: f32,
+}
+
+/// One colour of a gradient at `at` (0..1); `color` is "#rrggbb", `alpha` 0..1
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct Stop {
+    pub at: f32,
+    pub color: String,
+    pub alpha: f32,
+}
+
+impl Default for Stop {
+    fn default() -> Self {
+        Stop { at: 0.0, color: "#ffffff".into(), alpha: 1.0 }
+    }
+}
+
+impl Default for Gradient {
+    fn default() -> Self {
+        Gradient::new(0, "#ffffff")
+    }
+}
+
+impl Gradient {
+    /// A new gradient of `kind` from `color` to the same colour see-through, laid out the
+    /// usual way for its kind
+    pub fn new(kind: u8, color: &str) -> Self {
+        let stops = vec![Stop { at: 0.0, color: color.into(), alpha: 1.0 }, Stop { at: 1.0, color: color.into(), alpha: 0.0 }];
+        let mut g = Gradient { kind, stops, from: [0.5, 0.0], to: [0.5, 1.0], smooth: 0.0 };
+        g.set_kind(kind);
+        g
+    }
+    /// Switch kind; the handles move to that kind's usual place
+    pub fn set_kind(&mut self, kind: u8) {
+        self.kind = kind;
+        (self.from, self.to) = if kind == 0 { ([0.5, 0.0], [0.5, 1.0]) } else { ([0.5, 0.5], [0.5, 1.0]) };
+    }
 }
 
 /// One point of a pen path: where it is and its two curve handles (`i` toward the point
@@ -426,6 +482,9 @@ pub struct Group {
     /// Where the border sits on the edge, like Figma: 0 centre, 1 inside, 2 outside
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub stroke_pos: u8,
+    /// Its fill as a gradient instead of `color` (canvas/gradient.rs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<Gradient>,
 }
 
 fn is_zero_u8(v: &u8) -> bool {
@@ -469,6 +528,10 @@ pub struct Board {
     pub opacity: std::collections::HashMap<String, f32>,
     /// Order set by dragging rows in the outline (object id -> position among its siblings)
     pub layer_order: std::collections::HashMap<String, f32>,
+    /// Per-object blend mode (missing = normal; canvas/layers.rs BLENDS). A frame's mixes
+    /// the frame and everything inside it as one
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub blend: std::collections::HashMap<String, u8>,
     pub updated_at: f64,
     pub created_at: f64,
 }
@@ -553,6 +616,7 @@ impl Board {
             corner: None,
             border: None,
             stroke_pos: 1,
+            gradient: None,
         });
         id
     }

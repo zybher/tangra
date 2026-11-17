@@ -359,6 +359,10 @@ struct App {
     pen: Option<crate::canvas::pen::PenDraft>,
     /// Path whose points are being edited (canvas/path_edit.rs)
     path_edit: Option<crate::canvas::path_edit::PathEdit>,
+    /// Gradient being edited: object id and its picked stop (canvas/gradient_handles.rs)
+    grad_edit: Option<(String, usize)>,
+    /// Copy as picture waiting for its render (canvas/capture.rs)
+    capture: Option<crate::canvas::capture::Capture>,
     /// Pixels the image edits are worked from, per file (capped size)
     edit_base: HashMap<String, (u32, u32, Vec<u8>)>,
     /// Edited copy per picture id, with the settings it was made from
@@ -523,6 +527,8 @@ impl App {
             lasso: None,
             pen: None,
             path_edit: None,
+            grad_edit: None,
+            capture: None,
             edit_base: HashMap::new(),
             edited: HashMap::new(),
             stats_on: false,
@@ -849,6 +855,8 @@ impl eframe::App for App {
             // Canvas painter clipped strictly to canvas_rect so zoomed/panned items never bleed into titlebar
             let canvas_painter = ui.painter().with_clip_rect(canvas_rect);
             self.paint(&canvas_painter, canvas_rect, view, ctx.pointer_hover_pos());
+            // a copy as picture waiting to be drawn / handed over (canvas/capture.rs)
+            self.run_capture(ctx);
 
             // 2. Titlebar UI drawn on top of the canvas junction with the unclipped window painter
             self.titlebar_ui(ui, ctx, titlebar_rect);
