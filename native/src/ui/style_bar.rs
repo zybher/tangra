@@ -732,13 +732,8 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // Colour: a vertical list like the other dropdowns, with "Custom" (a full picker) at the end
         // One panel for all of this bar's dropdowns, moving like the toolbar's menu (drop_anim.rs)
         let da = super::drop_anim::DropAnim::new(&ctx, bid.with("drop"), pop);
-        // Each dropdown is only as wide as its rows (drop_anim::fit_w)
-        let drop_left = |k: usize, w: f32| -> f32 {
-            let xid = bid.with(("dcx", k));
-            let cx = if btn_cx[k].is_finite() { btn_cx[k] } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.center().x) };
-            ctx.data_mut(|d| d.insert_temp(xid, cx));
-            super::drop_anim::left_for(cx, rect, w)
-        };
+        // Each dropdown is only as wide as its rows (drop_anim::fit_w); all of them open through
+        // bar_drop.rs so they place, animate and close the same
         let fit = |x: f32, labels: &[&str]| super::drop_anim::fit_w(&ctx, x, labels);
         let k1 = da.k(1);
         let cid = bid.with("custom");
@@ -754,39 +749,18 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             ctx.data_mut(|d| d.insert_temp(cid, false));
         }
         if k1 > 0.001 {
-            let pk = p.clone();
-            let slide = (1.0 - k1) * -8.0;
             // Frames and closed shapes get a last row, "No fill" (just the outline)
             let n = PEN_COLORS.len() + 1 + (is_group || shape_fill.is_some()) as usize;
             let mut names: Vec<String> = PEN_COLORS.iter().map(|c| c.trim_start_matches('#').to_uppercase()).collect();
             names.push("Custom".into());
             names.push("No fill".into());
             let w = fit(32.0, &names.iter().take(n).map(|s| s.as_str()).collect::<Vec<_>>());
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect, w);
-            let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave1"), drop_left(1, grid_w(w, cols)), top + ph, w, super::drop_anim::PITCH, n, cols);
-            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
-            let pr = pr.translate(vec2(0.0, dy));
-            let (bgr, gx) = da.panel(&ctx, pr, up);
-            if pop != 0 {
-                pop_rect = pr.expand2(vec2(14.0, 0.0));
-            }
-            if pop == 1 {
-                ui.interact(pr, bid.with("pop1"), Sense::click());
-            }
-            let mut p = pk.clone();
-            p.multiply_opacity(k1);
-            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, bgr, 10.0, 1.0);
-            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
+            let dd = super::bar_drop::open(ui, &da, bid, pop, 1, bar, rect, btn_cx[1], n, w, super::bar_drop::MENU);
+            pop_rect = pop_rect.union(dd.zone());
             let custom_on: bool = ctx.data(|d| d.get_temp(cid)).unwrap_or(false);
             let in_list = PEN_COLORS.iter().any(|c| color.eq_ignore_ascii_case(c));
             for i in 0..n {
-                let rk = da.row(i, rows.len(), up);
-                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
-                let mut p = pk.clone();
-                p.multiply_opacity(k1 * rk);
+                let (rr, wm, p) = dd.row(&da, i);
                 let resp = ui.interact(rr, bid.with(("sw", i)), Sense::click());
                 wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let k = 1.0 + 0.14 * wm;
@@ -842,7 +816,7 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             if kc > 0.001 {
                 let live = pop == 1 && custom_on;
                 let mut c = if color.is_empty() || color.eq_ignore_ascii_case("none") { Color32::GRAY } else { hex(&color) };
-                let at = pos2(pr.max.x + 8.0, if up { pr.max.y - 290.0 } else { pr.min.y });
+                let at = pos2(dd.pr.max.x + 8.0, if dd.up { dd.pr.max.y - 290.0 } else { dd.pr.min.y });
                 let ez = |x: f32| 1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3);
                 // Same panel as the dropdowns (glass, 10 rounding, border, shadow) fading and
                 // sliding 8 px out from the list; its parts still come in one after another
@@ -884,34 +858,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         let k2 = da.k(2);
         let k3 = da.k(3);
         if k2 > 0.001 {
-            let pk = p.clone();
-            let slide = (1.0 - k2) * -8.0;
             // Open upward when the list wouldn't fit between the bar and the bottom toolbar
             let w = fit(10.0, &["Row", "Column", "Grid", "Gallery", "None"]);
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, 5, rect, w);
-            let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave2"), drop_left(2, grid_w(w, cols)), top + ph, w, super::drop_anim::PITCH, 5, cols);
-            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
-            let pr = pr.translate(vec2(0.0, dy));
-            let (bgr, gx) = da.panel(&ctx, pr, up);
-            if pop != 0 {
-                pop_rect = pr.expand2(vec2(14.0, 0.0));
-            }
-            if pop == 2 {
-                ui.interact(pr, bid.with("pop2"), Sense::click());
-            }
-            let mut p = pk.clone();
-            p.multiply_opacity(k2);
-            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, bgr, 10.0, 1.0);
-            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
+            let dd = super::bar_drop::open(ui, &da, bid, pop, 2, bar, rect, btn_cx[2], 5, w, super::bar_drop::MENU);
+            pop_rect = pop_rect.union(dd.zone());
             // "None": the frame stops arranging/hugging; pasted images keep their size and spot
             for (i, name) in ["Row", "Column", "Grid", "Gallery", "None"].iter().enumerate() {
-                let rk = da.row(i, rows.len(), up);
-                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
-                let mut p = pk.clone();
-                p.multiply_opacity(k2 * rk);
+                let (rr, wm, p) = dd.row(&da, i);
                 let resp = ui.interact(rr, bid.with(("ar", i)), Sense::click());
                 wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let on = if i == 4 { layout == 0 } else { layout as i32 - 1 == i as i32 };
@@ -924,35 +877,14 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
         }
         if k3 > 0.001 {
-            let pk = p.clone();
-            let slide = (1.0 - k3) * -8.0;
             const RATIOS: [(&str, f32); 6] = [("1 : 1", 1.0), ("4 : 3", 4.0 / 3.0), ("3 : 4", 0.75), ("16 : 9", 16.0 / 9.0), ("9 : 16", 9.0 / 16.0), ("3 : 2", 1.5)];
             let cur = target.as_ref().and_then(|(_, id)| self.board.group_cards.iter().find(|g| &g.id == id)).map_or(0.0, |g| g.width / g.height.max(1.0));
             let n = RATIOS.len();
             let w = fit(32.0, &RATIOS.iter().map(|r| r.0).collect::<Vec<_>>());
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect, w);
-            let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave3"), drop_left(3, grid_w(w, cols)), top + ph, w, super::drop_anim::PITCH, n, cols);
-            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
-            let pr = pr.translate(vec2(0.0, dy));
-            let (bgr, gx) = da.panel(&ctx, pr, up);
-            if pop != 0 {
-                pop_rect = pr.expand2(vec2(14.0, 0.0));
-            }
-            if pop == 3 {
-                ui.interact(pr, bid.with("pop3"), Sense::click());
-            }
-            let mut p = pk.clone();
-            p.multiply_opacity(k3);
-            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, bgr, 10.0, 1.0);
-            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
+            let dd = super::bar_drop::open(ui, &da, bid, pop, 3, bar, rect, btn_cx[3], n, w, super::bar_drop::MENU);
+            pop_rect = pop_rect.union(dd.zone());
             for (i, (name, rt)) in RATIOS.iter().enumerate() {
-                let rk = da.row(i, rows.len(), up);
-                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
-                let mut p = pk.clone();
-                p.multiply_opacity(k3 * rk);
+                let (rr, wm, p) = dd.row(&da, i);
                 let resp = ui.interact(rr, bid.with(("asp", i)), Sense::click());
                 wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let on = (cur - rt).abs() < 0.01;
@@ -972,8 +904,6 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // Align dropdown: icon rows like the placement bar's buttons, even spacing for 3+
         let k4 = da.k(4);
         if k4 > 0.001 {
-            let pk = p.clone();
-            let slide = (1.0 - k4) * -8.0;
             let mut rows_def: Vec<(&str, Option<Align>, bool)> = vec![
                 ("Left", Some(Align::Left), false),
                 ("Centre", Some(Align::HCenter), false),
@@ -988,29 +918,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
             }
             let n = rows_def.len();
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect, w);
-            let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave4"), drop_left(4, grid_w(w, cols)), top + ph, w, super::drop_anim::PITCH, n, cols);
-            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
-            let pr = pr.translate(vec2(0.0, dy));
-            let (bgr, gx) = da.panel(&ctx, pr, up);
-            if pop != 0 {
-                pop_rect = pr.expand2(vec2(14.0, 0.0));
-            }
-            if pop == 4 {
-                ui.interact(pr, bid.with("pop4"), Sense::click());
-            }
-            let mut p = pk.clone();
-            p.multiply_opacity(k4);
-            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, bgr, 10.0, 1.0);
-            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
+            let dd = super::bar_drop::open(ui, &da, bid, pop, 4, bar, rect, btn_cx[4], n, w, super::bar_drop::MENU);
+            pop_rect = pop_rect.union(dd.zone());
             for (i, (name, al, across)) in rows_def.iter().enumerate() {
-                let rk = da.row(i, rows.len(), up);
-                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
-                let mut p = pk.clone();
-                p.multiply_opacity(k4 * rk);
+                let (rr, wm, p) = dd.row(&da, i);
                 let resp = ui.interact(rr, bid.with(("aln", i)), Sense::click());
                 wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);
                 let k = 1.0 + 0.14 * wm;
@@ -1039,34 +950,13 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
         // Stroke position dropdown
         let k5 = da.k(5);
         if k5 > 0.001 {
-            let pk = p.clone();
-            let slide = (1.0 - k5) * -8.0;
             let rows_def: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
             let n = rows_def.len();
             let w = fit(32.0, &rows_def.iter().map(|r| r.0).collect::<Vec<_>>());
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bid, bar, n, rect, w);
-            let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + slide * sg;
-            let (rows, mags, pr) = wave_grid(&ctx, bid.with("wave5"), drop_left(5, grid_w(w, cols)), top + ph, w, super::drop_anim::PITCH, n, cols);
-            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
-            let pr = pr.translate(vec2(0.0, dy));
-            let (bgr, gx) = da.panel(&ctx, pr, up);
-            if pop != 0 {
-                pop_rect = pr.expand2(vec2(14.0, 0.0));
-            }
-            if pop == 5 {
-                ui.interact(pr, bid.with("pop5"), Sense::click());
-            }
-            let mut p = pk.clone();
-            p.multiply_opacity(k5);
-            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, bgr, 10.0, 1.0);
-            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
+            let dd = super::bar_drop::open(ui, &da, bid, pop, 5, bar, rect, btn_cx[5], n, w, super::bar_drop::MENU);
+            pop_rect = pop_rect.union(dd.zone());
             for (i, (name, v)) in rows_def.iter().enumerate() {
-                let rk = da.row(i, rows.len(), up);
-                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
-                let mut p = pk.clone();
-                p.multiply_opacity(k5 * rk);
+                let (rr, wm, p) = dd.row(&da, i);
                 let resp = ui.interact(rr, bid.with(("spos", i)), Sense::click());
                 let cur = *v == stroke_pos;
                 wave_tile(&p, rr, wm, mix(popup(), gray_ui(90), 0.35), 1.0);

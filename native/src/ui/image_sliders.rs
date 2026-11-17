@@ -23,7 +23,7 @@ impl App {
     pub(crate) fn image_pop(&mut self, ui: &mut egui::Ui, rect: Rect, bar: Rect, btns: [Rect; 2], da: &super::drop_anim::DropAnim, bar_id: egui::Id, pop: u8, img: &str) -> Rect {
         let ctx = ui.ctx().clone();
         let bid = egui::Id::new("qd_img_pop");
-        let pop = if pop >= 6 { pop - 5 } else { 0 };
+        let bar_pop = pop;
         let mut open_rect = Rect::NOTHING;
         let mut any_drag = false;
         // A reset in progress eases the values back (reset_morph.rs); grabbing a row stops it
@@ -38,38 +38,26 @@ impl App {
             let sliders: &[(u8, &str, f32, f32)] = if kind == 1 { &ADJUST_ROWS } else { &TILT_ROWS };
             let per_px = if kind == 1 { 0.5 } else { 0.3 };
             // The reset button: (tooltip, enabled, which). Restoring lasso cuts is its own button
-            // on the placement bar (place_bar.rs)
+            // on the bar (style_bar.rs)
             let (rs_tip, rs_on, rs_which) = if kind == 1 { ("Reset adjustments", ed.has_color(), 0u8) } else { ("Reset 3D", ed.tilt_x != 0.0 || ed.tilt_y != 0.0 || ed.depth != 0.0, 2u8) };
             let n = sliders.len();
             let panel_w = super::drop_anim::fit_w(&ctx, 12.0, &sliders.iter().map(|s| s.1).collect::<Vec<_>>()) + VALUE_W;
-            // Same fit as the bars' other dropdowns: off the picture, in 1-3 columns, else the
-            // bar moves to the picture's other side (drop_anim.rs)
-            let (cols, ph, up) = super::drop_anim::drop_fit(&ctx, bar_id, bar, n, rect, panel_w);
-            let tw = grid_w(panel_w, cols);
-
-            // Keep the last spot while it fades out (the button may already be gone)
-            let btn = btns[kind as usize - 1];
-            let xid = bid.with(("ix", kind));
-            let left = if btn.is_positive() { super::drop_anim::left_for(btn.center().x, rect, tw) } else { ctx.data(|d| d.get_temp(xid)).unwrap_or(bar.min.x) };
-            ctx.data_mut(|d| d.insert_temp(xid, left));
-            let sg = if up { -1.0 } else { 1.0 };
-            let top = if up { bar.min.y - 14.0 - ph } else { bar.max.y + 14.0 } + (1.0 - kk) * -8.0 * sg;
-
             // The row being dragged stays raised and the others stay flat until it is let go
             let drag_id = bid.with(("idrag", kind));
             let dragging: Option<usize> = ctx.data(|d| d.get_temp(drag_id)).flatten();
             // Eased like the toolbar menu's pinned rows: letting go plays the rise backwards
             let pinned: Vec<f32> = (0..n).map(|i| ease(&ctx, bid.with(("ipin", kind, i)), dragging == Some(i))).collect();
-            let (rows, mags, pr) = wave_grid_k(&ctx, bid.with(("iwave", kind)), left, top + ph, panel_w, PITCH, n, cols, &pinned, SOFT, dragging.is_some());
-            let dy = if up { top + ph - pr.max.y } else { top - pr.min.y };
-            let pr = pr.translate(vec2(0.0, dy));
-            let (bgr, gx) = da.panel(&ctx, pr, up);
-            let live = pop == kind;
+            // Placed, animated and closed like every bar dropdown (bar_drop.rs)
+            let btn = btns[kind as usize - 1];
+            let btn_cx = if btn.is_positive() { btn.center().x } else { f32::NAN };
+            let wave = super::bar_drop::Wave { pinned: &pinned, soft: SOFT, lock: dragging.is_some() };
+            let dd = super::bar_drop::open(ui, da, bar_id, bar_pop, kind + 5, bar, rect, btn_cx, n, panel_w, wave);
+            let (bgr, pr, live, pk) = (dd.bgr, dd.pr, dd.live, dd.base.clone());
             // Reset: floats just right of the panel's top corner, fading in while there's
             // something to reset
             let rk = ease(&ctx, bid.with(("ien", rs_which)), rs_on) * kk;
             // It rides the rows' wave: a hovered row popping out past the panel pushes it aside
-            let (rl, rr_) = rows.iter().fold((bgr.min.x, bgr.max.x), |a, r| (a.0.min(r.min.x + gx), a.1.max(r.max.x + gx)));
+            let (rl, rr_) = dd.rest_rows().fold((bgr.min.x, bgr.max.x), |a, r| (a.0.min(r.min.x), a.1.max(r.max.x)));
             let mut rb = Rect::from_center_size(pos2(rr_ + 8.0 + RESET_D / 2.0, bgr.min.y + RESET_D / 2.0 + 2.0), vec2(RESET_D, RESET_D));
             // no room right of it at the screen edge: the top-left corner instead
             if bgr.max.x + 8.0 + RESET_D > rect.max.x - 4.0 {
@@ -77,21 +65,11 @@ impl App {
             }
             if live {
                 open_rect = if rs_on { pr.union(rb) } else { pr };
-                ui.interact(pr, bid.with(("ipanel", kind)), Sense::click());
             }
-            let pk = ui.painter().clone().with_clip_rect(ctx.screen_rect());
-            let mut p = pk.clone();
-            p.multiply_opacity(kk);
-            p.rect_filled(bgr.translate(vec2(0.0, 3.0)), 10.0, Color32::from_black_alpha(70));
-            glass(&p, bgr, 10.0, 1.0);
-            p.rect_stroke(bgr, 10.0, EStroke::new(1.0_f32, border()));
 
             let mut now_drag: Option<usize> = None;
             for i in 0..n {
-                let rk = da.row(i, n, up);
-                let (rr, wm) = (rows[i].translate(vec2(gx, dy - sg * (1.0 - rk) * 16.0)), mags[i]);
-                let mut p = pk.clone();
-                p.multiply_opacity(kk * rk);
+                let (rr, wm, p) = dd.row(da, i);
                 let k = 1.0 + 0.14 * wm;
                 {
                     let (f, label, lo, hi) = sliders[i];

@@ -7,6 +7,7 @@ pub(crate) mod icons;
 pub(crate) mod svg_icons;
 mod place_keys;
 pub(crate) mod image_sliders;
+mod bar_drop;
 pub(crate) mod drop_anim;
 pub(crate) mod num_edit;
 pub(crate) mod scrub_wrap;

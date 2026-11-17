@@ -77,7 +77,8 @@ pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, 
     // decided where the bar is heading, so a glide in progress doesn't flip it back
     let (tgt, can_flip) = ctx.data(|d| d.get_temp::<(Rect, bool)>(bid.with("target"))).unwrap_or((bar, false));
     let cover = |y0: f32, y1: f32| (y1.min(obj.max.y) - y0.max(obj.min.y)).max(0.0);
-    let fits = |b: Rect| -> Option<(usize, f32, bool)> {
+    // `bot`: room kept clear above the window's bottom edge (the bottom toolbar)
+    let fits = |b: Rect, bot: f32| -> Option<(usize, f32, bool)> {
         let mut last = 0;
         for c in 1..=3usize {
             let per = n.div_ceil(c);
@@ -86,7 +87,7 @@ pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, 
             }
             last = per;
             let ph = per as f32 * PITCH + 8.0;
-            let down = b.max.y + 14.0 + ph <= rect.max.y - 70.0 && cover(b.max.y + 14.0, b.max.y + 14.0 + ph) <= 0.0;
+            let down = b.max.y + 14.0 + ph <= rect.max.y - bot && cover(b.max.y + 14.0, b.max.y + 14.0 + ph) <= 0.0;
             let up = b.min.y - 14.0 - ph >= rect.min.y + 8.0 && cover(b.min.y - 14.0 - ph, b.min.y - 14.0) <= 0.0;
             if down || up {
                 return Some((c, ph, !down));
@@ -94,14 +95,16 @@ pub(crate) fn drop_fit(ctx: &egui::Context, bid: egui::Id, bar: Rect, n: usize, 
         }
         None
     };
-    if let Some(f) = fits(tgt) {
+    if let Some(f) = fits(tgt, 70.0) {
         return f;
     }
     if can_flip {
         let above = tgt.center().y < obj.center().y;
         let alt = if above { Rect::from_min_size(pos2(tgt.min.x, obj.max.y + 32.0), tgt.size()) } else { Rect::from_min_size(pos2(tgt.min.x, obj.min.y - 32.0 - tgt.height()), tgt.size()) };
         let room = if above { alt.max.y <= rect.max.y - 70.0 } else { alt.min.y >= rect.min.y + 50.0 };
-        if let (true, Some(f)) = (room, fits(alt)) {
+        // Cleanly first; failing that, squeezed down past the bottom toolbar's margin (it's
+        // still better than covering the object)
+        if let (true, Some(f)) = (room, fits(alt, 70.0).or_else(|| fits(alt, 8.0))) {
             let was = ctx.data(|d| d.get_temp::<bool>(bid.with("flip"))).unwrap_or(false);
             ctx.data_mut(|d| {
                 d.insert_temp(bid.with("flip"), !was);
