@@ -418,8 +418,11 @@ pub(crate) fn draw_cursor(p: &egui::Painter, name: &'static str, at: Pos2, hot: 
 /// Fills a simple polygon (concave ones too, like a hand) by clipping ears; whatever can't be
 /// clipped (an outline folded mid-morph) falls back to a fan from its first point
 pub(crate) fn fan(p: &egui::Painter, v: &[Pos2], col: Color32) {
-    for t in ears(v) {
-        p.add(Shape::convex_polygon(t.to_vec(), col, Stroke::NONE));
+    // A plain mesh (clipping ears leaves near-flat slivers, and smoothing those throws spikes
+    // across the screen), its edge smoothed by a hairline of the same colour
+    fan_mesh(p, v, col);
+    if v.len() > 2 {
+        p.add(Shape::closed_line(v.to_vec(), Stroke::new(1.0, col)));
     }
 }
 
