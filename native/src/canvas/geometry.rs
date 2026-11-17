@@ -116,16 +116,18 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
     let inset = |w: f32| spk * w / 2.0;
     // Pen path: any shape, so its own fill (path_mesh.rs) and a plain line with sharp joins
     if !s.knots.is_empty() {
+        // flattened on screen, finer the bigger it's drawn, so curves stay smooth when zoomed in
+        let pts = super::path_mesh::flatten(s, &map);
         let n = pts.len();
         if s.closed && n > 3 {
             if fk > 0.001 {
-                p.add(super::path_mesh::fill(&pts[..n - 1], fill_col));
+                p.add(super::path_mesh::fill(&pts[..n - 1], fill_col, ctx.pixels_per_point()));
             }
             if sk > 0.001 {
-                p.add(Shape::closed_line(offset_closed(&pts[..n - 1], inset(width)), EStroke::new(width, col)));
+                p.add(super::path_mesh::line(&offset_closed(&pts[..n - 1], inset(width)), width, col, true, ctx.pixels_per_point()));
             }
         } else {
-            p.add(super::stroke_mesh::stroke_mesh(&pts, width, col));
+            p.add(super::path_mesh::line(&pts, width, col, false, ctx.pixels_per_point()));
         }
         return;
     }

@@ -182,7 +182,7 @@ impl App {
     pub(crate) fn paint_path_edit(&self, p: &egui::Painter, v: View) {
         let Some(e) = &self.path_edit else { return };
         let Some(s) = self.board.world_strokes.iter().find(|s| s.id == e.id) else { return };
-        let pts: Vec<Pos2> = s.points.iter().map(|q| v.s(q.x, q.y)).collect();
+        let pts = super::path_mesh::flatten(s, &|q: Pt| v.s(q.x, q.y));
         p.add(Shape::line(pts, EStroke::new(1.5_f32, blue())));
         paint_knots(p, v, &s.knots, e.sel);
     }

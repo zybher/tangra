@@ -109,3 +109,4 @@ pub(crate) fn stroke_mesh(line: &[Pos2], width: f32, col: Color32) -> Mesh {
     cap(&mut m, line[n - 1], dirs[n - 2], hin, hout, col);
     m
 }
+
