@@ -126,7 +126,7 @@ pub(crate) fn hover_fx(ctx: &egui::Context, resp: &egui::Response, enabled: bool
 
 /// Blue rising like liquid in a rounded tile: a wavy surface (calm when full or empty)
 pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time: f32) {
-    let n = 28;
+    let n = 40;
     let rad = rad.min(r.width() / 2.0).min(r.height() / 2.0);
     let amp = 4.5 * (level * std::f32::consts::PI).sin().powf(0.6);
     let base = r.max.y - r.height() * level;
@@ -150,6 +150,34 @@ pub(crate) fn liquid_fill(p: &egui::Painter, r: Rect, rad: f32, level: f32, time
             mesh.add_triangle(j - 2, j - 1, j);
             mesh.add_triangle(j - 1, j + 1, j);
         }
+    }
+    // A one-pixel soft edge all round (wave on top, the rounded bottom and sides), so the
+    // outline doesn't stair-step: an outer ring of clear points pushed out along each corner's
+    // outward direction. Outline order: the top left to right, then the bottom right to left
+    let f = 1.0 / p.ctx().pixels_per_point();
+    let ring: Vec<u32> = (0..=n as u32).map(|i| 2 * i).chain((0..=n as u32).rev().map(|i| 2 * i + 1)).collect();
+    let at = |k: usize| mesh.vertices[ring[k] as usize].pos;
+    let m = ring.len();
+    let out = |e: egui::Vec2| if e.length() > 1e-4 { vec2(e.y, -e.x).normalized() } else { egui::Vec2::ZERO };
+    let mut outer = Vec::with_capacity(m);
+    for k in 0..m {
+        let q = at(k);
+        // nearest distinct neighbours (squashed columns repeat a point)
+        let prev = (1..m).map(|d| at((k + m - d) % m)).find(|o| o.distance(q) > 1e-3).unwrap_or(q);
+        let next = (1..m).map(|d| at((k + d) % m)).find(|o| o.distance(q) > 1e-3).unwrap_or(q);
+        let nn = out(q - prev) + out(next - q);
+        let nn = if nn.length() > 1e-4 { nn.normalized() } else { egui::Vec2::ZERO };
+        outer.push(q + nn * f);
+    }
+    let base = mesh.vertices.len() as u32;
+    for q in outer {
+        mesh.colored_vertex(q, Color32::TRANSPARENT);
+    }
+    for k in 0..m {
+        let k2 = (k + 1) % m;
+        let (a, b, oa, ob) = (ring[k], ring[k2], base + k as u32, base + k2 as u32);
+        mesh.add_triangle(a, b, ob);
+        mesh.add_triangle(a, ob, oa);
     }
     p.add(egui::Shape::mesh(mesh));
 }
