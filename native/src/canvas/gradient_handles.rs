@@ -86,8 +86,6 @@ impl App {
                 }
             });
             ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
-        } else if hover.is_some_and(|q| a.distance(q) < GRAB_PX || b.distance(q) < GRAB_PX) {
-            ctx.set_cursor_icon(egui::CursorIcon::Grab);
         }
         if !down {
             drag = None;

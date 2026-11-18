@@ -17,6 +17,62 @@ struct Item {
     hollow: bool,
     /// fill="#fff": the white body of a pointer; the icon's other strokes become dark creases on it
     solid: bool,
+    /// A fill that isn't one convex shape (a crescent, a band with a hole): triangles, worked
+    /// out once, filling it even-odd the way SVG does
+    tris: Option<Vec<[f32; 2]>>,
+}
+
+/// Is this one closed outline convex (so egui can fill it directly, with smooth edges)
+fn convex(v: &[[f32; 2]]) -> bool {
+    let n = v.len();
+    if n < 3 {
+        return true;
+    }
+    let mut sign = 0.0_f32;
+    for i in 0..n {
+        let (a, b, c) = (v[i], v[(i + 1) % n], v[(i + 2) % n]);
+        let cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+        if cr.abs() < 1e-6 {
+            continue;
+        }
+        if sign == 0.0 {
+            sign = cr.signum();
+        } else if cr.signum() != sign {
+            return false;
+        }
+    }
+    true
+}
+
+/// Even-odd fill of any outlines (holes, dents) as triangles: the shape is cut into
+/// horizontal slabs at every corner's height; in each slab the edges crossing it pair up
+/// left to right, and each pair bounds one filled trapezoid
+fn slabs(subs: &[(Vec<[f32; 2]>, bool)]) -> Vec<[f32; 2]> {
+    let mut edges: Vec<([f32; 2], [f32; 2])> = Vec::new();
+    for (v, _) in subs {
+        for i in 0..v.len() {
+            let (a, b) = (v[i], v[(i + 1) % v.len()]);
+            if (a[1] - b[1]).abs() > 1e-5 {
+                edges.push(if a[1] < b[1] { (a, b) } else { (b, a) });
+            }
+        }
+    }
+    let mut ys: Vec<f32> = edges.iter().flat_map(|e| [e.0[1], e.1[1]]).collect();
+    ys.sort_by(|a, b| a.total_cmp(b));
+    ys.dedup_by(|a, b| (*a - *b).abs() < 1e-4);
+    let x_at = |e: &([f32; 2], [f32; 2]), y: f32| e.0[0] + (e.1[0] - e.0[0]) * (y - e.0[1]) / (e.1[1] - e.0[1]);
+    let mut out = Vec::new();
+    for w in ys.windows(2) {
+        let (y0, y1) = (w[0], w[1]);
+        let ym = (y0 + y1) / 2.0;
+        let mut xs: Vec<(f32, f32, f32)> = edges.iter().filter(|e| e.0[1] <= ym && e.1[1] > ym).map(|e| (x_at(e, ym), x_at(e, y0), x_at(e, y1))).collect();
+        xs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for pr in xs.chunks_exact(2) {
+            let (l, r) = (pr[0], pr[1]);
+            out.extend([[l.1, y0], [r.1, y0], [r.2, y1], [l.1, y0], [r.2, y1], [l.2, y1]]);
+        }
+    }
+    out
 }
 
 fn attr<'a>(el: &'a str, name: &str) -> Option<&'a str> {
@@ -311,7 +367,8 @@ fn parse(svg: &str) -> Vec<Item> {
         let dash = attr(el, "stroke-dasharray").map(nums).and_then(|v| (v.len() >= 2).then(|| (v[0], v[1])));
         let hollow = attr(el, "fill") == Some("none");
         let solid = attr(el, "fill") == Some("#fff");
-        items.push(Item { subs, fill, stroke, dash, hollow, solid });
+        let tris = fill.filter(|_| subs.len() > 1 || subs.iter().any(|(v, _)| !convex(v))).map(|_| slabs(&subs));
+        items.push(Item { subs, fill, stroke, dash, hollow, solid, tris });
     }
     items
 }
@@ -463,7 +520,16 @@ fn draw_items(p: &egui::Painter, items: &[Item], c: Pos2, px: f32, col: Color32)
     let c = p.round_pos_to_pixels(c);
     let tf = |q: &[f32; 2]| pos2(c.x + (q[0] - 12.0) * k, c.y + (q[1] - 12.0) * k);
     for it in items.iter() {
-        if let Some(a) = it.fill {
+        if let (Some(a), Some(t)) = (it.fill, &it.tris) {
+            // no edge smoothing on these (thin slab edges would shoot out spikes)
+            let fc = col.gamma_multiply(a);
+            let mut m = egui::Mesh::default();
+            for q in t {
+                m.colored_vertex(tf(q), fc);
+            }
+            m.indices = (0..t.len() as u32).collect();
+            p.add(Shape::mesh(m));
+        } else if let Some(a) = it.fill {
             for (pts, _) in &it.subs {
                 let v: Vec<Pos2> = pts.iter().map(tf).collect();
                 p.add(Shape::convex_polygon(v, col.gamma_multiply(a), Stroke::NONE));
@@ -567,6 +633,51 @@ const PACK: &[(&str, &str)] = &[
     ("scale", r##"<rect x="5" y="5" width="14" height="14" rx="0" stroke-dasharray="2.5 2.5"/><rect x="3.25" y="3.25" width="3.5" height="3.5" rx="0.75" fill="currentColor" fill-opacity=".25"/><rect x="17.25" y="3.25" width="3.5" height="3.5" rx="0.75" fill="currentColor" fill-opacity=".25"/><rect x="3.25" y="17.25" width="3.5" height="3.5" rx="0.75" fill="currentColor" fill-opacity=".25"/><rect x="17.25" y="17.25" width="3.5" height="3.5" rx="0.75" fill="currentColor" fill-opacity=".25"/>"##),
     ("rotate-cw", r##"<path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 4v4.5h-4.5"/>"##),
     ("rotate-ccw", r##"<path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.5M4 4v4.5h4.5"/>"##),
+    // two arrows passing each other: swap a gradient's ends
+    ("swap-ends", r##"<path d="M19 8H5M9 4L5 8l4 4"/><path d="M5 16h14M15 12l4 4-4 4"/>"##),
+    // Fill types (the fill dropdown)
+    ("fill-solid", r##"<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" fill-opacity=".45"/>"##),
+    ("gradient-linear", r##"<rect x="8" y="4" width="4" height="16" fill="currentColor" fill-opacity=".12" stroke="none"/><rect x="12" y="4" width="4" height="16" fill="currentColor" fill-opacity=".28" stroke="none"/><path d="M16 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2z" fill="currentColor" fill-opacity=".5" stroke="none"/><rect x="4" y="4" width="16" height="16" rx="2"/>"##),
+    ("gradient-radial", r##"<circle cx="12" cy="12" r="7.5" fill="currentColor" fill-opacity=".12" stroke="none"/><circle cx="12" cy="12" r="5" fill="currentColor" fill-opacity=".2" stroke="none"/><circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity=".35" stroke="none"/><rect x="4" y="4" width="16" height="16" rx="2"/>"##),
+    ("gradient-angular", r##"<path d="M12 12L12 4L19.6 4.4Z" fill="currentColor" fill-opacity="0.05" stroke="none"/><path d="M12 12L19.6 4.4L20 12Z" fill="currentColor" fill-opacity="0.13" stroke="none"/><path d="M12 12L20 12L19.6 19.6Z" fill="currentColor" fill-opacity="0.21" stroke="none"/><path d="M12 12L19.6 19.6L12 20Z" fill="currentColor" fill-opacity="0.29" stroke="none"/><path d="M12 12L12 20L4.4 19.6Z" fill="currentColor" fill-opacity="0.37" stroke="none"/><path d="M12 12L4.4 19.6L4 12Z" fill="currentColor" fill-opacity="0.45" stroke="none"/><path d="M12 12L4 12L4.4 4.4Z" fill="currentColor" fill-opacity="0.53" stroke="none"/><path d="M12 12L4.4 4.4L12 4Z" fill="currentColor" fill-opacity="0.61" stroke="none"/><path d="M12 12V4"/><rect x="4" y="4" width="16" height="16" rx="2"/>"##),
+    ("gradient-diamond", r##"<path d="M12 4l8 8-8 8-8-8z" fill="currentColor" fill-opacity=".12" stroke="none"/><path d="M12 6.75l5.25 5.25L12 17.25 6.75 12z" fill="currentColor" fill-opacity=".2" stroke="none"/><path d="M12 9.5l2.5 2.5L12 14.5 9.5 12z" fill="currentColor" fill-opacity=".35" stroke="none"/><rect x="4" y="4" width="16" height="16" rx="2"/>"##),
+    ("fill-none", r##"<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M5 19L19 5"/>"##),
+    // Blend modes (the blend dropdown): two circles, the overlap shows the mode
+    ("blend-normal", r##"<path d="M12 6.8A6 6 0 1 0 12 17.2"/><circle cx="15" cy="12" r="6" fill="currentColor" fill-opacity=".25"/>"##),
+    ("blend-multiply", r##"<circle cx="9" cy="12" r="6" fill="currentColor" fill-opacity=".25"/><circle cx="15" cy="12" r="6" fill="currentColor" fill-opacity=".25"/>"##),
+    ("blend-screen", r##"<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>"##),
+    ("blend-overlay", r##"<path d="M9 12A6 6 0 0 1 12 6.8A6 6 0 0 1 15 12Z" fill="currentColor" fill-opacity=".45" stroke="none"/><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/><path d="M9 12h6"/>"##),
+    ("blend-darken", r##"<path d="M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8Z" fill="currentColor" fill-opacity=".45" stroke="none"/><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>"##),
+    ("blend-lighten", r##"<path d="M12 6.8A6 6 0 1 0 12 17.2A6 6 0 1 0 12 6.8Z"/>"##),
+    ("blend-color-dodge", r##"<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/><path d="M12 10.25v3.5M10.25 12h3.5"/>"##),
+    ("blend-color-burn", r##"<path d="M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8Z" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>"##),
+    ("blend-hard-light", r##"<path d="M9 12A6 6 0 0 1 12 6.8A6 6 0 0 1 15 12Z" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/><path d="M9 12h6"/>"##),
+    ("blend-soft-light", r##"<path d="M9 12A6 6 0 0 1 12 6.8A6 6 0 0 1 15 12C13.5 13.5 10.5 10.5 9 12Z" fill="currentColor" fill-opacity=".25" stroke="none"/><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/><path d="M9 12c1.5-1.5 4.5 1.5 6 0"/>"##),
+    ("blend-difference", r##"<path d="M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8Z" fill="currentColor" fill-opacity=".45"/><path d="M12 17.2A6 6 0 1 0 12 6.8A6 6 0 0 1 12 17.2Z" fill="currentColor" fill-opacity=".45"/>"##),
+    ("blend-exclusion", r##"<path d="M12 6.8A6 6 0 1 0 12 17.2M12 17.2A6 6 0 1 0 12 6.8"/><path d="M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8Z" fill="currentColor" fill-opacity=".25" stroke="none"/><path d="M12 17.2A6 6 0 1 0 12 6.8A6 6 0 0 1 12 17.2Z" fill="currentColor" fill-opacity=".25" stroke="none"/><path d="M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8Z" stroke-dasharray="1.5 2"/>"##),
+    // Gradient stops
+    ("stop-add", r##"<path d="M9.5 3.5h5A2.5 2.5 0 0 1 17 6v5a2.5 2.5 0 0 1-2.5 2.5H14l-2 2.5-2-2.5h-.5A2.5 2.5 0 0 1 7 11V6a2.5 2.5 0 0 1 2.5-2.5z"/><path d="M12 6v5M9.5 8.5h5M4 20h16"/>"##),
+    ("stop-remove", r##"<path d="M9.5 3.5h5A2.5 2.5 0 0 1 17 6v5a2.5 2.5 0 0 1-2.5 2.5H14l-2 2.5-2-2.5h-.5A2.5 2.5 0 0 1 7 11V6a2.5 2.5 0 0 1 2.5-2.5z"/><path d="M9.5 8.5h5M4 20h16"/>"##),
+    ("smooth", r##"<path d="M4.5 18.5C11 18.5 13 5.5 19.5 5.5"/><circle cx="4.5" cy="18.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="19.5" cy="5.5" r="1.5" fill="currentColor" stroke="none"/>"##),
+    ("hash", r##"<path d="M10 4L8 20M16 4l-2 16M5 9h15M4 15h15"/>"##),
+    // Stroke position
+    ("stroke-inside", r##"<path d="M8 5.5H16A2.5 2.5 0 0 1 18.5 8V16A2.5 2.5 0 0 1 16 18.5H8A2.5 2.5 0 0 1 5.5 16V8A2.5 2.5 0 0 1 8 5.5ZM9.5 9A0.5 0.5 0 0 0 9 9.5V14.5A0.5 0.5 0 0 0 9.5 15H14.5A0.5 0.5 0 0 0 15 14.5V9.5A0.5 0.5 0 0 0 14.5 9Z" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="5.5" y="5.5" width="13" height="13" rx="2.5" stroke-width="1"/>"##),
+    ("stroke-center", r##"<path d="M7.75 3.75H16.25A4 4 0 0 1 20.25 7.75V16.25A4 4 0 0 1 16.25 20.25H7.75A4 4 0 0 1 3.75 16.25V7.75A4 4 0 0 1 7.75 3.75ZM8.25 7.25A1 1 0 0 0 7.25 8.25V15.75A1 1 0 0 0 8.25 16.75H15.75A1 1 0 0 0 16.75 15.75V8.25A1 1 0 0 0 15.75 7.25Z" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="5.5" y="5.5" width="13" height="13" rx="2.5" stroke-width="1"/>"##),
+    ("stroke-outside", r##"<path d="M7.5 2H16.5A5.5 5.5 0 0 1 22 7.5V16.5A5.5 5.5 0 0 1 16.5 22H7.5A5.5 5.5 0 0 1 2 16.5V7.5A5.5 5.5 0 0 1 7.5 2ZM8 5.5A2.5 2.5 0 0 0 5.5 8V16A2.5 2.5 0 0 0 8 18.5H16A2.5 2.5 0 0 0 18.5 16V8A2.5 2.5 0 0 0 16 5.5Z" fill="currentColor" fill-opacity=".45" stroke="none"/><rect x="5.5" y="5.5" width="13" height="13" rx="2.5" stroke-width="1"/>"##),
+    // Path points
+    ("point-mirror-none", r##"<path d="M10.21 12.22L6.22 9.37"/><circle cx="5" cy="8.5" r="1.5"/><path d="M13.44 11.84L17.52 7.13"/><circle cx="18.5" cy="6" r="1.5"/><rect x="10.25" y="11.75" width="3.5" height="3.5" rx="0.75" fill="currentColor" stroke="none"/>"##),
+    ("point-mirror-angle", r##"<path d="M10.11 13.13L5.79 15.73"/><circle cx="4.5" cy="16.5" r="1.5"/><path d="M13.89 10.87L15.42 9.94"/><circle cx="16.71" cy="9.17" r="1.5"/><rect x="10.25" y="10.25" width="3.5" height="3.5" rx="0.75" fill="currentColor" stroke="none"/>"##),
+    ("point-mirror-full", r##"<path d="M10.11 13.13L5.79 15.73"/><circle cx="4.5" cy="16.5" r="1.5"/><path d="M13.89 10.87L18.21 8.27"/><circle cx="19.5" cy="7.5" r="1.5"/><rect x="10.25" y="10.25" width="3.5" height="3.5" rx="0.75" fill="currentColor" stroke="none"/>"##),
+    ("point-corner", r##"<path d="M4 18.5L12 7.5l8 11"/><rect x="10.25" y="5.75" width="3.5" height="3.5" rx="0.75" fill="currentColor" stroke="none"/>"##),
+    ("point-smooth", r##"<path d="M3.5 18C7 18 8 8.5 12 8.5s5 9.5 8.5 9.5"/><path d="M9.6 8.5L7.1 8.5"/><circle cx="5.5" cy="8.5" r="1.6"/><path d="M14.4 8.5L16.9 8.5"/><circle cx="18.5" cy="8.5" r="1.6"/><rect x="10.25" y="6.75" width="3.5" height="3.5" rx="0.75" fill="currentColor" stroke="none"/>"##),
+    // Line ends
+    ("cap-round", r##"<path d="M3 8h11a4 4 0 0 1 0 8H3" fill="currentColor" fill-opacity=".25"/><path d="M3 12h11" stroke-width="1"/><circle cx="14" cy="12" r="1.25" fill="currentColor" stroke="none"/>"##),
+    ("cap-square", r##"<path d="M3 8h15v8H3" fill="currentColor" fill-opacity=".25"/><path d="M3 12h11" stroke-width="1"/><circle cx="14" cy="12" r="1.25" fill="currentColor" stroke="none"/>"##),
+    ("tip-none", r##"<path d="M4 12h16"/>"##),
+    ("tip-arrow", r##"<path d="M4 12h15.5M15 7.5l4.5 4.5-4.5 4.5"/>"##),
+    ("tip-triangle", r##"<path d="M4 12h10"/><path d="M14 7.5l6 4.5-6 4.5z" fill="currentColor" fill-opacity=".25"/>"##),
+    ("tip-circle", r##"<path d="M4 12h10"/><circle cx="17" cy="12" r="3" fill="currentColor" fill-opacity=".25"/>"##),
+    ("tip-bar", r##"<path d="M4 12h15M19 7v10"/>"##),
     ("flip-horizontal", r##"<path d="M12 3v18" stroke-dasharray="2 2.75"/><path d="M9 6.5L3 17.5h6z"/><path d="M15 6.5l6 11h-6z" fill="currentColor" fill-opacity=".25"/>"##),
     ("flip-vertical", r##"<path d="M3 12h18" stroke-dasharray="2 2.75"/><path d="M6.5 9L17.5 3v6z"/><path d="M6.5 15l11 6v-6z" fill="currentColor" fill-opacity=".25"/>"##),
     ("aspect-ratio", r##"<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12.5V9.5h3M17 11.5v3h-3"/>"##),

@@ -47,69 +47,79 @@ enum PAct {
     GMove(usize, f32),
     GAdd(f32),
     GDel(usize),
-    GAlpha(f32, bool),
+    GAlpha(usize, f32, bool),
+    GAt(usize, f32, bool),
+    GRotate,
+    GColor(usize, String),
     GSmooth(f32, bool),
     GFlip,
 }
 
-/// A row of choices; a pill sits under the picked one and slides when it changes. `cur`
-/// None: nothing in this row is picked (the pill fades out where it was)
-#[allow(clippy::too_many_arguments)]
-fn pills(ui: &mut egui::Ui, id: egui::Id, r: Rect, names: &[&str], cur: Option<usize>, font: f32, a: f32) -> Option<usize> {
-    let ctx = ui.ctx().clone();
-    let n = names.len().max(1);
-    let cell = r.width() / n as f32;
-    let last: usize = ctx.data(|d| d.get_temp(id.with("last"))).unwrap_or(0);
-    let at_i = cur.unwrap_or(last);
-    ctx.data_mut(|d| d.insert_temp(id.with("last"), at_i));
-    let at = ctx.animate_value_with_time(id.with("k"), at_i as f32, 0.2 * anim_k());
-    let on_k = ease(&ctx, id.with("on"), cur.is_some());
-    let p = ui.painter().clone();
-    p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-    p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * cell, r.min.y + 2.0), vec2(cell - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a * on_k) as u8));
-    let mut out = None;
-    for (j, name) in names.iter().enumerate() {
-        let br = Rect::from_min_size(pos2(r.min.x + j as f32 * cell, r.min.y), vec2(cell, r.height()));
-        let resp = ui.interact(br, id.with(j), Sense::click());
-        let on = cur == Some(j);
-        let (hh, pp) = hover_fx(&ctx, &resp, !on);
-        if !on {
-            p.rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
-        }
-        let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0) * on_k;
-        p.text(br.center(), Align2::CENTER_CENTER, *name, FontId::proportional(font), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
-        if resp.clicked() && !on {
-            out = Some(j);
-        }
+/// Icons for the blend modes, in `canvas::layers::BLENDS` order
+const BLEND_ICONS: [&str; 12] = [
+    "blend-normal", "blend-multiply", "blend-screen", "blend-overlay", "blend-darken", "blend-lighten", "blend-color-dodge", "blend-color-burn", "blend-hard-light", "blend-soft-light", "blend-difference", "blend-exclusion",
+];
+
+/// A colour chip and its hex inside `r` (a field-style row). The colour glides to a new one
+/// (so switching gradient stops eases rather than snaps); "none" shows as an empty chip
+fn color_chip(ctx: &egui::Context, p: &egui::Painter, id: egui::Id, r: Rect, color: &str, hl: f32, label: bool, a: f32) {
+    let none = color == "none";
+    let c = hex(if none { "#000000" } else { color });
+    let ch = |k: &str, v: u8| super::micro::glide(ctx, id.with(k), v as f32, false).round().clamp(0.0, 255.0) as u8;
+    let g = Color32::from_rgb(ch("r", c.r()), ch("g", c.g()), ch("b", c.b()));
+    if g != c {
+        ctx.request_repaint();
     }
-    out
+    let chip = if label { Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0)) } else { Rect::from_center_size(r.center(), vec2(16.0, 16.0)) };
+    if none {
+        p.line_segment([chip.left_bottom() + vec2(2.0, -2.0), chip.right_top() + vec2(-2.0, 2.0)], EStroke::new(1.5_f32, hex("#ef4444").gamma_multiply(a)));
+    } else {
+        p.rect_filled(chip, 3.0, g.gamma_multiply(a));
+    }
+    p.rect_stroke(chip, 3.0, EStroke::new(1.0_f32, wa((60.0 * a) as u8)));
+    if !label {
+        return;
+    }
+    let label = if none { "None".to_string() } else { format!("{:02X}{:02X}{:02X}", g.r(), g.g(), g.b()) };
+    p.with_clip_rect(r.shrink(1.0)).text(pos2(chip.max.x + 7.0, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0), mix(gray_ui(200), txt(), hl).gamma_multiply(a));
 }
 
-/// A gradient's colours as a bar (over a checkerboard, so see-through stops show) with its
-/// stops as dots under it: click a dot to pick it, drag it along, right-click to remove it,
-/// click the bar to add one there
+/// A gradient's colours as a bar the full width of the panel (over a checkerboard, so
+/// see-through stops show) with its stops as dots on it: click a dot to pick it, drag it
+/// along, drag it down off the bar (or right-click it) to remove it, click the bar to add one
 fn gradient_bar(ui: &mut egui::Ui, id: egui::Id, r: Rect, g: &Gradient, pick: Option<usize>, a: f32, out: &mut Vec<PAct>) {
     let ctx = ui.ctx().clone();
     let p = ui.painter().clone();
-    let bar = Rect::from_min_max(r.min + vec2(7.0, 0.0), pos2(r.max.x - 7.0, r.min.y + 14.0));
-    let cp = p.with_clip_rect(bar.intersect(p.clip_rect()));
-    let sq = 5.0;
+    let bar = Rect::from_min_size(r.min, vec2(r.width(), 22.0));
+    // the colours run between the dots' outermost spots; the ends carry the end colours on
+    // (inset enough that an end dot, grown and ringed, stays inside the panel)
+    let ramp = bar.shrink2(vec2(14.0, 0.0));
+    let cp = p.with_clip_rect(bar.shrink(1.0).intersect(p.clip_rect()));
+    let sq = 5.5;
     let mut x = bar.min.x;
     let mut i = 0;
     while x < bar.max.x {
-        for (j, y) in [bar.min.y, bar.min.y + sq, bar.min.y + sq * 2.0].into_iter().enumerate() {
+        let mut y = bar.min.y;
+        let mut j = 0;
+        while y < bar.max.y {
             let c = if (i + j) % 2 == 0 { gray_ui(70) } else { gray_ui(110) };
             cp.rect_filled(Rect::from_min_size(pos2(x, y), vec2(sq, sq)), 0.0, c.gamma_multiply(a));
+            y += sq;
+            j += 1;
         }
         x += sq;
         i += 1;
     }
+    let c0 = crate::canvas::gradient::color32_at(g, 0.0).gamma_multiply(a);
+    let c1 = crate::canvas::gradient::color32_at(g, 1.0).gamma_multiply(a);
+    p.rect_filled(Rect::from_min_max(bar.min, pos2(ramp.min.x + 1.0, bar.max.y)), Rounding { nw: 6.0, sw: 6.0, ne: 0.0, se: 0.0 }, c0);
+    p.rect_filled(Rect::from_min_max(pos2(ramp.max.x - 1.0, bar.min.y), bar.max), Rounding { nw: 0.0, sw: 0.0, ne: 6.0, se: 6.0 }, c1);
     let mut m = egui::Mesh::default();
-    const N: usize = 48;
+    const N: usize = 64;
     for k in 0..=N {
         let t = k as f32 / N as f32;
         let c = crate::canvas::gradient::color32_at(g, t).gamma_multiply(a);
-        let x = bar.min.x + t * bar.width();
+        let x = ramp.min.x + t * ramp.width();
         m.colored_vertex(pos2(x, bar.min.y), c);
         m.colored_vertex(pos2(x, bar.max.y), c);
         if k > 0 {
@@ -119,52 +129,79 @@ fn gradient_bar(ui: &mut egui::Ui, id: egui::Id, r: Rect, g: &Gradient, pick: Op
         }
     }
     p.add(egui::Shape::mesh(m));
-    p.rect_stroke(bar, 3.0, EStroke::new(1.0_f32, wa((40.0 * a) as u8)));
-    let t_of = |x: f32| ((x - bar.min.x) / bar.width()).clamp(0.0, 1.0);
-    let dot_y = bar.max.y + 8.0;
-    let resp = ui.interact(r, id, Sense::click_and_drag());
+    p.rect_stroke(bar.shrink(0.5), 5.5, EStroke::new(1.0_f32, wa((40.0 * a) as u8)));
+
+    let x_of = |t: f32| ramp.min.x + t.clamp(0.0, 1.0) * ramp.width();
+    let t_of = |x: f32| ((x - ramp.min.x) / ramp.width()).clamp(0.0, 1.0);
+    let resp = ui.interact(bar.expand2(vec2(0.0, 4.0)), id, Sense::click_and_drag()).on_hover_text("Click to add a stop · drag a dot down to remove it");
     let hov = resp.hover_pos();
-    let near = |q: Pos2| g.stops.iter().enumerate().map(|(j, s)| (j, (bar.min.x + s.at * bar.width() - q.x).abs())).filter(|(_, d)| *d < 8.0).min_by(|x, y| x.1.total_cmp(&y.1)).map(|(j, _)| j);
+    let near = |q: Pos2| g.stops.iter().enumerate().map(|(j, s)| (j, (x_of(s.at) - q.x).abs())).filter(|(_, d)| *d < 11.0).min_by(|x, y| x.1.total_cmp(&y.1)).map(|(j, _)| j);
     let held_id = id.with("held");
-    if resp.drag_started() || resp.clicked() {
-        if let Some(q) = resp.interact_pointer_pos() {
-            match near(q) {
-                Some(j) => {
-                    out.push(PAct::GPick(j));
-                    ctx.data_mut(|d| d.insert_temp(held_id, j));
-                }
-                None if resp.clicked() => out.push(PAct::GAdd(t_of(q.x))),
-                None => {}
+    let held_prev: Option<(usize, f32)> = ctx.data(|d| d.get_temp(held_id));
+    let down = resp.is_pointer_button_down_on();
+    let q_now = ctx.input(|i| i.pointer.latest_pos());
+    // pressed on a dot: it's picked and held at once, remembering how far off its middle the
+    // pointer was, so it moves with the pointer from the first pixel and never jumps
+    let mut held = held_prev;
+    if down && held.is_none() && ctx.input(|i| i.pointer.primary_pressed()) {
+        if let Some(q) = q_now {
+            if let Some(j) = near(q) {
+                out.push(PAct::GPick(j));
+                held = Some((j, x_of(g.stops[j].at) - q.x));
+                ctx.data_mut(|d| d.insert_temp(held_id, held.unwrap()));
             }
         }
     }
-    if resp.dragged() {
-        if let (Some(j), Some(q)) = (ctx.data(|d| d.get_temp::<usize>(held_id)), resp.interact_pointer_pos()) {
-            out.push(PAct::GMove(j, t_of(q.x)));
+    // dragged down off the bar: it's going to be removed (needs two left)
+    let off = |q: Pos2| q.y > bar.max.y + 22.0 && g.stops.len() > 2;
+    if down {
+        if let (Some((j, dx)), Some(q)) = (held, q_now) {
+            let t = t_of(q.x + dx);
+            if !off(q) && (t - g.stops[j].at).abs() > 1e-4 {
+                out.push(PAct::GMove(j, t));
+            }
         }
-    }
-    if resp.drag_stopped() || resp.clicked() {
-        ctx.data_mut(|d| d.remove::<usize>(held_id));
+    } else if let Some((j, _)) = held {
+        // let go
+        if q_now.is_some_and(off) {
+            out.push(PAct::GDel(j));
+        }
+        ctx.data_mut(|d| d.remove::<(usize, f32)>(held_id));
         ctx.data_mut(|d| d.remove::<bool>(id.with("gmv")));
+    }
+    if resp.clicked() && held_prev.is_none() && held.is_none() {
+        if let Some(q) = resp.interact_pointer_pos() {
+            if near(q).is_none() {
+                out.push(PAct::GAdd(t_of(q.x)));
+            }
+        }
     }
     if resp.secondary_clicked() {
         if let Some(j) = resp.interact_pointer_pos().and_then(near).filter(|_| g.stops.len() > 2) {
             out.push(PAct::GDel(j));
         }
     }
+    let held = if down { held.map(|h| h.0) } else { None };
+    let going = held.is_some() && q_now.is_some_and(off);
     for (j, st) in g.stops.iter().enumerate() {
-        let cx = bar.min.x + st.at * bar.width();
-        let c = pos2(cx, dot_y);
-        let hh = ease(&ctx, id.with(("hv", j)), hov.is_some_and(|q| (q.x - cx).abs() < 8.0));
+        let leaving = ease(&ctx, id.with(("off", j)), going && held == Some(j));
+        let mut c = pos2(x_of(st.at), bar.center().y);
+        if leaving > 0.001 {
+            if let Some(q) = q_now {
+                c = c.lerp(q, leaving);
+            }
+        }
+        let hh = ease(&ctx, id.with(("hv", j)), hov.is_some_and(|q| (q.x - c.x).abs() < 11.0));
         let on = ease(&ctx, id.with(("on", j)), pick == Some(j));
-        let rad = 5.0 + 1.0 * hh + 1.0 * on;
-        p.line_segment([pos2(cx, bar.max.y), pos2(cx, c.y - rad)], EStroke::new(1.0_f32, wa((90.0 * a) as u8)));
-        p.circle_filled(c, rad + 1.0, Color32::from_black_alpha((120.0 * a) as u8));
-        p.circle_filled(c, rad, hex(&st.color).gamma_multiply(a));
-        p.circle_stroke(c, rad, EStroke::new(1.5_f32, mix(wa(200), blue(), on).gamma_multiply(a)));
+        let rad = 6.0 + 1.0 * hh + 1.0 * on;
+        let fa = a * (1.0 - 0.6 * leaving);
+        p.circle_filled(c + vec2(0.0, 1.0), rad + 1.5, Color32::from_black_alpha((110.0 * fa) as u8));
+        p.circle_filled(c, rad + 1.5, mix(Color32::WHITE, blue(), on).gamma_multiply(fa));
+        p.circle_filled(c, rad - 0.5, hex(&st.color).gamma_multiply(fa));
     }
-    if hov.is_some() {
-        ctx.set_cursor_icon(if hov.and_then(near).is_some() { CursorIcon::Grab } else { CursorIcon::PointingHand });
+    // the hand only while a dot is being dragged
+    if held.is_some() {
+        ctx.set_cursor_icon(CursorIcon::Grabbing);
     }
 }
 
@@ -427,7 +464,9 @@ impl App {
                         let gi = ((xs - 0.02 - ri as f32 * 0.035) / 0.3).clamp(0.0, 1.0);
                         ri += 1;
                         let ca = 1.0 - (1.0 - gi).powi(3);
-                        (r.translate(vec2(0.0, (1.0 - ca) * 8.0)), ca)
+                        // 2 px clear of the card's clip on both sides, so edges and strokes drawn
+                        // right on a row's border are never shaved off
+                        (r.translate(vec2(2.0, (1.0 - ca) * 8.0)), ca)
                     };
                     let head = |ui: &mut egui::Ui, row: &mut dyn FnMut(&mut egui::Ui, f32) -> (Rect, f32), name: &str, first: bool| -> (Rect, f32) {
                         if !first {
@@ -642,41 +681,12 @@ impl App {
                             out.push(PAct::Num("corner", v, f1));
                         }
                     }
-                    // Blend mode: the row shows it; a click opens the choices under it
+                    // Blend mode: a dropdown that floats over the panel (ui/panel_drop.rs)
                     if crate::canvas::layers::available() {
                         gap(ui);
-                        let names = crate::canvas::layers::BLENDS;
-                        let open_id = bid.with("blend_open");
-                        let open: bool = ctx.data(|d| d.get_temp(open_id)).unwrap_or(false);
                         let (r, a) = row(ui, FH);
-                        let resp = ui.interact(r, bid.with("blend_row"), Sense::click());
-                        let (hh, pp) = hover_fx(ctx, &resp, true);
-                        let p = ui.painter();
-                        p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-                        p.rect_filled(r, 6.0, hover_fill(hh, pp).gamma_multiply(a));
-                        p.text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, "Blend", FontId::proportional(11.5), txt_dim().gamma_multiply(a));
-                        p.text(pos2(r.max.x - 24.0, r.center().y), Align2::RIGHT_CENTER, names[blend_now as usize % names.len()], FontId::proportional(12.0), mix(gray_ui(225), hi(), hh).gamma_multiply(a));
-                        let ok = ease(ctx, open_id.with("k"), open);
-                        crate::ui::svg_icons::draw(p, if ok > 0.5 { "chevron-up" } else { "chevron-down" }, pos2(r.max.x - 12.0, r.center().y), 12.0, mix(txt_dim(), hi(), hh).gamma_multiply(a));
-                        if resp.clicked() {
-                            ctx.data_mut(|d| d.insert_temp(open_id, !open));
-                        }
-                        if ok > 0.001 {
-                            // three a row; rows rise in one after another as it opens
-                            for (ri, chunk) in names.chunks(3).enumerate() {
-                                let k = ((ok * 1.6) - ri as f32 * 0.15).clamp(0.0, 1.0);
-                                let k = 1.0 - (1.0 - k).powi(3);
-                                ui.add_space(4.0 * ok);
-                                let (r, a2) = row(ui, (FH - 2.0) * ok);
-                                if r.height() < 4.0 {
-                                    continue;
-                                }
-                                let base = ri * 3;
-                                let cur = (blend_now as usize).checked_sub(base).filter(|c| *c < chunk.len());
-                                if let Some(j) = pills(ui, bid.with(("blend", ri)), r.translate(vec2(0.0, (1.0 - k) * 6.0)), chunk, cur, 10.5, a2 * k) {
-                                    out.push(PAct::Blend((base + j) as u8));
-                                }
-                            }
+                        if let Some(j) = super::panel_drop::dropdown_icons(ui, bid.with("blend_dd"), r, "Blend", &crate::canvas::layers::BLENDS, &BLEND_ICONS, blend_now as usize, a) {
+                            out.push(PAct::Blend(j as u8));
                         }
                     }
 
@@ -686,73 +696,136 @@ impl App {
                         // Solid or a gradient (canvas/gradient.rs; its handles show on the canvas
                         // while a stop is picked)
                         if can_grad {
+                            // type: a floating dropdown; while it's hovered, flip and a quarter
+                            // turn show on its right
                             let (r, a) = row(ui, FH);
                             let mut names = vec!["Solid"];
                             names.extend(crate::canvas::gradient::KINDS);
                             let cur = grad.as_ref().map_or(0, |g| g.kind as usize + 1);
-                            if let Some(j) = pills(ui, bid.with("gkind"), r, &names, Some(cur), 10.5, a) {
+                            let extras: &[(&'static str, &str)] = if grad.is_some() { &[("swap-ends", "Swap the gradient's ends"), ("rotate-cw", "Turn it a quarter")] } else { &[] };
+                            let (pick, extra) = super::panel_drop::dropdown_ex(ui, bid.with("gkind_dd"), r, "", &names, &["fill-solid", "gradient-linear", "gradient-radial", "gradient-angular", "gradient-diamond"], cur, extras, a);
+                            if let Some(j) = pick {
                                 out.push(PAct::GKind(j.checked_sub(1).map(|k| k as u8)));
+                            }
+                            match extra {
+                                Some(0) => out.push(PAct::GFlip),
+                                Some(_) => out.push(PAct::GRotate),
+                                None => {}
                             }
                             if let Some(g) = &grad {
                                 gap(ui);
-                                let (r, a) = row(ui, 30.0);
-                                // the bar, and a flip button at its right end
-                                let fr = Rect::from_min_size(pos2(r.max.x - 26.0, r.min.y), vec2(26.0, 22.0));
-                                gradient_bar(ui, bid.with("gbar"), Rect::from_min_max(r.min, pos2(fr.min.x - 4.0, r.max.y)), g, gstop, a, &mut out);
-                                let resp = ui.interact(fr, bid.with("gflip"), Sense::click()).on_hover_text("Swap the gradient's ends");
+                                let (r, a) = row(ui, 22.0);
+                                gradient_bar(ui, bid.with("gbar"), r, g, gstop, a, &mut out);
+                                gap(ui);
+                                // the picked stop only (pick another on the bar): where it sits,
+                                // its colour (click: colour panel), its opacity; remove shows on hover
+                                let j = gstop.unwrap_or_else(|| (0..g.stops.len()).min_by(|x, y| g.stops[*x].at.total_cmp(&g.stops[*y].at)).unwrap_or(0));
+                                let st = &g.stops[j];
+                                let (r, a) = row(ui, FH);
+                                let can = g.stops.len() > 2;
+                                let row_hov = ctx.pointer_hover_pos().is_some_and(|q| r.contains(q));
+                                let dk = ease(ctx, bid.with("gst_del_k"), row_hov && can);
+                                let del_w = 26.0 * dk;
+                                let rest = r.width() - FH - 8.0 - del_w - 4.0 * dk;
+                                let pos_r = Rect::from_min_size(r.min, vec2(rest / 2.0, FH));
+                                let col_r = Rect::from_min_size(pos2(pos_r.max.x + 4.0, r.min.y), vec2(FH, FH));
+                                let al_r = Rect::from_min_size(pos2(col_r.max.x + 4.0, r.min.y), vec2(rest / 2.0, FH));
+                                if let Some((v, f1)) = field(ui, bid.with("gst_at"), pos_r, "", (st.at * 100.0).round(), "%", 0.5, 0.0, 100.0, false, a) {
+                                    out.push(PAct::GAt(j, v / 100.0, f1));
+                                }
+                                // small icons on the left say what each number is
+                                crate::ui::svg_icons::draw(ui.painter(), "stop-add", pos2(pos_r.min.x + 15.0, pos_r.center().y), 15.0, txt_dim().gamma_multiply(a));
+                                // the stop's colour as a square: click for the colour panel,
+                                // double-click to type its hex in a bubble under it
+                                let cpid = bid.with("gstop_color");
+                                let hbid = bid.with("gstop_hex");
+                                let resp = ui.interact(col_r, bid.with("gst_col"), Sense::click()).on_hover_text("Click: colour panel · double-click: type the hex");
+                                let open_k = ease(ctx, bid.with("gst_col_open"), super::panel_drop::is_open(ctx, cpid) || super::panel_drop::is_open(ctx, hbid));
                                 let (hh, pp) = hover_fx(ctx, &resp, true);
                                 let p = ui.painter();
-                                p.rect_filled(fr, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-                                p.rect_filled(fr, 6.0, hover_fill(hh, pp).gamma_multiply(a));
-                                crate::ui::svg_icons::draw(p, "flip-horizontal", fr.center(), 14.0, mix(txt_dim(), hi(), hh).gamma_multiply(a));
-                                if resp.clicked() {
-                                    out.push(PAct::GFlip);
+                                p.rect_filled(col_r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                                p.rect_filled(col_r, 6.0, hover_fill(hh.max(open_k * 0.6), pp).gamma_multiply(a));
+                                color_chip(ctx, p, bid.with("gst_cc"), col_r, &st.color, hh.max(open_k), false, a);
+                                match super::hex_bubble::chip_click(ctx, bid.with("gst_col"), &resp) {
+                                    Some(false) => {
+                                        out.push(PAct::GPick(j));
+                                        super::panel_drop::toggle(ctx, cpid);
+                                    }
+                                    Some(true) => {
+                                        out.push(PAct::GPick(j));
+                                        super::hex_bubble::open(ctx, hbid);
+                                    }
+                                    None => {}
+                                }
+                                if let Some(c) = super::hex_bubble::show(ctx, hbid, col_r, &st.color) {
+                                    out.push(PAct::GColor(j, c));
+                                }
+                                if let Some((v, f1)) = field(ui, bid.with("gst_al"), al_r, "", (st.alpha * 100.0).round(), "%", 0.5, 0.0, 100.0, true, a) {
+                                    out.push(PAct::GAlpha(j, v / 100.0, f1));
+                                }
+                                crate::ui::svg_icons::draw(ui.painter(), "opacity", pos2(al_r.min.x + 15.0, al_r.center().y), 15.0, txt_dim().gamma_multiply(a));
+                                if dk > 0.01 {
+                                    let del_r = Rect::from_min_max(pos2(r.max.x - del_w, r.min.y), r.max);
+                                    let resp = ui.interact(del_r, bid.with("gst_del"), Sense::click()).on_hover_text("Remove this stop");
+                                    let (hh, pp) = hover_fx(ctx, &resp, true);
+                                    let p = ui.painter();
+                                    p.rect_filled(del_r, 6.0, hover_fill(hh, pp).gamma_multiply(a * dk));
+                                    crate::ui::svg_icons::draw(p, "minus", del_r.center(), 14.0 * dk, mix(txt_dim(), hi(), hh).gamma_multiply(a * dk));
+                                    if resp.clicked() {
+                                        out.push(PAct::GDel(j));
+                                    }
+                                }
+                                if let Some(c) = super::panel_drop::color_pop(ctx, cpid, r, card, &st.color) {
+                                    out.push(PAct::GColor(j, c));
                                 }
                                 gap(ui);
-                                let (r, a) = row(ui, FH);
-                                let (l, rr) = halves(r);
-                                let st_a = gstop.and_then(|j| g.stops.get(j)).map_or(100.0, |s| (s.alpha * 100.0).round());
-                                if let Some((v, f1)) = field(ui, bid.with("gal"), l, "Stop", st_a, "%", 0.5, 0.0, 100.0, true, a) {
-                                    out.push(PAct::GAlpha(v / 100.0, f1));
-                                }
                                 // how softly the colours ease into each other (no hard edge where it ends)
-                                if let Some((v, f1)) = field(ui, bid.with("gsm"), rr, "Smooth", (g.smooth * 100.0).round(), "%", 0.5, 0.0, 100.0, true, a) {
+                                let (r, a) = row(ui, FH);
+                                if let Some((v, f1)) = field(ui, bid.with("gsm"), r, "Smooth", (g.smooth * 100.0).round(), "%", 0.5, 0.0, 100.0, true, a) {
                                     out.push(PAct::GSmooth(v / 100.0, f1));
                                 }
                             }
                             gap(ui);
                         }
-                        // with a gradient the swatches colour its picked stop
-                        let col = &match (&grad, gstop) {
-                            (Some(g), Some(j)) => g.stops[j].color.clone(),
-                            (Some(_), None) => String::new(),
-                            _ => col.clone(),
-                        };
-                        let (r, a) = row(ui, 28.0);
-                        let mut sw: Vec<&str> = PEN_COLORS.to_vec();
-                        if is_group {
-                            sw.push("none");
-                        }
-                        let cw = (r.width() / sw.len() as f32).min(30.0);
-                        for (j, c) in sw.into_iter().enumerate() {
-                            let cc = pos2(r.min.x + cw * (j as f32 + 0.5), r.center().y);
-                            let br = Rect::from_center_size(cc, vec2(cw, 28.0));
-                            let resp = ui.interact(br, bid.with(("sw", j)), Sense::click());
-                            let hk = spring(ctx, bid.with(("swk", j)), resp.hovered(), 18.0);
-                            let rad = 7.5 * (1.0 + 0.18 * hk);
+                        if grad.is_none() {
+                            let (r, a) = row(ui, FH);
+                            let none_ok = is_group && col != "none";
+                            let row_hov = ctx.pointer_hover_pos().is_some_and(|q| r.contains(q));
+                            let dk = ease(ctx, bid.with("fill_none_k"), row_hov && none_ok);
+                            let del_w = 26.0 * dk;
+                            let col_r = Rect::from_min_max(r.min, pos2(r.max.x - del_w - 4.0 * dk, r.max.y));
+                            let cpid = bid.with("fill_color");
+                            let resp = ui.interact(col_r, bid.with("fill_col"), Sense::click()).on_hover_text("Click: colour panel · double-click: type the hex");
+                            let open_k = ease(ctx, bid.with("fill_col_open"), super::panel_drop::is_open(ctx, cpid));
+                            let (hh, pp) = hover_fx(ctx, &resp, true);
                             let p = ui.painter();
-                            if c == "none" {
-                                p.circle_stroke(cc, rad, EStroke::new(1.0_f32, wa((90.0 * a) as u8)));
-                                p.line_segment([cc + vec2(-rad * 0.7, rad * 0.7), cc + vec2(rad * 0.7, -rad * 0.7)], EStroke::new(1.5_f32, hex("#ef4444").gamma_multiply(a)));
-                            } else {
-                                p.circle_filled(cc, rad, hex(c).gamma_multiply(a));
-                                p.circle_stroke(cc, rad, EStroke::new(1.0_f32, wa((50.0 * a) as u8)));
+                            p.rect_filled(col_r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                            p.rect_filled(col_r, 6.0, hover_fill(hh.max(open_k * 0.6), pp).gamma_multiply(a));
+                            color_chip(ctx, p, bid.with("fill_cc"), col_r, col, hh.max(open_k), true, a);
+                            let hbid = bid.with("fill_hex");
+                            match super::hex_bubble::chip_click(ctx, bid.with("fill_col"), &resp) {
+                                Some(false) => super::panel_drop::toggle(ctx, cpid),
+                                Some(true) => super::hex_bubble::open(ctx, hbid),
+                                None => {}
                             }
-                            if col.eq_ignore_ascii_case(c) {
-                                p.circle_stroke(cc, rad + 3.0, EStroke::new(1.3_f32, Color32::WHITE.gamma_multiply(a)));
+                            let chip_at = Rect::from_center_size(pos2(col_r.min.x + 14.0, col_r.center().y), vec2(14.0, 14.0));
+                            if let Some(c) = super::hex_bubble::show(ctx, hbid, chip_at.expand(4.0), if col == "none" { "#ffffff" } else { col.as_str() }) {
+                                out.push(PAct::Color(c));
                             }
-                            if resp.clicked() {
-                                out.push(PAct::Color(c.to_string()));
+                            if dk > 0.01 {
+                                let del_r = Rect::from_min_max(pos2(r.max.x - del_w, r.min.y), r.max);
+                                let resp = ui.interact(del_r, bid.with("fill_none"), Sense::click()).on_hover_text("No fill");
+                                let (hh, pp) = hover_fx(ctx, &resp, true);
+                                let p = ui.painter();
+                                p.rect_filled(del_r, 6.0, hover_fill(hh, pp).gamma_multiply(a * dk));
+                                crate::ui::svg_icons::draw(p, "eye-off", del_r.center(), 14.0 * dk, mix(txt_dim(), hi(), hh).gamma_multiply(a * dk));
+                                if resp.clicked() {
+                                    out.push(PAct::Color("none".into()));
+                                }
+                            }
+                            let shown = if col == "none" { "#ffffff" } else { col.as_str() };
+                            if let Some(c) = super::panel_drop::color_pop(ctx, cpid, r, card, shown) {
+                                out.push(PAct::Color(c));
                             }
                         }
                     }
@@ -1002,11 +1075,42 @@ impl App {
                     });
                     self.grad_edit = Some((id.clone(), 0));
                 }
-                PAct::GAlpha(v, first) => {
+                PAct::GAt(j, t, first) => {
                     if first {
                         self.snapshot();
                     }
-                    let j = gstop.unwrap_or(0);
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
+                            s.at = t.clamp(0.0, 1.0);
+                        }
+                    });
+                    self.grad_edit = Some((id.clone(), j));
+                }
+                PAct::GColor(j, c) => {
+                    self.snapshot();
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
+                            s.color = c;
+                        }
+                    });
+                    self.grad_edit = Some((id.clone(), j));
+                }
+                PAct::GRotate => {
+                    // a quarter turn clockwise: linear about its middle, the others about the centre
+                    self.snapshot();
+                    self.edit_gradient(&id, |g, _| {
+                        if let Some(g) = g.as_mut() {
+                            let c = if g.kind == 0 { [(g.from[0] + g.to[0]) / 2.0, (g.from[1] + g.to[1]) / 2.0] } else { g.from };
+                            let turn = |q: [f32; 2]| [c[0] - (q[1] - c[1]), c[1] + (q[0] - c[0])];
+                            g.from = turn(g.from);
+                            g.to = turn(g.to);
+                        }
+                    });
+                }
+                PAct::GAlpha(j, v, first) => {
+                    if first {
+                        self.snapshot();
+                    }
                     self.edit_gradient(&id, |g, _| {
                         if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
                             s.alpha = v.clamp(0.0, 1.0);

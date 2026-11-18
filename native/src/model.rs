@@ -106,7 +106,10 @@ impl Gradient {
     /// A new gradient of `kind` from `color` to the same colour see-through, laid out the
     /// usual way for its kind
     pub fn new(kind: u8, color: &str) -> Self {
-        let stops = vec![Stop { at: 0.0, color: color.into(), alpha: 1.0 }, Stop { at: 1.0, color: color.into(), alpha: 0.0 }];
+        // the colour, then a darker shade of it, both fully opaque (as Figma starts)
+        let ch = |i: usize| u8::from_str_radix(color.trim_start_matches('#').get(i..i + 2).unwrap_or("80"), 16).unwrap_or(128);
+        let dark = format!("#{:02x}{:02x}{:02x}", ch(0) as u32 * 45 / 100, ch(2) as u32 * 45 / 100, ch(4) as u32 * 45 / 100);
+        let stops = vec![Stop { at: 0.0, color: color.into(), alpha: 1.0 }, Stop { at: 1.0, color: dark, alpha: 1.0 }];
         let mut g = Gradient { kind, stops, from: [0.5, 0.0], to: [0.5, 1.0], smooth: 0.0 };
         g.set_kind(kind);
         g

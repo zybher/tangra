@@ -1114,12 +1114,10 @@ let seg_ws = |i: usize, sg: &Seg| seg_w(sg) * (1.0 + 0.22 * mags[i]) + 10.0 * ma
 
 /// Square with a thick edge sitting inside / on / outside a thin outline
 fn stroke_pos_icon(p: &egui::Painter, c: Pos2, k: f32, col: Color32, pos: u8) {
-    let r = Rect::from_center_size(c, vec2(10.0, 10.0) * k);
-    p.rect_stroke(r, 1.5, EStroke::new(1.0_f32, col.gamma_multiply(0.45)));
-    let thick = match pos {
-        1 => r.shrink(2.0 * k),
-        2 => r.expand(1.0 * k),
-        _ => r.shrink(0.5 * k),
+    let name = match pos {
+        1 => "stroke-inside",
+        2 => "stroke-outside",
+        _ => "stroke-center",
     };
-    p.rect_stroke(thick, 1.5, EStroke::new(1.6_f32, col));
+    super::svg_icons::draw(p, name, c, 16.0 * k, col);
 }
