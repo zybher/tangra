@@ -12,16 +12,49 @@ use i_triangle::float::triangulatable::Triangulatable;
 
 type Shapes = Vec<Vec<Vec<[f32; 2]>>>;
 
-/// The path as screen points: each curve cut into pieces about 3 px long (a straight side
-/// stays one piece); a closed path ends on its first point, like `Stroke::points`
+/// How far (px) a flattened curve may stray from the true one
+const TOL: f32 = 0.2;
+
+/// A closed outline cut down to the part inside `r` (Sutherland-Hodgman), so a path many
+/// screens big, zoomed in, only builds the bit that shows. Where it's cut, it runs along
+/// `r`'s edge, so `r` should reach past the screen by more than the line's half width.
+pub(crate) fn clip_closed(v: &[Pos2], r: Rect) -> Vec<Pos2> {
+    let mut cur = v.to_vec();
+    let sides: [(fn(Pos2, Rect) -> f32, u8); 4] = [(|p, r| p.x - r.min.x, 0), (|p, r| r.max.x - p.x, 0), (|p, r| p.y - r.min.y, 1), (|p, r| r.max.y - p.y, 1)];
+    for (dist, _) in sides {
+        if cur.len() < 3 {
+            return Vec::new();
+        }
+        let mut out = Vec::with_capacity(cur.len() + 4);
+        for i in 0..cur.len() {
+            let (a, b) = (cur[i], cur[(i + 1) % cur.len()]);
+            let (da, db) = (dist(a, r), dist(b, r));
+            if da >= 0.0 {
+                out.push(a);
+            }
+            if (da >= 0.0) != (db >= 0.0) {
+                out.push(a + (b - a) * (da / (da - db)));
+            }
+        }
+        cur = out;
+    }
+    cur
+}
+
+/// The path as screen points: each curve cut into just enough pieces that none strays more
+/// than a fifth of a pixel from the true curve (gentle curves need few, tight ones more; a
+/// straight side stays one piece). Cutting by length instead made a big path zoomed in
+/// thousands of points, and a thick line over that many took a tenth of a second a frame.
+/// A closed path ends on its first point, like `Stroke::points`
 pub(crate) fn flatten(s: &Stroke, map: &impl Fn(Pt) -> Pos2) -> Vec<Pos2> {
     let mut out = Vec::new();
     let segs = s.drawn_segments();
     for &(a, b, c, d) in &segs {
         let (sa, sb, sc, sd) = (map(a), map(b), map(c), map(d));
         let straight = b == a && c == d;
-        let len = sa.distance(sb) + sb.distance(sc) + sc.distance(sd);
-        let steps = if straight { 1 } else { ((len / 3.0).ceil() as usize).clamp(4, 400) };
+        // how far the curve bends (its control points' second differences) sets the pieces
+        let bend = ((sa - sb * 2.0 + sc.to_vec2()).length()).max((sb - sc * 2.0 + sd.to_vec2()).length());
+        let steps = if straight { 1 } else { ((0.75 * bend / TOL).sqrt().ceil() as usize).clamp(4, 400) };
         for k in 0..steps {
             let t = k as f32 / steps as f32;
             let w = |p: Pos2, q: Pos2| p + (q - p) * t;

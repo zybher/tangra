@@ -111,15 +111,19 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
     use super::presence::gf;
     let gid = egui::Id::new(("qd_sg", s.id.as_str()));
     let ctx = p.ctx();
-    let [r, g, b] = hex_rgb(&s.color);
-    let o = s.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+    // the outline and the inside each have their own colour and opacity (Stroke % / Fill %)
+    let [r, g, b] = hex_rgb(s.stroke_col());
+    let o = s.stroke_alpha();
     let [r, g, b, a] = super::presence::gcol(ctx, gid, [r, g, b, (o * 255.0) as u8]).to_srgba_unmultiplied();
     let o = a as f32 / 255.0;
+    let [fr, fg, fb] = hex_rgb(&s.color);
+    let [fr, fg, fb, fa] = super::presence::gcol(ctx, gid.with("fc"), [fr, fg, fb, (s.fill_alpha() * 255.0) as u8]).to_srgba_unmultiplied();
+    let fo = fa as f32 / 255.0;
     // fill / outline turned on and off fade
     let fk = gf(ctx, gid.with("f"), if s.fill { 1.0 } else { 0.0 });
     let sk = gf(ctx, gid.with("s"), if s.no_stroke { 0.0 } else { 1.0 });
     let col = rgba(r, g, b, (o * sk * 255.0) as u8);
-    let fill_col = rgba(r, g, b, (s.fill_alpha() * fk * 255.0) as u8);
+    let fill_col = rgba(fr, fg, fb, (fo * fk * 255.0) as u8);
     let pts: Vec<Pos2> = s.points.iter().map(|q| map(*q)).collect();
     let zk = width / s.width.max(0.01);
     // No floor: a line keeps its size relative to the board at any zoom (too thin to draw
@@ -130,7 +134,7 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
     let inset = |w: f32| spk * w / 2.0;
     // Gradient fill: the fill's own shape drawn in white, then given the gradient
     // (canvas/gradient.rs); its box is the object's, so the handles stretch with it
-    let grad_k = o * fk;
+    let grad_k = fo * fk;
     let paint_fill = |mk: &dyn Fn(Color32) -> Shape| match &s.gradient {
         Some(g) => super::gradient::fill(p, mk(Color32::WHITE), g, Rect::from_points(&pts), grad_k),
         None => {
@@ -142,18 +146,23 @@ fn paint_stroke_plain(p: &egui::Painter, s: &Stroke, map: impl Fn(Pt) -> Pos2, w
         // flattened on screen, finer the bigger it's drawn, so curves stay smooth when zoomed in
         let pts = super::path_mesh::flatten(s, &map);
         let n = pts.len();
+        // only the part on screen is built (plus the line's reach), so a huge path zoomed in
+        // costs what shows, not the whole thing
+        let view = p.clip_rect().expand(width.abs() + 8.0);
+        let bbox = Rect::from_points(&pts);
+        let cut = |v: Vec<Pos2>| if view.contains_rect(bbox.expand(width.abs())) { v } else { super::path_mesh::clip_closed(&v, view) };
         if s.closed && n > 3 {
             if fk > 0.001 {
                 let ppp = ctx.pixels_per_point();
                 match &s.gradient {
-                    Some(g) => super::gradient::fill(p, Shape::mesh(super::path_mesh::fill(&pts[..n - 1], Color32::WHITE, ppp)), g, Rect::from_points(&pts), grad_k),
+                    Some(g) => super::gradient::fill(p, Shape::mesh(super::path_mesh::fill(&cut(pts[..n - 1].to_vec()), Color32::WHITE, ppp)), g, bbox, grad_k),
                     None => {
-                        p.add(super::path_mesh::fill(&pts[..n - 1], fill_col, ppp));
+                        p.add(super::path_mesh::fill(&cut(pts[..n - 1].to_vec()), fill_col, ppp));
                     }
                 }
             }
             if sk > 0.001 {
-                p.add(super::path_mesh::line(&offset_closed(&pts[..n - 1], inset(width)), width, col, true, ctx.pixels_per_point()));
+                p.add(super::path_mesh::line(&cut(offset_closed(&pts[..n - 1], inset(width))), width, col, true, ctx.pixels_per_point()));
             }
         } else {
             p.add(super::path_mesh::line(&pts, width, col, false, ctx.pixels_per_point()));

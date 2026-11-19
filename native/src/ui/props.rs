@@ -12,8 +12,8 @@ use crate::image_edit::{ImageEdit, ADJUST_ROWS, SPIN_ROW, TILT_ROWS};
 use crate::*;
 
 /// Field height
-const FH: f32 = 26.0;
-const GAP: f32 = 6.0;
+pub(super) const FH: f32 = 26.0;
+pub(super) const GAP: f32 = 6.0;
 /// Card padding and distance from the canvas edges
 const PAD: f32 = 10.0;
 /// Card width with something selected (slim, like Figma's)
@@ -21,14 +21,22 @@ const CARD_W: f32 = 228.0;
 const EDGE: f32 = 12.0;
 const HINT: &str = "Select something to see its properties";
 
-enum PAct {
+pub(super) enum PAct {
     /// key, value, first change of this edit (takes the undo step)
     Num(&'static str, f32, bool),
     /// width and height together (aspect lock)
     Size(f32, f32, bool),
     Align(Align),
     Dist(bool),
-    Color(String),
+    /// Fill / Stroke rows and their paint panels: colour, how solid (first change), on / off
+    FillColor(String),
+    StrokeColor(String),
+    FillPct(f32, bool),
+    StrokePct(f32, bool),
+    FillOn(bool),
+    StrokeOn(bool),
+    /// Flip the selected shapes: horizontally (true) or vertically
+    Flip(bool),
     StrokePos(u8),
     /// arrow head style / line ends (canvas/arrow_mesh.rs)
     Tip(u8),
@@ -60,156 +68,198 @@ const BLEND_ICONS: [&str; 12] = [
     "blend-normal", "blend-multiply", "blend-screen", "blend-overlay", "blend-darken", "blend-lighten", "blend-color-dodge", "blend-color-burn", "blend-hard-light", "blend-soft-light", "blend-difference", "blend-exclusion",
 ];
 
-/// A colour chip and its hex inside `r` (a field-style row). The colour glides to a new one
-/// (so switching gradient stops eases rather than snaps); "none" shows as an empty chip
-fn color_chip(ctx: &egui::Context, p: &egui::Painter, id: egui::Id, r: Rect, color: &str, hl: f32, label: bool, a: f32) {
-    let none = color == "none";
-    let c = hex(if none { "#000000" } else { color });
-    let ch = |k: &str, v: u8| super::micro::glide(ctx, id.with(k), v as f32, false).round().clamp(0.0, 255.0) as u8;
-    let g = Color32::from_rgb(ch("r", c.r()), ch("g", c.g()), ch("b", c.b()));
-    if g != c {
-        ctx.request_repaint();
+/// A Fill or Stroke row: its colour chip and hex (or the gradient and its type), how solid it
+/// is, and a minus to take it off. Click the chip for the paint panel `pid`, double-click a
+/// solid one to type its hex. True when this click opened the panel
+#[allow(clippy::too_many_arguments)]
+fn paint_row(ui: &mut egui::Ui, id: egui::Id, r: Rect, color: &str, grad: Option<&Gradient>, pct: f32, removable: bool, stroke: bool, pid: egui::Id, a: f32, out: &mut Vec<PAct>) -> bool {
+    let ctx = ui.ctx().clone();
+    let del_w = if removable { 26.0 } else { 0.0 };
+    let pct_w = 64.0;
+    let chip_r = Rect::from_min_max(r.min, pos2(r.max.x - pct_w - 4.0 - if removable { del_w + 4.0 } else { 0.0 }, r.max.y));
+    let pct_r = Rect::from_min_size(pos2(chip_r.max.x + 4.0, r.min.y), vec2(pct_w, r.height()));
+    let open = super::paint_panel::is_open(&ctx, pid);
+    let open_k = ease(&ctx, id.with("open"), open);
+    let chip = Rect::from_center_size(pos2(chip_r.min.x + 14.0, chip_r.center().y), vec2(14.0, 14.0));
+    let mut opened = false;
+    match grad {
+        Some(g) => {
+            let resp = ui.interact(chip_r, id.with("chip"), Sense::click());
+            let (hh, pp) = hover_fx(&ctx, &resp, true);
+            let p = ui.painter();
+            p.rect_filled(chip_r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+            p.rect_filled(chip_r, 6.0, hover_fill(hh.max(open_k * 0.6), pp).gamma_multiply(a));
+            // a small swatch of the gradient and its type
+            // a fine grid whose corner points are pulled onto the stroke's 3 px corners (as the
+            // colour square, color_picker::round_in), so nothing pokes past it
+            let mut m = egui::Mesh::default();
+            const N: u32 = 16;
+            for j in 0..=N {
+                for k in 0..=N {
+                    let t = k as f32 / N as f32;
+                    let c = crate::canvas::gradient::color32_at(g, t).gamma_multiply(a);
+                    let q = pos2(chip.min.x + t * chip.width(), chip.min.y + j as f32 / N as f32 * chip.height());
+                    m.colored_vertex(super::color_picker::round_in(q, chip, 3.0), c);
+                }
+            }
+            for j in 0..N {
+                for k in 0..N {
+                    let q = j * (N + 1) + k;
+                    m.add_triangle(q, q + 1, q + N + 1);
+                    m.add_triangle(q + 1, q + N + 2, q + N + 1);
+                }
+            }
+            p.add(egui::Shape::mesh(m));
+            p.rect_stroke(chip, 3.0, EStroke::new(1.0_f32, wa((60.0 * a) as u8)));
+            let name = crate::canvas::gradient::KINDS.get(g.kind as usize).copied().unwrap_or("Gradient");
+            p.with_clip_rect(chip_r.shrink(1.0)).text(pos2(chip.max.x + 7.0, chip_r.center().y), Align2::LEFT_CENTER, name, FontId::proportional(12.0), mix(gray_ui(200), txt(), hh.max(open_k)).gamma_multiply(a));
+            if resp.clicked() {
+                opened = !open;
+                super::paint_panel::toggle(&ctx, pid);
+            }
+        }
+        None => {
+            let cell = super::hex_cell::show(ui, id.with("cell"), chip_r, color, open_k, 0.0, a);
+            if cell.square {
+                opened = !open;
+                super::paint_panel::toggle(&ctx, pid);
+            }
+            if let Some(c) = cell.typed {
+                out.push(if stroke { PAct::StrokeColor(c) } else { PAct::FillColor(c) });
+            }
+        }
     }
-    let chip = if label { Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0)) } else { Rect::from_center_size(r.center(), vec2(16.0, 16.0)) };
-    if none {
-        p.line_segment([chip.left_bottom() + vec2(2.0, -2.0), chip.right_top() + vec2(-2.0, 2.0)], EStroke::new(1.5_f32, hex("#ef4444").gamma_multiply(a)));
-    } else {
-        p.rect_filled(chip, 3.0, g.gamma_multiply(a));
+    if let Some((v, f1)) = field(ui, id.with("pct"), pct_r, "", pct, "%", 0.5, 0.0, 100.0, true, a) {
+        out.push(if stroke { PAct::StrokePct(v, f1) } else { PAct::FillPct(v, f1) });
     }
-    p.rect_stroke(chip, 3.0, EStroke::new(1.0_f32, wa((60.0 * a) as u8)));
-    if !label {
-        return;
-    }
-    let label = if none { "None".to_string() } else { format!("{:02X}{:02X}{:02X}", g.r(), g.g(), g.b()) };
-    p.with_clip_rect(r.shrink(1.0)).text(pos2(chip.max.x + 7.0, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.0), mix(gray_ui(200), txt(), hl).gamma_multiply(a));
+    super::svg_icons::draw(ui.painter(), "opacity", pos2(pct_r.min.x + 14.0, pct_r.center().y), 14.0, txt_dim().gamma_multiply(a));
+    // the minus in the last `del_w` is the section's own plus / minus (`plus_minus`)
+    opened
 }
 
-/// A gradient's colours as a bar the full width of the panel (over a checkerboard, so
-/// see-through stops show) with its stops as dots on it: click a dot to pick it, drag it
-/// along, drag it down off the bar (or right-click it) to remove it, click the bar to add one
-fn gradient_bar(ui: &mut egui::Ui, id: egui::Id, r: Rect, g: &Gradient, pick: Option<usize>, a: f32, out: &mut Vec<PAct>) {
+/// Rows that grow in when `on` turns on and fold away when it turns off (a section's Fill /
+/// Stroke rows on its plus / minus): drawn into the returned child, revealed from the top
+/// down and faded on the shared `ease`, while the room under it opens / closes to match.
+/// Pair with `fold_end`. None once fully folded away
+pub(super) fn fold_begin(ui: &mut egui::Ui, id: egui::Id, on: bool) -> Option<(egui::Ui, f32)> {
     let ctx = ui.ctx().clone();
-    let p = ui.painter().clone();
-    let bar = Rect::from_min_size(r.min, vec2(r.width(), 22.0));
-    // the colours run between the dots' outermost spots; the ends carry the end colours on
-    // (inset enough that an end dot, grown and ringed, stays inside the panel)
-    let ramp = bar.shrink2(vec2(14.0, 0.0));
-    let cp = p.with_clip_rect(bar.shrink(1.0).intersect(p.clip_rect()));
-    let sq = 5.5;
-    let mut x = bar.min.x;
-    let mut i = 0;
-    while x < bar.max.x {
-        let mut y = bar.min.y;
-        let mut j = 0;
-        while y < bar.max.y {
-            let c = if (i + j) % 2 == 0 { gray_ui(70) } else { gray_ui(110) };
-            cp.rect_filled(Rect::from_min_size(pos2(x, y), vec2(sq, sq)), 0.0, c.gamma_multiply(a));
-            y += sq;
-            j += 1;
-        }
-        x += sq;
-        i += 1;
+    let k = ease(&ctx, id.with("k"), on);
+    if k <= 0.001 {
+        return None;
     }
-    let c0 = crate::canvas::gradient::color32_at(g, 0.0).gamma_multiply(a);
-    let c1 = crate::canvas::gradient::color32_at(g, 1.0).gamma_multiply(a);
-    p.rect_filled(Rect::from_min_max(bar.min, pos2(ramp.min.x + 1.0, bar.max.y)), Rounding { nw: 6.0, sw: 6.0, ne: 0.0, se: 0.0 }, c0);
-    p.rect_filled(Rect::from_min_max(pos2(ramp.max.x - 1.0, bar.min.y), bar.max), Rounding { nw: 0.0, sw: 0.0, ne: 6.0, se: 6.0 }, c1);
-    let mut m = egui::Mesh::default();
-    const N: usize = 64;
-    for k in 0..=N {
-        let t = k as f32 / N as f32;
-        let c = crate::canvas::gradient::color32_at(g, t).gamma_multiply(a);
-        let x = ramp.min.x + t * ramp.width();
-        m.colored_vertex(pos2(x, bar.min.y), c);
-        m.colored_vertex(pos2(x, bar.max.y), c);
-        if k > 0 {
-            let q = (k * 2) as u32;
-            m.add_triangle(q - 2, q - 1, q);
-            m.add_triangle(q - 1, q + 1, q);
-        }
-    }
-    p.add(egui::Shape::mesh(m));
-    p.rect_stroke(bar.shrink(0.5), 5.5, EStroke::new(1.0_f32, wa((40.0 * a) as u8)));
+    let h: f32 = ctx.data(|d| d.get_temp(id.with("h"))).unwrap_or(0.0);
+    let top = ui.cursor().min;
+    let w = ui.available_width();
+    let mut sub = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(top, vec2(w, 1e5))).layout(egui::Layout::top_down(egui::Align::Min)));
+    let cl = ui.clip_rect();
+    let shown = if h > 0.0 { h * k } else { 1e5 };
+    // a little slack: rows sit 2 px in, and strokes on their edges stay whole
+    sub.set_clip_rect(Rect::from_min_max(pos2(cl.min.x, top.y - 2.0), pos2(cl.max.x, top.y + shown + 2.0)).intersect(cl));
+    sub.multiply_opacity(k);
+    Some((sub, k))
+}
 
-    let x_of = |t: f32| ramp.min.x + t.clamp(0.0, 1.0) * ramp.width();
-    let t_of = |x: f32| ((x - ramp.min.x) / ramp.width()).clamp(0.0, 1.0);
-    let resp = ui.interact(bar.expand2(vec2(0.0, 4.0)), id, Sense::click_and_drag()).on_hover_text("Click to add a stop · drag a dot down to remove it");
-    let hov = resp.hover_pos();
-    let near = |q: Pos2| g.stops.iter().enumerate().map(|(j, s)| (j, (x_of(s.at) - q.x).abs())).filter(|(_, d)| *d < 11.0).min_by(|x, y| x.1.total_cmp(&y.1)).map(|(j, _)| j);
-    let held_id = id.with("held");
-    let held_prev: Option<(usize, f32)> = ctx.data(|d| d.get_temp(held_id));
-    let down = resp.is_pointer_button_down_on();
-    let q_now = ctx.input(|i| i.pointer.latest_pos());
-    // pressed on a dot: it's picked and held at once, remembering how far off its middle the
-    // pointer was, so it moves with the pointer from the first pixel and never jumps
-    let mut held = held_prev;
-    if down && held.is_none() && ctx.input(|i| i.pointer.primary_pressed()) {
-        if let Some(q) = q_now {
-            if let Some(j) = near(q) {
-                out.push(PAct::GPick(j));
-                held = Some((j, x_of(g.stops[j].at) - q.x));
-                ctx.data_mut(|d| d.insert_temp(held_id, held.unwrap()));
-            }
+/// Ends `fold_begin`: remembers how tall the rows are and takes that much room, times how open
+pub(super) fn fold_end(ui: &mut egui::Ui, id: egui::Id, sub: egui::Ui, k: f32) {
+    let h = sub.min_rect().height();
+    ui.ctx().data_mut(|d| d.insert_temp(id.with("h"), h));
+    let w = ui.available_width();
+    ui.allocate_exact_size(vec2(w, h * k), Sense::hover());
+}
+
+/// A dark box split into icon buttons (the Position section's alignment): (code, tip) each;
+/// codes 0-5 are the align icons, 6 / 7 even spacing across / down. Returns the clicked code
+fn btn_box(ui: &mut egui::Ui, id: egui::Id, r: Rect, btns: &[(u8, &str)], a: f32) -> Option<u8> {
+    let ctx = ui.ctx().clone();
+    ui.painter().rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+    let cw = r.width() / btns.len().max(1) as f32;
+    let mut out = None;
+    for (j, (code, tip)) in btns.iter().enumerate() {
+        let br = Rect::from_min_size(pos2(r.min.x + j as f32 * cw, r.min.y), vec2(cw, r.height())).shrink(2.0);
+        let resp = ui.interact(br, id.with(j), Sense::click()).on_hover_text(*tip);
+        let (hh, pp) = hover_fx(&ctx, &resp, true);
+        let p = ui.painter();
+        p.rect_filled(br, 5.0, hover_fill(hh, pp).gamma_multiply(a));
+        let col = mix(txt_dim(), hi(), hh).gamma_multiply(a);
+        if *code < 6 {
+            super::icons::align(p, br.center(), 14.0, col, *code);
+        } else {
+            super::icons::distribute(p, br.center(), 14.0, col, *code == 6);
+        }
+        if resp.clicked() {
+            out = Some(*code);
         }
     }
-    // dragged down off the bar: it's going to be removed (needs two left)
-    let off = |q: Pos2| q.y > bar.max.y + 22.0 && g.stops.len() > 2;
-    if down {
-        if let (Some((j, dx)), Some(q)) = (held, q_now) {
-            let t = t_of(q.x + dx);
-            if !off(q) && (t - g.stops[j].at).abs() > 1e-4 {
-                out.push(PAct::GMove(j, t));
-            }
-        }
-    } else if let Some((j, _)) = held {
-        // let go
-        if q_now.is_some_and(off) {
-            out.push(PAct::GDel(j));
-        }
-        ctx.data_mut(|d| d.remove::<(usize, f32)>(held_id));
-        ctx.data_mut(|d| d.remove::<bool>(id.with("gmv")));
-    }
-    if resp.clicked() && held_prev.is_none() && held.is_none() {
-        if let Some(q) = resp.interact_pointer_pos() {
-            if near(q).is_none() {
-                out.push(PAct::GAdd(t_of(q.x)));
-            }
+    out
+}
+
+/// The flip buttons in a dark box (dimmed when nothing selected can flip yet)
+fn flip_box(ui: &mut egui::Ui, id: egui::Id, r: Rect, btns: &[(u8, &str)], en: bool, a: f32) -> Option<u8> {
+    let ctx = ui.ctx().clone();
+    ui.painter().rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+    let cw = r.width() / btns.len().max(1) as f32;
+    let en_k = ease(&ctx, id.with("en"), en);
+    let mut out = None;
+    for (j, (code, tip)) in btns.iter().enumerate() {
+        let br = Rect::from_min_size(pos2(r.min.x + j as f32 * cw, r.min.y), vec2(cw, r.height())).shrink(2.0);
+        let resp = ui.interact(br, id.with(j), Sense::click()).on_hover_text(*tip);
+        let (hh, pp) = hover_fx(&ctx, &resp, en);
+        let p = ui.painter();
+        p.rect_filled(br, 5.0, hover_fill(hh, pp).gamma_multiply(a));
+        let col = mix(txt_dim(), hi(), hh).gamma_multiply(a * (0.35 + 0.65 * en_k));
+        super::svg_icons::draw(p, if *code == 0 { "flip-horizontal" } else { "flip-vertical" }, br.center(), 15.0, col);
+        if en && resp.clicked() {
+            out = Some(*code);
         }
     }
-    if resp.secondary_clicked() {
-        if let Some(j) = resp.interact_pointer_pos().and_then(near).filter(|_| g.stops.len() > 2) {
-            out.push(PAct::GDel(j));
-        }
+    out
+}
+
+/// A section's add / remove button: a plus on its heading while it has none, a minus at the
+/// end of its row once it has one. It is one button: adding glides it from the heading down
+/// to the row while the plus's upright stroke folds away into the minus (and back on removal).
+/// `at`: where it rests now (None: no button, it fades out). True when clicked
+fn plus_minus(ui: &mut egui::Ui, id: egui::Id, at: Option<Rect>, on: bool, tip: &str, a: f32) -> bool {
+    let ctx = ui.ctx().clone();
+    let last: Option<Rect> = ctx.data(|d| d.get_temp(id.with("at")));
+    let tgt = at.or(last).unwrap_or(Rect::NOTHING);
+    if !tgt.is_positive() {
+        return false;
     }
-    let held = if down { held.map(|h| h.0) } else { None };
-    let going = held.is_some() && q_now.is_some_and(off);
-    for (j, st) in g.stops.iter().enumerate() {
-        let leaving = ease(&ctx, id.with(("off", j)), going && held == Some(j));
-        let mut c = pos2(x_of(st.at), bar.center().y);
-        if leaving > 0.001 {
-            if let Some(q) = q_now {
-                c = c.lerp(q, leaving);
-            }
-        }
-        let hh = ease(&ctx, id.with(("hv", j)), hov.is_some_and(|q| (q.x - c.x).abs() < 11.0));
-        let on = ease(&ctx, id.with(("on", j)), pick == Some(j));
-        let rad = 6.0 + 1.0 * hh + 1.0 * on;
-        let fa = a * (1.0 - 0.6 * leaving);
-        p.circle_filled(c + vec2(0.0, 1.0), rad + 1.5, Color32::from_black_alpha((110.0 * fa) as u8));
-        p.circle_filled(c, rad + 1.5, mix(Color32::WHITE, blue(), on).gamma_multiply(fa));
-        p.circle_filled(c, rad - 0.5, hex(&st.color).gamma_multiply(fa));
+    ctx.data_mut(|d| d.insert_temp(id.with("at"), tgt));
+    let vis = ease(&ctx, id.with("vis"), at.is_some());
+    if vis <= 0.001 {
+        return false;
     }
-    // the hand only while a dot is being dragged
-    if held.is_some() {
-        ctx.set_cursor_icon(CursorIcon::Grabbing);
+    let x = super::micro::glide(&ctx, id.with("x"), tgt.center().x, false);
+    let y = super::micro::glide(&ctx, id.with("y"), tgt.center().y, false);
+    let r = Rect::from_center_size(pos2(x, y), tgt.size());
+    let resp = ui.interact(r, id, Sense::click()).on_hover_text(tip);
+    let (hh, pp) = hover_fx(&ctx, &resp, at.is_some());
+    let k = ease(&ctx, id.with("minus"), on);
+    let p = ui.painter();
+    let a = a * vis;
+    p.rect_filled(r, 6.0, hover_fill(hh, pp).gamma_multiply(a));
+    let col = mix(txt_dim(), hi(), hh).gamma_multiply(a);
+    let c = r.center();
+    let h = 5.5;
+    let st = EStroke::new(1.4_f32, col);
+    p.line_segment([c - vec2(h, 0.0), c + vec2(h, 0.0)], st);
+    // the upright folds into the crossbar (turning a quarter as it goes)
+    let up = 1.0 - k;
+    if up > 0.01 {
+        let ang = k * std::f32::consts::FRAC_PI_2;
+        let d = vec2(ang.sin(), ang.cos()) * h * up;
+        p.line_segment([c - d, c + d], st);
     }
+    at.is_some() && resp.clicked()
 }
 
 /// Figma-style number field: label left, value right. Drag sideways to scrub, double-click
 /// to type (num_edit.rs, like the bars); the shown number counts to a new value.
 /// `liquid`: fills with the accent up to the value on hover, like the bars' opacity.
 #[allow(clippy::too_many_arguments)]
-fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: &str, per_px: f32, lo: f32, hi: f32, liquid: bool, a: f32) -> Option<(f32, bool)> {
+pub(super) fn field(ui: &mut egui::Ui, id: egui::Id, r: Rect, label: &str, val: f32, unit: &str, per_px: f32, lo: f32, hi: f32, liquid: bool, a: f32) -> Option<(f32, bool)> {
     let ctx = ui.ctx().clone();
     let p = ui.painter().clone();
     p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
@@ -419,8 +469,60 @@ impl App {
             Kind::Note => "Note",
             Kind::Link => "Link",
         };
+        // Paint: the Fill and Stroke rows (colour, how solid, on or off, can it come off)
+        let mut fill_on = true;
+        let mut fill_pct = 100.0;
+        let mut fill_rm = false;
+        let mut stroke_paint: Option<(String, f32, bool, bool)> = None;
+        match kind {
+            Kind::Group => {
+                if let Some(g) = self.board.group_cards.iter().find(|g| g.id == id) {
+                    let plain = g.color.is_empty() || g.color.eq_ignore_ascii_case("#1e293b");
+                    fill_on = !g.color.eq_ignore_ascii_case("none");
+                    // the default panel grey, as it's drawn
+                    if plain {
+                        fill = Some("#242424".into());
+                    }
+                    fill_pct = (g.fill_opacity.unwrap_or(1.0) * 100.0).round();
+                    fill_rm = true;
+                    // no border colour of its own: the shade it's drawn in (canvas/paint.rs)
+                    let sc = g.stroke_color.clone().unwrap_or_else(|| {
+                        let c = if fill_on && !plain {
+                            let [r, gg, b] = hex_rgb(&g.color);
+                            mix(Color32::from_rgb(r, gg, b), Color32::BLACK, 0.25)
+                        } else {
+                            let [r, gg, b, _] = wa(48).to_srgba_unmultiplied();
+                            Color32::from_rgb(r, gg, b)
+                        };
+                        format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())
+                    });
+                    stroke_paint = Some((sc, (g.stroke_opacity.unwrap_or(1.0) * 100.0).round(), g.border.unwrap_or(1.0) > 0.0, true));
+                }
+            }
+            Kind::Stroke => {
+                if let Some(st) = self.find_stroke(&id) {
+                    let closed = st.takes_fill();
+                    if closed {
+                        fill_on = st.fill;
+                        fill_pct = (st.fill_alpha() * 100.0).round();
+                        fill_rm = true;
+                    } else {
+                        fill = None;
+                    }
+                    stroke_paint = Some((st.stroke_col().to_string(), (st.stroke_alpha() * 100.0).round(), !closed || !st.no_stroke, closed));
+                }
+            }
+            Kind::Text => fill_pct = opacity,
+            _ => {}
+        }
+        let recent = self.board.recent_colors.clone();
+        // a paint panel follows the selection only while it stays the same
+        let last: Option<String> = ctx.data(|d| d.get_temp(bid.with("paint_for")));
+        if last.as_deref() != Some(id.as_str()) {
+            super::paint_panel::close(ctx);
+            ctx.data_mut(|d| d.insert_temp(bid.with("paint_for"), id.clone()));
+        }
         let n_sel = self.selected.len();
-        let is_group = kind == Kind::Group;
         // Gradient fill: frames and closed shapes / paths (canvas/gradient.rs)
         let can_grad = single
             && match kind {
@@ -453,7 +555,9 @@ impl App {
             #[allow(deprecated)]
             ui.allocate_ui_at_rect(cr, |ui| {
                 ui.set_clip_rect(cr);
-                egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(cr.height()).show(ui, |ui| {
+                // no scrollbar: the card grows to fit its rows (it only flashed in for a frame while the
+                // card was still growing after a + ); a card taller than the window still scrolls by wheel
+                egui::ScrollArea::vertical().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).auto_shrink([false, false]).max_height(cr.height()).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     let w = ui.available_width() - 4.0;
                     let y_top = ui.min_rect().min.y;
@@ -508,9 +612,18 @@ impl App {
                     }
 
                     // Title: what's selected
-                    let (r, a) = row(ui, 22.0);
+                    let (r, a) = row(ui, FH);
                     let label = if n_sel > 1 { format!("{title}  ·  {n_sel} selected") } else { title.to_string() };
-                    ui.painter().text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), gray_ui(235).gamma_multiply(a));
+                    let blend_on = tab == 0 && crate::canvas::layers::available();
+                    let tclip = if blend_on { Rect::from_min_max(r.min, pos2(r.max.x - 32.0, r.max.y)) } else { r };
+                    ui.painter().with_clip_rect(tclip.intersect(ui.clip_rect())).text(pos2(r.min.x, r.center().y), Align2::LEFT_CENTER, label, FontId::proportional(12.5), gray_ui(235).gamma_multiply(a));
+                    // Blend mode, on the title's right: just its icon (the names are in the list)
+                    if blend_on {
+                        let br = Rect::from_min_max(pos2(r.max.x - FH, r.min.y), r.max);
+                        if let Some(j) = super::panel_drop::dropdown_bar_ex(ui, bid.with("blend_dd"), br, &crate::canvas::layers::BLENDS, &BLEND_ICONS, blend_now as usize, "Blend mode", true, a) {
+                            out.push(PAct::Blend(j as u8));
+                        }
+                    }
                     let mut first = false;
 
                     // Animate: a placeholder (prototype-style interactions come later)
@@ -579,28 +692,74 @@ impl App {
                         }
                     }
 
-                    // Position and size (one object, not one the frame arranges)
-                    if design && single && !locked {
+                    // Position: lining up in the frame, where it is, its turn and flips; then its size
+                    if design && ((single && !locked) || align) {
                         head(ui, &mut row, "Position", first);
                         first = false;
-                        let (r, a) = row(ui, FH);
-                        let (l, rr) = halves(r);
-                        if let Some((v, f1)) = field(ui, bid.with("x"), l, "X", r0[0], "", 1.0, -1e6, 1e6, false, a) {
-                            out.push(PAct::Num("x", v, f1));
-                        }
-                        if let Some((v, f1)) = field(ui, bid.with("y"), rr, "Y", r0[1], "", 1.0, -1e6, 1e6, false, a) {
-                            out.push(PAct::Num("y", v, f1));
-                        }
-                        // A picture's flat rotation (its own control, out of the 3D rows)
-                        if let Some(e) = &edit {
-                            gap(ui);
+                        // Alignment: two dark boxes, across (+ even spacing) and down (+ even spacing)
+                        if align {
                             let (r, a) = row(ui, FH);
-                            let (fk, name, lo, hi) = SPIN_ROW;
-                            if let Some((nv, f1)) = field(ui, bid.with("spin"), r, name, e.spin, "°", 0.5, lo, hi, false, a) {
-                                out.push(PAct::Edit(fk, nv, f1));
+                            let (l, rr) = halves(r);
+                            let three = targets.len() >= 3;
+                            let mut across: Vec<(u8, &str)> = vec![(0, "Align left"), (1, "Align centre"), (2, "Align right")];
+                            let mut down: Vec<(u8, &str)> = vec![(3, "Align top"), (4, "Align middle"), (5, "Align bottom")];
+                            if three {
+                                across.push((6, "Space across"));
+                                down.push((7, "Space down"));
+                            }
+                            for (bx, btns) in [(l, across), (rr, down)] {
+                                if let Some(code) = btn_box(ui, bid.with(("al_box", bx.min.x as i32)), bx, &btns, a) {
+                                    out.push(match code {
+                                        0 => PAct::Align(Align::Left),
+                                        1 => PAct::Align(Align::HCenter),
+                                        2 => PAct::Align(Align::Right),
+                                        3 => PAct::Align(Align::Top),
+                                        4 => PAct::Align(Align::VCenter),
+                                        5 => PAct::Align(Align::Bottom),
+                                        c => PAct::Dist(c == 6),
+                                    });
+                                }
                             }
                         }
-                        if kind != Kind::Text {
+                        if single && !locked {
+                            if align {
+                                gap(ui);
+                            }
+                            let (r, a) = row(ui, FH);
+                            let (l, rr) = halves(r);
+                            if let Some((v, f1)) = field(ui, bid.with("x"), l, "X", r0[0], "", 1.0, -1e6, 1e6, false, a) {
+                                out.push(PAct::Num("x", v, f1));
+                            }
+                            if let Some((v, f1)) = field(ui, bid.with("y"), rr, "Y", r0[1], "", 1.0, -1e6, 1e6, false, a) {
+                                out.push(PAct::Num("y", v, f1));
+                            }
+                            // Rotation (pictures turn for now; the rest later) and the flips
+                            gap(ui);
+                            let (r, a) = row(ui, FH);
+                            let (l, rr) = halves(r);
+                            match &edit {
+                                Some(e) => {
+                                    let (fk, _, lo, hi) = SPIN_ROW;
+                                    if let Some((nv, f1)) = field(ui, bid.with("spin"), l, "", e.spin, "°", 0.5, lo, hi, false, a) {
+                                        out.push(PAct::Edit(fk, nv, f1));
+                                    }
+                                    super::svg_icons::draw(ui.painter(), "rotate-cw", pos2(l.min.x + 15.0, l.center().y), 14.0, txt_dim().gamma_multiply(a));
+                                }
+                                None => {
+                                    ui.interact(l, bid.with("rot_soon"), Sense::hover()).on_hover_text("Rotation: pictures for now, shapes soon");
+                                    let p = ui.painter();
+                                    p.rect_filled(l, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
+                                    super::svg_icons::draw(p, "rotate-cw", pos2(l.min.x + 15.0, l.center().y), 14.0, txt_dim().gamma_multiply(a * 0.45));
+                                    p.text(pos2(l.max.x - 8.0, l.center().y), Align2::RIGHT_CENTER, "0°", FontId::proportional(12.0), gray_ui(225).gamma_multiply(a * 0.4));
+                                }
+                            }
+                            let can = self.can_flip();
+                            let flips: [(u8, &str); 2] = if can { [(0, "Flip horizontal"), (1, "Flip vertical")] } else { [(0, "Flip horizontal (shapes only for now)"), (1, "Flip vertical (shapes only for now)")] };
+                            if let Some(c) = flip_box(ui, bid.with("flip_box"), rr, &flips, can, a) {
+                                out.push(PAct::Flip(c == 0));
+                            }
+                        }
+                        if single && !locked && kind != Kind::Text {
                             head(ui, &mut row, "Size", false);
                             let (r, a) = row(ui, FH);
                             // W, the aspect lock, H
@@ -630,241 +789,123 @@ impl App {
                         }
                     }
 
-                    // Align inside the frame
-                    if design && align {
-                        head(ui, &mut row, "Align", first);
-                        first = false;
-                        let mut btns: Vec<(u8, &str)> = vec![(0, "Left"), (1, "Centre"), (2, "Right"), (3, "Top"), (4, "Middle"), (5, "Bottom")];
-                        if targets.len() >= 3 {
-                            btns.push((6, "Space across"));
-                            btns.push((7, "Space down"));
-                        }
-                        let (r, a) = row(ui, 28.0);
-                        let cw = r.width() / btns.len() as f32;
-                        for (j, (code, tip)) in btns.into_iter().enumerate() {
-                            let br = Rect::from_min_size(pos2(r.min.x + j as f32 * cw, r.min.y), vec2(cw, r.height())).shrink2(vec2(1.5, 0.0));
-                            let resp = ui.interact(br, bid.with(("al", code)), Sense::click()).on_hover_text(tip);
-                            let (hh, pp) = hover_fx(ctx, &resp, true);
-                            let p = ui.painter();
-                            p.rect_filled(br, 6.0, hover_fill(hh, pp).gamma_multiply(a));
-                            let col = mix(txt_dim(), txt(), hh).gamma_multiply(a);
-                            if code < 6 {
-                                super::icons::align(p, br.center(), 15.0, col, code);
-                            } else {
-                                super::icons::distribute(p, br.center(), 15.0, col, code == 6);
-                            }
-                            if resp.clicked() {
-                                out.push(match code {
-                                    0 => PAct::Align(Align::Left),
-                                    1 => PAct::Align(Align::HCenter),
-                                    2 => PAct::Align(Align::Right),
-                                    3 => PAct::Align(Align::Top),
-                                    4 => PAct::Align(Align::VCenter),
-                                    5 => PAct::Align(Align::Bottom),
-                                    c => PAct::Dist(c == 6),
-                                });
-                            }
-                        }
-                    }
-
-                    // Layer: opacity (+ corners)
                     if design {
-                    head(ui, &mut row, "Layer", first);
-                    first = false;
-                    let (r, a) = row(ui, FH);
-                    let (l, rr) = if corner.is_some() { halves(r) } else { (r, Rect::NOTHING) };
-                    if let Some((v, f1)) = field(ui, bid.with("op"), l, "Opacity", opacity, "%", 0.5, 0.0, 100.0, true, a) {
-                        out.push(PAct::Num("opacity", v, f1));
-                    }
-                    if let Some(c) = corner {
-                        if let Some((v, f1)) = field(ui, bid.with("cr"), rr, "Corners", c, "", 0.25, 0.0, if kind == Kind::Image { 500.0 } else { 60.0 }, false, a) {
-                            out.push(PAct::Num("corner", v, f1));
+                    // Corners (and a picture's / note's opacity): under the size
+                    let show_op = matches!(kind, Kind::Image | Kind::Note | Kind::Link);
+                    if corner.is_some() || show_op {
+                        if single && !locked && kind != Kind::Text {
+                            gap(ui);
+                        } else {
+                            head(ui, &mut row, if corner.is_some() { "Corners" } else { "Opacity" }, first);
+                            first = false;
                         }
-                    }
-                    // Blend mode: a dropdown that floats over the panel (ui/panel_drop.rs)
-                    if crate::canvas::layers::available() {
-                        gap(ui);
                         let (r, a) = row(ui, FH);
-                        if let Some(j) = super::panel_drop::dropdown_icons(ui, bid.with("blend_dd"), r, "Blend", &crate::canvas::layers::BLENDS, &BLEND_ICONS, blend_now as usize, a) {
-                            out.push(PAct::Blend(j as u8));
+                        let (l, rr) = if corner.is_some() && show_op { halves(r) } else { (r, r) };
+                        if show_op {
+                            if let Some((v, f1)) = field(ui, bid.with("op"), l, "Opacity", opacity, "%", 0.5, 0.0, 100.0, true, a) {
+                                out.push(PAct::Num("opacity", v, f1));
+                            }
+                        }
+                        if let Some(c) = corner {
+                            if let Some((v, f1)) = field(ui, bid.with("cr"), rr, "Corners", c, "", 0.25, 0.0, if kind == Kind::Image { 500.0 } else { 60.0 }, false, a) {
+                                out.push(PAct::Num("corner", v, f1));
+                            }
                         }
                     }
 
-                    // Fill / colour swatches
+                    // Fill: its colour or gradient (click: the paint panel), how solid, a minus.
+                    // Its row grows in when added and folds away when removed (`fold_begin`)
                     if let Some(col) = &fill {
-                        head(ui, &mut row, if is_group { "Fill" } else { "Colour" }, first);
-                        // Solid or a gradient (canvas/gradient.rs; its handles show on the canvas
-                        // while a stop is picked)
-                        if can_grad {
-                            // type: a floating dropdown; while it's hovered, flip and a quarter
-                            // turn show on its right
-                            let (r, a) = row(ui, FH);
-                            let mut names = vec!["Solid"];
-                            names.extend(crate::canvas::gradient::KINDS);
-                            let cur = grad.as_ref().map_or(0, |g| g.kind as usize + 1);
-                            let extras: &[(&'static str, &str)] = if grad.is_some() { &[("swap-ends", "Swap the gradient's ends"), ("rotate-cw", "Turn it a quarter")] } else { &[] };
-                            let (pick, extra) = super::panel_drop::dropdown_ex(ui, bid.with("gkind_dd"), r, "", &names, &["fill-solid", "gradient-linear", "gradient-radial", "gradient-angular", "gradient-diamond"], cur, extras, a);
-                            if let Some(j) = pick {
-                                out.push(PAct::GKind(j.checked_sub(1).map(|k| k as u8)));
-                            }
-                            match extra {
-                                Some(0) => out.push(PAct::GFlip),
-                                Some(_) => out.push(PAct::GRotate),
-                                None => {}
-                            }
-                            if let Some(g) = &grad {
-                                gap(ui);
-                                let (r, a) = row(ui, 22.0);
-                                gradient_bar(ui, bid.with("gbar"), r, g, gstop, a, &mut out);
-                                gap(ui);
-                                // the picked stop only (pick another on the bar): where it sits,
-                                // its colour (click: colour panel), its opacity; remove shows on hover
-                                let j = gstop.unwrap_or_else(|| (0..g.stops.len()).min_by(|x, y| g.stops[*x].at.total_cmp(&g.stops[*y].at)).unwrap_or(0));
-                                let st = &g.stops[j];
-                                let (r, a) = row(ui, FH);
-                                let can = g.stops.len() > 2;
-                                let row_hov = ctx.pointer_hover_pos().is_some_and(|q| r.contains(q));
-                                let dk = ease(ctx, bid.with("gst_del_k"), row_hov && can);
-                                let del_w = 26.0 * dk;
-                                let rest = r.width() - FH - 8.0 - del_w - 4.0 * dk;
-                                let pos_r = Rect::from_min_size(r.min, vec2(rest / 2.0, FH));
-                                let col_r = Rect::from_min_size(pos2(pos_r.max.x + 4.0, r.min.y), vec2(FH, FH));
-                                let al_r = Rect::from_min_size(pos2(col_r.max.x + 4.0, r.min.y), vec2(rest / 2.0, FH));
-                                if let Some((v, f1)) = field(ui, bid.with("gst_at"), pos_r, "", (st.at * 100.0).round(), "%", 0.5, 0.0, 100.0, false, a) {
-                                    out.push(PAct::GAt(j, v / 100.0, f1));
-                                }
-                                // small icons on the left say what each number is
-                                crate::ui::svg_icons::draw(ui.painter(), "stop-add", pos2(pos_r.min.x + 15.0, pos_r.center().y), 15.0, txt_dim().gamma_multiply(a));
-                                // the stop's colour as a square: click for the colour panel,
-                                // double-click to type its hex in a bubble under it
-                                let cpid = bid.with("gstop_color");
-                                let hbid = bid.with("gstop_hex");
-                                let resp = ui.interact(col_r, bid.with("gst_col"), Sense::click()).on_hover_text("Click: colour panel · double-click: type the hex");
-                                let open_k = ease(ctx, bid.with("gst_col_open"), super::panel_drop::is_open(ctx, cpid) || super::panel_drop::is_open(ctx, hbid));
-                                let (hh, pp) = hover_fx(ctx, &resp, true);
-                                let p = ui.painter();
-                                p.rect_filled(col_r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-                                p.rect_filled(col_r, 6.0, hover_fill(hh.max(open_k * 0.6), pp).gamma_multiply(a));
-                                color_chip(ctx, p, bid.with("gst_cc"), col_r, &st.color, hh.max(open_k), false, a);
-                                match super::hex_bubble::chip_click(ctx, bid.with("gst_col"), &resp) {
-                                    Some(false) => {
-                                        out.push(PAct::GPick(j));
-                                        super::panel_drop::toggle(ctx, cpid);
-                                    }
-                                    Some(true) => {
-                                        out.push(PAct::GPick(j));
-                                        super::hex_bubble::open(ctx, hbid);
-                                    }
-                                    None => {}
-                                }
-                                if let Some(c) = super::hex_bubble::show(ctx, hbid, col_r, &st.color) {
-                                    out.push(PAct::GColor(j, c));
-                                }
-                                if let Some((v, f1)) = field(ui, bid.with("gst_al"), al_r, "", (st.alpha * 100.0).round(), "%", 0.5, 0.0, 100.0, true, a) {
-                                    out.push(PAct::GAlpha(j, v / 100.0, f1));
-                                }
-                                crate::ui::svg_icons::draw(ui.painter(), "opacity", pos2(al_r.min.x + 15.0, al_r.center().y), 15.0, txt_dim().gamma_multiply(a));
-                                if dk > 0.01 {
-                                    let del_r = Rect::from_min_max(pos2(r.max.x - del_w, r.min.y), r.max);
-                                    let resp = ui.interact(del_r, bid.with("gst_del"), Sense::click()).on_hover_text("Remove this stop");
-                                    let (hh, pp) = hover_fx(ctx, &resp, true);
-                                    let p = ui.painter();
-                                    p.rect_filled(del_r, 6.0, hover_fill(hh, pp).gamma_multiply(a * dk));
-                                    crate::ui::svg_icons::draw(p, "minus", del_r.center(), 14.0 * dk, mix(txt_dim(), hi(), hh).gamma_multiply(a * dk));
-                                    if resp.clicked() {
-                                        out.push(PAct::GDel(j));
-                                    }
-                                }
-                                if let Some(c) = super::panel_drop::color_pop(ctx, cpid, r, card, &st.color) {
-                                    out.push(PAct::GColor(j, c));
-                                }
-                                gap(ui);
-                                // how softly the colours ease into each other (no hard edge where it ends)
-                                let (r, a) = row(ui, FH);
-                                if let Some((v, f1)) = field(ui, bid.with("gsm"), r, "Smooth", (g.smooth * 100.0).round(), "%", 0.5, 0.0, 100.0, true, a) {
-                                    out.push(PAct::GSmooth(v / 100.0, f1));
-                                }
-                            }
-                            gap(ui);
+                        let (hr, a) = head(ui, &mut row, "Fill", first);
+                        first = false;
+                        let mut pm_at = (!fill_on).then(|| Rect::from_center_size(pos2(hr.max.x - 13.0, hr.center().y), vec2(26.0, 22.0)));
+                        let fid = bid.with("fill_fold");
+                        // while it folds away it keeps showing what it had
+                        let g_now = if can_grad { grad.clone() } else { None };
+                        if fill_on {
+                            ctx.data_mut(|d| d.insert_temp(fid.with("last"), (col.clone(), g_now.clone())));
                         }
-                        if grad.is_none() {
-                            let (r, a) = row(ui, FH);
-                            let none_ok = is_group && col != "none";
-                            let row_hov = ctx.pointer_hover_pos().is_some_and(|q| r.contains(q));
-                            let dk = ease(ctx, bid.with("fill_none_k"), row_hov && none_ok);
-                            let del_w = 26.0 * dk;
-                            let col_r = Rect::from_min_max(r.min, pos2(r.max.x - del_w - 4.0 * dk, r.max.y));
-                            let cpid = bid.with("fill_color");
-                            let resp = ui.interact(col_r, bid.with("fill_col"), Sense::click()).on_hover_text("Click: colour panel · double-click: type the hex");
-                            let open_k = ease(ctx, bid.with("fill_col_open"), super::panel_drop::is_open(ctx, cpid));
-                            let (hh, pp) = hover_fx(ctx, &resp, true);
-                            let p = ui.painter();
-                            p.rect_filled(col_r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-                            p.rect_filled(col_r, 6.0, hover_fill(hh.max(open_k * 0.6), pp).gamma_multiply(a));
-                            color_chip(ctx, p, bid.with("fill_cc"), col_r, col, hh.max(open_k), true, a);
-                            let hbid = bid.with("fill_hex");
-                            match super::hex_bubble::chip_click(ctx, bid.with("fill_col"), &resp) {
-                                Some(false) => super::panel_drop::toggle(ctx, cpid),
-                                Some(true) => super::hex_bubble::open(ctx, hbid),
-                                None => {}
+                        let (fcol, fgrad): (String, Option<Gradient>) = if fill_on { (col.clone(), g_now) } else { ctx.data(|d| d.get_temp(fid.with("last"))).unwrap_or((col.clone(), None)) };
+                        if let Some((mut sub, k)) = fold_begin(ui, fid, fill_on) {
+                            let mut sink = Vec::new();
+                            let o: &mut Vec<PAct> = if fill_on { &mut out } else { &mut sink };
+                            let (r, a) = row(&mut sub, FH);
+                            if fill_on {
+                                pm_at = fill_rm.then(|| Rect::from_min_max(pos2(r.max.x - 26.0, r.min.y), r.max));
                             }
-                            let chip_at = Rect::from_center_size(pos2(col_r.min.x + 14.0, col_r.center().y), vec2(14.0, 14.0));
-                            if let Some(c) = super::hex_bubble::show(ctx, hbid, chip_at.expand(4.0), if col == "none" { "#ffffff" } else { col.as_str() }) {
-                                out.push(PAct::Color(c));
-                            }
-                            if dk > 0.01 {
-                                let del_r = Rect::from_min_max(pos2(r.max.x - del_w, r.min.y), r.max);
-                                let resp = ui.interact(del_r, bid.with("fill_none"), Sense::click()).on_hover_text("No fill");
-                                let (hh, pp) = hover_fx(ctx, &resp, true);
-                                let p = ui.painter();
-                                p.rect_filled(del_r, 6.0, hover_fill(hh, pp).gamma_multiply(a * dk));
-                                crate::ui::svg_icons::draw(p, "eye-off", del_r.center(), 14.0 * dk, mix(txt_dim(), hi(), hh).gamma_multiply(a * dk));
-                                if resp.clicked() {
-                                    out.push(PAct::Color("none".into()));
+                            let pid = bid.with("paint_fill");
+                            // the canvas shows the gradient's knobs only while this panel is open
+                            crate::canvas::note_grad_panel(sub.ctx(), fill_on && super::paint_panel::is_open(sub.ctx(), pid));
+                            let g = fgrad.as_ref();
+                            if paint_row(&mut sub, bid.with("fill_row"), r, &fcol, g, fill_pct, fill_rm, false, pid, a, o) {
+                                if let Some(g) = g {
+                                    let j = (0..g.stops.len()).min_by(|x, y| g.stops[*x].at.total_cmp(&g.stops[*y].at)).unwrap_or(0);
+                                    o.push(PAct::GPick(gstop.unwrap_or(j)));
                                 }
                             }
-                            let shown = if col == "none" { "#ffffff" } else { col.as_str() };
-                            if let Some(c) = super::panel_drop::color_pop(ctx, cpid, r, card, shown) {
-                                out.push(PAct::Color(c));
+                            if fill_on {
+                                let paint = super::paint_panel::Paint { color: &fcol, grad: g, can_grad, pick: gstop, recent: &recent, stroke: false };
+                                super::paint_panel::show(ctx, pid, bid.with("gbar"), r, card, &paint, o);
                             }
+                            fold_end(ui, fid, sub, k);
+                        }
+                        if plus_minus(ui, bid.with("fill_pm"), pm_at, fill_on, if fill_on { "Remove the fill" } else { "Add a fill" }, a) {
+                            if fill_on {
+                                super::paint_panel::close(ctx);
+                            }
+                            out.push(PAct::FillOn(!fill_on));
                         }
                     }
-
-                    // Stroke
-                    if let Some((key, v, lo, hi, per)) = stroke_w {
-                        head(ui, &mut row, if is_group { "Stroke" } else { "Line" }, first);
-                        let (r, a) = row(ui, FH);
-                        if let Some((nv, f1)) = field(ui, bid.with("sw_w"), r, "Width", v, "", per, lo, hi, false, a) {
-                            out.push(PAct::Num(key, nv, f1));
-                        }
-                        if let Some(sp) = spos {
-                            gap(ui);
-                            let (r, a) = row(ui, FH);
-                            // Inside / centre / outside: a pill slides to the picked third
-                            let opts: [(&str, u8); 3] = [("Inside", 1), ("Center", 0), ("Outside", 2)];
-                            let cur = opts.iter().position(|o| o.1 == sp).unwrap_or(1) as f32;
-                            let at = ctx.animate_value_with_time(bid.with("spos_k"), cur, 0.2 * anim_k());
-                            let p = ui.painter();
-                            p.rect_filled(r, 6.0, Color32::from_black_alpha((60.0 * a) as u8));
-                            let third = r.width() / 3.0;
-                            p.rect_filled(Rect::from_min_size(pos2(r.min.x + 2.0 + at * third, r.min.y + 2.0), vec2(third - 4.0, r.height() - 4.0)), 5.0, wa((22.0 * a) as u8));
-                            for (j, (name, val)) in opts.into_iter().enumerate() {
-                                let br = Rect::from_min_size(pos2(r.min.x + j as f32 * third, r.min.y), vec2(third, r.height()));
-                                let resp = ui.interact(br, bid.with(("spos", j)), Sense::click());
-                                let on = val == sp;
-                                let (hh, pp) = hover_fx(ctx, &resp, !on);
-                                if !on {
-                                    ui.painter().rect_filled(br.shrink(2.0), 5.0, hover_fill(hh * 0.6, pp).gamma_multiply(a));
-                                }
-                                let onk = (1.0 - (at - j as f32).abs()).clamp(0.0, 1.0);
-                                ui.painter().text(br.center(), Align2::CENTER_CENTER, name, FontId::proportional(11.0), mix(txt_dim(), gray_ui(235), onk.max(hh * 0.5)).gamma_multiply(a));
-                                if resp.clicked() && !on {
-                                    out.push(PAct::StrokePos(val));
-                                }
+                    // Stroke: its colour (click: the paint panel), how solid, a minus; then where
+                    // it sits on the edge and how thick. Grows in / folds away like the fill
+                    if let Some((scol, spct, son, srm)) = &stroke_paint {
+                        let (hr, a) = head(ui, &mut row, "Stroke", first);
+                        first = false;
+                        let son = *son;
+                        let mut pm_at = (!son).then(|| Rect::from_center_size(pos2(hr.max.x - 13.0, hr.center().y), vec2(26.0, 22.0)));
+                        let sid = bid.with("stroke_fold");
+                        if let Some((mut sub, k)) = fold_begin(ui, sid, son) {
+                            let mut sink = Vec::new();
+                            let o: &mut Vec<PAct> = if son { &mut out } else { &mut sink };
+                            let (r, a) = row(&mut sub, FH);
+                            if son && *srm {
+                                pm_at = Some(Rect::from_min_max(pos2(r.max.x - 26.0, r.min.y), r.max));
                             }
+                            let pid = bid.with("paint_stroke");
+                            paint_row(&mut sub, bid.with("stroke_row"), r, scol, None, *spct, *srm, true, pid, a, o);
+                            if son {
+                                let paint = super::paint_panel::Paint { color: scol, grad: None, can_grad: false, pick: None, recent: &recent, stroke: true };
+                                super::paint_panel::show(ctx, pid, bid.with("gbar_s"), r, card, &paint, o);
+                            }
+                            if let Some((key, v, lo, hi, per)) = stroke_w {
+                                gap(&mut sub);
+                                let (r, a) = row(&mut sub, FH);
+                                // lined up with the row above: position under the colour, weight under its %, and
+                                // the spot under the minus kept free (stroke styles, later)
+                                let wx = r.max.x - 64.0 - if *srm { 30.0 } else { 0.0 };
+                                let wr = Rect::from_min_max(pos2(if spos.is_some() { wx } else { r.min.x }, r.min.y), pos2(wx + 64.0, r.max.y));
+                                let l = if spos.is_some() { Rect::from_min_max(r.min, pos2(wx - 4.0, r.max.y)) } else { Rect::NOTHING };
+                                if let Some(sp) = spos {
+                                    const VALS: [u8; 3] = [1, 0, 2];
+                                    let cur = VALS.iter().position(|v| *v == sp).unwrap_or(0);
+                                    if let Some(j) = super::panel_drop::dropdown_bar(&mut sub, bid.with("spos_dd"), l, &["Inside", "Center", "Outside"], &["stroke-inside", "stroke-center", "stroke-outside"], cur, "Stroke position", a) {
+                                        o.push(PAct::StrokePos(VALS[j]));
+                                    }
+                                }
+                                if let Some((nv, f1)) = field(&mut sub, bid.with("sw_w"), wr, "", v, "", per, lo, hi, false, a) {
+                                    o.push(PAct::Num(key, nv, f1));
+                                }
+                                super::svg_icons::draw(sub.painter(), "stroke-weight", pos2(wr.min.x + 15.0, wr.center().y), 15.0, txt_dim().gamma_multiply(a));
+                            }
+                            fold_end(ui, sid, sub, k);
+                        }
+                        if plus_minus(ui, bid.with("stroke_pm"), pm_at, son, if son { "Remove the stroke" } else { "Add a stroke" }, a) {
+                            if son {
+                                super::paint_panel::close(ctx);
+                            }
+                            out.push(PAct::StrokeOn(!son));
                         }
                     }
-
                     // Arrow: head style and line ends
                     if let (true, Some((tip, cap))) = (design, arrow) {
                         head(ui, &mut row, "Arrow", first);
@@ -999,18 +1040,113 @@ impl App {
                 }
                 PAct::Align(a) => self.align_selection(a),
                 PAct::Dist(h) => self.distribute_selection(h),
-                PAct::Color(c) if grad.is_some() && c != "none" => {
-                    self.snapshot();
-                    let j = gstop.unwrap_or(0);
-                    self.edit_gradient(&id, |g, _| {
-                        if let Some(s) = g.as_mut().and_then(|g| g.stops.get_mut(j)) {
-                            s.color = c;
-                        }
-                    });
-                    self.grad_edit = Some((id.clone(), j));
+                PAct::Flip(h) => self.flip_selection(h),
+                PAct::FillColor(c) => {
+                    self.snap_once(ctx);
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_recent_pending"), c.clone()));
+                    match kind {
+                        Kind::Text => acts.push(Act::Color(c)),
+                        _ => self.paint_edit(
+                            kind,
+                            &id,
+                            |s| {
+                                // the outline keeps the colour it had
+                                if s.takes_fill() && s.stroke_color.is_none() {
+                                    s.stroke_color = Some(s.color.clone());
+                                }
+                                s.color = c.clone();
+                            },
+                            |g| g.color = c.clone(),
+                        ),
+                    }
+                    dirty = true;
                 }
-                PAct::Color(c) => acts.push(if is_group { Act::GroupColor(c) } else { Act::Color(c) }),
-                PAct::StrokePos(v) => {
+                PAct::StrokeColor(c) => {
+                    self.snap_once(ctx);
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("qd_recent_pending"), c.clone()));
+                    self.paint_edit(
+                        kind,
+                        &id,
+                        |s| {
+                            if s.takes_fill() {
+                                s.stroke_color = Some(c.clone());
+                            } else {
+                                s.color = c.clone();
+                            }
+                        },
+                        |g| g.stroke_color = Some(c.clone()),
+                    );
+                    dirty = true;
+                }
+                PAct::FillPct(v, first) => {
+                    if first {
+                        self.snapshot();
+                    }
+                    let v = (v / 100.0).clamp(0.0, 1.0);
+                    if kind == Kind::Text {
+                        self.set_selection_opacity(v);
+                    } else {
+                        self.paint_edit(kind, &id, |s| s.fill_opacity = Some(v), |g| g.fill_opacity = Some(v));
+                    }
+                    dirty = true;
+                }
+                PAct::StrokePct(v, first) => {
+                    if first {
+                        self.snapshot();
+                    }
+                    let v = (v / 100.0).clamp(0.0, 1.0);
+                    self.paint_edit(
+                        kind,
+                        &id,
+                        |s| {
+                            // the inside keeps how solid it was (old shapes tied it to this)
+                            if s.takes_fill() && s.fill_opacity.is_none() {
+                                s.fill_opacity = Some(s.fill_alpha());
+                            }
+                            s.opacity = Some(v);
+                        },
+                        |g| g.stroke_opacity = Some(v),
+                    );
+                    dirty = true;
+                }
+                PAct::FillOn(on) => {
+                    self.snapshot();
+                    self.paint_edit(
+                        kind,
+                        &id,
+                        |s| {
+                            if !s.takes_fill() {
+                                return;
+                            }
+                            if on {
+                                // a light grey inside (like Figma's), the outline keeping its colour
+                                if s.stroke_color.is_none() && !s.no_stroke {
+                                    s.stroke_color = Some(s.color.clone());
+                                    s.color = "#d9d9d9".into();
+                                }
+                                if s.fill_opacity.is_none() {
+                                    s.fill_opacity = Some(1.0);
+                                }
+                            }
+                            s.fill = on;
+                        },
+                        |g| {
+                            g.color = if on { "#1e293b".into() } else { "none".into() };
+                            if !on {
+                                g.gradient = None;
+                            }
+                        },
+                    );
+                    if !on {
+                        self.grad_edit = None;
+                    }
+                    dirty = true;
+                }
+                PAct::StrokeOn(on) => {
+                    self.snapshot();
+                    self.paint_edit(kind, &id, |s| s.no_stroke = !on, |g| g.border = Some(if on { 1.0 } else { 0.0 }));
+                    dirty = true;
+                }                PAct::StrokePos(v) => {
                     acts.push(Act::StrokePos(v));
                     dirty = true;
                 }
@@ -1037,7 +1173,9 @@ impl App {
                         (Some(k), Some(g)) => g.set_kind(k),
                         (Some(k), None) => *g = Some(Gradient::new(k, base)),
                     });
-                    self.grad_edit = k.map(|_| (id.clone(), 0));
+                    // switching type keeps the picked stop (a new gradient starts on its first)
+                    let keep = self.grad_edit.as_ref().filter(|(g, _)| g == &id).map(|(_, j)| *j);
+                    self.grad_edit = k.map(|_| (id.clone(), keep.unwrap_or(0)));
                 }
                 PAct::GPick(j) => self.grad_edit = Some((id.clone(), j)),
                 PAct::GMove(j, t) => {
@@ -1052,6 +1190,9 @@ impl App {
                             s.at = t;
                         }
                     });
+                }
+                PAct::GAdd(t) if self.gradient_of(&id).is_some_and(|g| g.stops.len() >= super::paint_panel::MAX_STOPS) => {
+                    let _ = t;
                 }
                 PAct::GAdd(t) => {
                     self.snapshot();
@@ -1157,8 +1298,42 @@ impl App {
                 }
             }
         }
+        // a colour lands in the document colours once it's let go (not every step of a drag)
+        if !ctx.input(|i| i.pointer.any_down()) {
+            ctx.data_mut(|d| d.remove::<bool>(egui::Id::new("qd_props_snap1")));
+            if let Some(c) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new("qd_recent_pending"))) {
+                let c = c.to_lowercase();
+                if c.starts_with('#') {
+                    let rc = &mut self.board.recent_colors;
+                    rc.retain(|x| *x != c);
+                    rc.insert(0, c);
+                    rc.truncate(20);
+                    dirty = true;
+                }
+            }
+        }
         if dirty {
             self.mark_dirty();
+        }
+    }
+
+    /// One undo step for a whole colour drag (the paint panel's picker sends every step)
+    fn snap_once(&mut self, ctx: &egui::Context) {
+        let k = egui::Id::new("qd_props_snap1");
+        if !ctx.data(|d| d.get_temp::<bool>(k)).unwrap_or(false) {
+            self.snapshot();
+            ctx.data_mut(|d| d.insert_temp(k, true));
+        }
+    }
+
+    /// Change the Fill / Stroke of everything selected of this kind (shapes: `fs`, frames: `fg`)
+    fn paint_edit(&mut self, kind: Kind, id: &str, mut fs: impl FnMut(&mut Stroke), mut fg: impl FnMut(&mut Group)) {
+        let ids: Vec<String> = self.selected.iter().filter(|s| s.0 == kind).map(|s| s.1.clone()).chain(std::iter::once(id.to_string())).collect();
+        let b = &mut self.board;
+        match kind {
+            Kind::Group => b.group_cards.iter_mut().filter(|g| ids.contains(&g.id)).for_each(&mut fg),
+            Kind::Stroke => b.world_strokes.iter_mut().chain(b.images.iter_mut().flat_map(|i| i.annotations.strokes.iter_mut())).filter(|s| ids.contains(&s.id)).for_each(&mut fs),
+            _ => {}
         }
     }
 

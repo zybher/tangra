@@ -63,6 +63,13 @@ pub struct Stroke {
     /// Closed shapes: the inside painted with a gradient instead of `color` (canvas/gradient.rs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gradient: Option<Gradient>,
+    /// Closed shapes: the outline's own colour (None: the same as `color`, as old boards had it)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_color: Option<String>,
+    /// Closed shapes: how solid the inside is, 0..1 (None: the old look, a 30% tint of the
+    /// colour when the outline shows; `opacity` is the outline's own)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_opacity: Option<f32>,
 }
 
 /// A gradient fill. `from` / `to` are fractions of the object's box, so it moves and
@@ -316,8 +323,26 @@ impl Stroke {
         self.reflatten();
         true
     }
+    /// A shape that can have an inside (closed shapes and closed pen paths)
+    pub fn takes_fill(&self) -> bool {
+        self.closed_len().is_some() || (self.closed && !self.knots.is_empty())
+    }
+    /// How solid the inside is (the Fill %)
     pub fn fill_alpha(&self) -> f32 {
-        self.opacity.unwrap_or(1.0).clamp(0.0, 1.0) * if self.no_stroke { 1.0 } else { 0.3 }
+        let o = self.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+        match self.fill_opacity {
+            Some(f) => f.clamp(0.0, 1.0),
+            None if self.gradient.is_some() || self.no_stroke => o,
+            None => o * 0.3,
+        }
+    }
+    /// How solid the outline is (the Stroke %)
+    pub fn stroke_alpha(&self) -> f32 {
+        self.opacity.unwrap_or(1.0).clamp(0.0, 1.0)
+    }
+    /// The outline's colour
+    pub fn stroke_col(&self) -> &str {
+        self.stroke_color.as_deref().unwrap_or(&self.color)
     }
 }
 
@@ -488,6 +513,14 @@ pub struct Group {
     /// Its fill as a gradient instead of `color` (canvas/gradient.rs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gradient: Option<Gradient>,
+    /// The border's own colour (None: a shade of the fill, as before)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_color: Option<String>,
+    /// How solid the fill / the border are, 0..1 (None: solid)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_opacity: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_opacity: Option<f32>,
 }
 
 fn is_zero_u8(v: &u8) -> bool {
@@ -535,6 +568,9 @@ pub struct Board {
     /// the frame and everything inside it as one
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub blend: std::collections::HashMap<String, u8>,
+    /// Colours used lately on this board, newest first (the paint panel's document colours)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recent_colors: Vec<String>,
     pub updated_at: f64,
     pub created_at: f64,
 }
@@ -620,6 +656,9 @@ impl Board {
             border: None,
             stroke_pos: 1,
             gradient: None,
+            stroke_color: None,
+            fill_opacity: None,
+            stroke_opacity: None,
         });
         id
     }

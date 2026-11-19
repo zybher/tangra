@@ -649,7 +649,7 @@ pub fn bake(img: &ImageNode, buf: &mut [u8], w: usize, h: usize) {
             }
             _ => pts,
         };
-        draw_stroke(buf, w, h, &pts, radius.max(0.5), hex_rgb(&s.color), s.opacity.unwrap_or(1.0));
+        draw_stroke(buf, w, h, &pts, radius.max(0.5), hex_rgb(s.stroke_col()), s.stroke_alpha());
     }
     for t in &img.annotations.texts {
         if !t.text.is_empty() {

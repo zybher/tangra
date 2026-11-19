@@ -697,6 +697,7 @@ impl eframe::App for App {
         self.tick_presence(ctx);
         theme_glide::tick(ctx);
         ui::theme_toggle::tick(ctx);
+        ui::color_picker::dropper_tick(ctx);
         tick_light(ctx);
         self.stamp_parents();
         if matches!(self.drag, Drag::None) {

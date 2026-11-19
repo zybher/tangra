@@ -82,21 +82,35 @@ impl App {
             use super::presence::{gcol, gf};
             let fid = egui::Id::new(("qd_fg", c.id.as_str()));
             let un = |c: Color32| if c == Color32::from_rgba_unmultiplied(36, 36, 36, 0) { [36, 36, 36, 0] } else { c.to_srgba_unmultiplied() };
-            let fill_color = gcol(&pctx, fid, un(fill_color));
-            let stroke_color = gcol(&pctx, fid.with("s"), stroke_color.to_srgba_unmultiplied());
+            // its own border colour, and the Fill % / Stroke % on top
+            let stroke_color = match &c.stroke_color {
+                Some(h) => {
+                    let [r, g, b] = hex_rgb(h);
+                    rgba(r, g, b, 255)
+                }
+                None => stroke_color,
+            };
+            let fo = c.fill_opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+            let so = c.stroke_opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+            let mut fu = un(fill_color);
+            fu[3] = (fu[3] as f32 * fo) as u8;
+            let mut su = stroke_color.to_srgba_unmultiplied();
+            su[3] = (su[3] as f32 * so) as u8;
+            let fill_color = gcol(&pctx, fid, fu);
+            let stroke_color = gcol(&pctx, fid.with("s"), su);
             let fr = gf(&pctx, fid.with("r"), group_radius(c)) * z;
             let cut = round_cut(&c.id, r, fr).filter(|(_, safe)| !safe);
             match &cut {
                 // a gradient fill replaces the colour (canvas/gradient.rs)
                 Some((poly, _)) if poly.len() >= 3 => match &c.gradient {
-                    Some(g) => super::gradient::fill(p, egui::Shape::convex_polygon(poly.clone(), Color32::WHITE, EStroke::NONE), g, r, 1.0),
+                    Some(g) => super::gradient::fill(p, egui::Shape::convex_polygon(poly.clone(), Color32::WHITE, EStroke::NONE), g, r, fo),
                     None => {
                         p.add(egui::Shape::convex_polygon(poly.clone(), fill_color, EStroke::NONE));
                     }
                 },
                 Some(_) => {}
                 None => match &c.gradient {
-                    Some(g) => super::gradient::fill(p, egui::Shape::rect_filled(r, fr, Color32::WHITE), g, r, 1.0),
+                    Some(g) => super::gradient::fill(p, egui::Shape::rect_filled(r, fr, Color32::WHITE), g, r, fo),
                     None => {
                         p.rect_filled(r, fr, fill_color);
                     }
@@ -593,6 +607,14 @@ impl App {
             if self.path_edit.as_ref().is_some_and(|e| &e.id == id) {
                 continue;
             }
+            // while the gradient's knobs show on it, its outline, corner dot and size pills fade away
+            let gk = 1.0 - self.grad_knobs_k(&p.ctx().clone(), id);
+            if gk < 0.01 {
+                continue;
+            }
+            let mut gp = p.clone();
+            gp.multiply_opacity(gk);
+            let p = &gp;
             if let Some([x, y, w, h]) = self.rect_of(*k, id) {
                 // Centred half a pixel in: covers the object's own edge, so no dark sliver shows
                 let r = item_rect(x, y, w, h).shrink(0.5);

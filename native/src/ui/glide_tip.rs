@@ -1,13 +1,16 @@
 //! A tooltip shared by a row of small buttons: moving from one button to its neighbour, the
 //! bubble slides and stretches over (`micro::glide`) with the new words in it, instead of one
 //! tip vanishing and another popping up. It fades in after
-//! a short hover and out when the pointer leaves the row.
+//! a short hover and out when the pointer leaves the row or the button is clicked.
 
 use crate::*;
 
 /// Call every frame for the group `id` with the hovered button and its tip (or None)
 pub(crate) fn show(ctx: &egui::Context, id: egui::Id, hovered: Option<(Rect, &str)>) {
     let now = ctx.input(|i| i.time);
+    // a click always closes it (and keeps it shut until the pointer moves on), like egui's tips
+    let (clk, mov, down) = ctx.input(|i| (i.pointer.time_since_last_click(), i.pointer.time_since_last_movement(), i.pointer.any_down()));
+    let hovered = hovered.filter(|_| !down && clk >= mov + 0.1);
     // a short wait before it first shows, like egui's own tooltips
     let since: Option<f64> = ctx.data(|d| d.get_temp(id.with("since")));
     let since = match (hovered.is_some(), since) {
